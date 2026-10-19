@@ -47,13 +47,25 @@ def test_tui_lists_and_filters_issues(tmp_path, monkeypatch):
     asyncio.run(scenario())
 
 
-async def settle(app, pilot):
-    """Waits for background jobs and the screens they open. Repeated, because a job may start
-    only from a callback (e.g. a dismissed dialog's) after the first wait has returned."""
-    for _ in range(5):
-        await pilot.pause()
+async def settle(app, pilot, timeout=15):
+    """Waits until the app has been idle (no job running, no progress dialog) for a while: a job
+    may start only from a callback, e.g. a dismissed dialog's, some ticks after the action."""
+    idle, waited = 0, 0.0
+    while idle < 10 and waited < timeout:
+        await pilot.pause(0.05)
         await app.workers.wait_for_complete()
+        busy = isinstance(app.screen, Busy) or any(w.is_running for w in app.workers)
+        idle, waited = (0 if busy else idle + 1), waited + 0.05
     await pilot.pause()
+
+
+async def until(pilot, condition, timeout=15):
+    """Waits for `condition()` to hold, e.g. for a background job's effect."""
+    waited = 0.0
+    while not condition() and waited < timeout:
+        await pilot.pause(0.05)
+        waited += 0.05
+    assert condition(), "timed out"
 
 
 def cached_monitor(tmp_path, monkeypatch):
@@ -138,6 +150,8 @@ def test_tui_email_sends_only_after_typing_send(tmp_path, monkeypatch):
                 assert "late-reviewers of papers #7" in str(app.screen.summary)
                 app.screen.query_one("#confirm").value = answer
                 await pilot.click("#confirm-send")
+                if sent:
+                    await until(pilot, lambda: len(client.messages) == sent)
                 await settle(app, pilot)
 
         asyncio.run(scenario())
@@ -323,6 +337,7 @@ def test_spc_tab_lists_issues_per_spc_and_sends_a_digest(tmp_path, monkeypatch):
             assert "ratings [3, 6]" in app.screen.summary
             app.screen.query_one("#confirm").value = "SEND"
             await pilot.click("#confirm-send")
+            await until(pilot, lambda: len(client.messages) == 1)
             await settle(app, pilot)
             panel = str(app.query_one("#spc-issues").render())
             assert "Sent to them from this app" in panel and "email to ~Spc_One1 via #7" in panel
@@ -371,6 +386,7 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             assert app.screen.summary.startswith("1 comments, readable by PCs, SACs\n")
             app.screen.query_one("#confirm").value = "SEND"
             await pilot.click("#confirm-send")
+            await until(pilot, lambda: len(client.comments) == 1)
             await settle(app, pilot)
 
             ((_, _, note),) = client.comments
