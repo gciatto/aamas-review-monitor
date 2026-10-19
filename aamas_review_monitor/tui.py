@@ -31,7 +31,7 @@ from textual.widgets import (
 
 from aamas_review_monitor import __main__ as cli
 from aamas_review_monitor import papers
-from aamas_review_monitor.checks import GREEN, RED, YELLOW, Issue, check, passed, report
+from aamas_review_monitor.checks import GREEN, RED, YELLOW, Issue, check, legend, passed, report
 
 ICONS = {RED: "🔴", YELLOW: "🟡", GREEN: "🟢"}
 RANKS = {ICONS[RED]: 0, ICONS[YELLOW]: 1, ICONS[GREEN]: 2}
@@ -158,6 +158,32 @@ class Attachment(ModalScreen):
         self.notify("Path copied")
 
 
+class Legend(ModalScreen):
+    """What the icons mean and what each check verifies, from the checks' docstrings."""
+
+    DEFAULT_CSS = "Legend {" + DIALOG_CSS + " width: 90%; height: 85%; padding: 1 2; } }"
+    BINDINGS = [("escape,q,l", "dismiss", "Close")]
+
+    def __init__(self, config: dict) -> None:
+        super().__init__()
+        self.config = config
+
+    def compose(self) -> ComposeResult:
+        text = Text()
+        text.append("Status\n", "bold underline")
+        text.append(f"{ICONS[RED]} serious, needs you   {ICONS[YELLOW]} needs SPC attention   ")
+        text.append(f"{ICONS[GREEN]} no process issue\n")
+        text.append("\nChecks\n", "bold underline")
+        for code, label, description in legend(self.config):
+            text.append(f"\n{label}", "bold cyan")
+            text.append(f"  {code}\n", "dim")
+            text.append(f"{description}\n")
+        text.highlight_words([RED], "bold red")
+        text.highlight_words([YELLOW], "bold yellow")
+        with Vertical():
+            yield VerticalScroll(Static(text, id="legend"))
+
+
 class Busy(ModalScreen):
     """Blocks the UI while a background job talks to OpenReview."""
 
@@ -264,6 +290,7 @@ class Monitor(App):
         Binding("E", "email(True)", "Email all", show=False),
         ("s", "sync", "Sync"),
         ("r", "reload", "Reload"),
+        ("l", "legend", "Legend"),
         ("f", "focus('filter')", "Filter"),
         ("q", "quit", "Quit"),
     ]
@@ -317,6 +344,9 @@ class Monitor(App):
                 continue
             if needle in f"{i.severity} #{i.number} {spcs} {i.message}".lower():
                 table.add_row(ICONS[i.severity], i.number, spcs, i.message, key=str(n))
+
+    def action_legend(self) -> None:
+        self.push_screen(Legend(self.config))
 
     def action_toggle_green(self) -> None:
         self.hide_green = not self.hide_green

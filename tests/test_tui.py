@@ -37,6 +37,10 @@ def test_tui_lists_and_filters_issues(tmp_path, monkeypatch):
             assert "🟢 Enough reviewers assigned" in text
             await pilot.press("escape")
             assert not isinstance(app.screen, Paper)
+            await pilot.press("l")
+            legend = str(app.screen.query_one("#legend", Static).render())
+            assert "Enough reviewers assigned" in legend and "fewer than 3 reviewers" in legend
+            await pilot.press("escape")
 
     asyncio.run(scenario())
 

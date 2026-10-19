@@ -4,12 +4,13 @@ import json
 import logging
 import os
 import sys
+import textwrap
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from aamas_review_monitor import papers
-from aamas_review_monitor.checks import check, passed, report, write_csv
+from aamas_review_monitor.checks import check, legend, passed, report, write_csv
 from aamas_review_monitor.collector import fetch, snapshot
 from aamas_review_monitor.resources import FILE_CONFIG
 
@@ -18,6 +19,7 @@ DIR_DATA = Path(os.environ.get("AAMAS_MONITOR_DATA", Path.home() / ".aamas-revie
 DIR_SNAPSHOTS = DIR_DATA / "snapshots"
 DIR_PAPERS = DIR_DATA / "papers"
 FILE_TOKEN = DIR_DATA / "token"
+LEGEND_STATUS = "RED: serious, needs you; YELLOW: needs SPC attention; GREEN: no process issue"
 
 
 def load_config() -> dict:
@@ -89,6 +91,7 @@ def main(argv: list[str] | None = None) -> None:
     report_cmd = commands.add_parser("report", help="action queue from the latest snapshot")
     report_cmd.add_argument("--csv", type=Path, help="also write the issues to this CSV file")
     commands.add_parser("tui", help="interactive terminal UI over the latest snapshot")
+    commands.add_parser("legend", help="what each check verifies, with current thresholds")
     show_cmd = commands.add_parser("show", help="metadata and issues of a paper")
     issues_cmd = commands.add_parser("issues", help="issues of a paper")
     reviews_cmd = commands.add_parser("reviews", help="reviews and meta-reviews of a paper")
@@ -109,6 +112,13 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "sync":
         file, changes = sync(config)
         print("\n".join([*changes, f"Saved {file}"]))
+    elif args.command == "legend":
+        print(LEGEND_STATUS)
+        for code, label, text in legend(config):
+            print(
+                f"\n{label} ({code})\n"
+                + textwrap.fill(text, 96, initial_indent="    ", subsequent_indent="    ")
+            )
     elif args.command == "tui":
         from aamas_review_monitor.tui import Monitor
 

@@ -31,3 +31,11 @@ def test_report_compares_latest_two_snapshots(tmp_path, monkeypatch, capsys):
 def test_run_as_module_without_command_fails():
     out = subprocess.run([sys.executable, "-m", "aamas_review_monitor"], capture_output=True)
     assert out.returncode == 2
+
+
+def test_legend_lists_every_check(capsys):
+    from aamas_review_monitor.checks import CHECKS
+
+    cli.main(["legend"])
+    out = capsys.readouterr().out
+    assert all(f"({f.__name__})" in out for f in CHECKS)
