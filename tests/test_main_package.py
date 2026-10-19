@@ -219,7 +219,7 @@ def test_email_previews_then_sends_only_after_send(tmp_path, monkeypatch, capsys
         assert "=== To late-reviewers of #7 (2), via #7 ===\nSubject: Hi" in out
         assert len(client.messages) == sent
     assert out.rstrip().endswith("Sent 1 of 1")
-    cli.main(["email", "spcs", "--subject", "Hi", "--body", str(tmp_path / "body.txt"), "7"])
+    cli.main(["email", "spcs", "7", "--subject", "Hi", "--body", str(tmp_path / "body.txt")])
     assert client.messages[-1][0][1] == [
         "ifaamas.org/AAMAS/2027/Conference/Submission7/Area_Chair_9jqi"
     ]
