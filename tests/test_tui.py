@@ -85,7 +85,7 @@ def test_tui_downloads_once_then_shows_the_pdf(tmp_path, monkeypatch):
             await settle(app, pilot)
             assert isinstance(app.screen, Attachment)
             path = str(app.screen.path)
-            assert path.endswith("/papers/7/pdf_v1.pdf")
+            assert app.screen.path == tmp_path / "papers" / "7" / "pdf_v1.pdf"
             assert "right column" in str(app.screen.query_one("#text", Static).render())
             await pilot.press("c", "v", "escape", "p")  # second time: cached, no download
             assert isinstance(app.screen, Attachment)
