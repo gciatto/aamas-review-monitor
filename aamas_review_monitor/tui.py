@@ -4,17 +4,36 @@ import webbrowser
 
 from rich.text import Text
 from textual.app import App, ComposeResult
+from textual.containers import VerticalScroll
+from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input, Static
 
 from aamas_review_monitor import __main__ as cli
+from aamas_review_monitor import papers
 from aamas_review_monitor.checks import RED, YELLOW, Issue, check, report
 
 STYLES = {RED: "bold red", YELLOW: "yellow"}
 
 
+class Paper(Screen):
+    """Metadata, issues and anonymous reviews of one paper, from the local cache."""
+
+    BINDINGS = [("escape,q", "app.pop_screen", "Back")]
+
+    def __init__(self, text: str) -> None:
+        super().__init__()
+        self.text = text
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield VerticalScroll(Static(self.text, markup=False))
+        yield Footer()
+
+
 class Monitor(App):
     TITLE = "AAMAS Review Monitor"
     BINDINGS = [
+        ("d", "details", "Details"),
         ("o", "open", "Open in browser"),
         ("s", "sync", "Sync"),
         ("r", "reload", "Reload"),
@@ -74,11 +93,27 @@ class Monitor(App):
     def on_data_table_row_selected(self) -> None:
         self.action_open()
 
-    def action_open(self) -> None:
+    def selected(self) -> Issue | None:
         table = self.query_one(DataTable)
-        if table.row_count:
-            row = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
-            webbrowser.open(self.issues[int(row.value or 0)].url)
+        if not table.row_count:
+            return None
+        row = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
+        return self.issues[int(row.value or 0)]
+
+    def action_open(self) -> None:
+        if issue := self.selected():
+            webbrowser.open(issue.url)
+
+    def action_details(self) -> None:
+        if not (issue := self.selected()):
+            return
+        mine = [f"{i.severity:6} {i.message}" for i in self.issues if i.number == issue.number]
+        try:
+            (record,) = papers.load(cli.DIR_PAPERS, [issue.number])
+            parts = [papers.metadata(record, self.config), *mine, papers.reviews(record)]
+        except FileNotFoundError:
+            parts = [f"#{issue.number}: not cached, press s to sync", *mine]
+        self.push_screen(Paper("\n\n".join(parts)))
 
     def action_sync(self) -> None:
         # Back to the plain terminal, where sync may prompt for credentials
