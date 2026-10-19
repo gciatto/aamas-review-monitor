@@ -12,6 +12,7 @@ import threading
 import textwrap
 import webbrowser
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from types import TracebackType
 from typing import Any
@@ -21,7 +22,7 @@ from urllib3.connectionpool import ConnectionPool
 from urllib3.response import BaseHTTPResponse
 from urllib3.util.retry import Retry
 
-from aamas_review_monitor import documents, logger, papers
+from aamas_review_monitor import documents, logger, outreach, papers
 from aamas_review_monitor.checks import (
     Issue,
     check,
@@ -205,7 +206,13 @@ def main(argv: list[str] | None = None) -> None:
     email_cmd.add_argument("role", choices=papers.ROLES)
     email_cmd.add_argument("--subject", required=True)
     email_cmd.add_argument("--body", type=Path, required=True, help="text file; {{fullname}} works")
-    for cmd in (download_cmd, email_cmd, inspect_cmd):
+    commands.add_parser("templates", help="list the email templates")
+    outreach_cmd = commands.add_parser(
+        "outreach", help="templated emails to SPCs or late reviewers: preview, then SEND"
+    )
+    outreach_cmd.add_argument("template", help="a template key, from `templates`")
+    outreach_cmd.add_argument("--spc", action="append", help="only this SPC (repeatable)")
+    for cmd in (download_cmd, email_cmd, inspect_cmd, outreach_cmd):
         cmd.add_argument("numbers", type=int, nargs="*", help="papers (default: all)")
     args = parser.parse_args(argv)
     # Only the application configures logging; importing the package leaves it alone. The TUI
@@ -299,6 +306,31 @@ def main(argv: list[str] | None = None) -> None:
             except Exception as e:
                 result = f"failed ({e})"
             print(f"[{count}/{len(records)}] #{record['number']}: {result}")
+    elif args.command == "templates":
+        for t in outreach.templates():
+            print(f"{t.key:20} {t.name} (to {t.audience}): {t.description}")
+    elif args.command == "outreach":
+        chosen = {t.key: t for t in outreach.templates()}.get(args.template)
+        latest, _ = load_snapshots()
+        if chosen is None or latest is None:
+            sys.exit("Unknown template: see `templates`" if chosen is None else "Run `sync` first")
+        extra, _ = documents.snapshot_issues(latest, config, DIR_PAPERS)
+        today = date.fromisoformat(latest["taken_at"][:10])
+        drafts, unreachable = outreach.compose(
+            chosen,
+            check(latest, config) + extra,
+            papers.load(DIR_PAPERS) if DIR_PAPERS.is_dir() else [],
+            config,
+            today,
+            set(args.spc) if args.spc else None,
+            set(args.numbers) if args.numbers else None,
+        )
+        print(outreach.preview(drafts, unreachable))
+        if drafts and input(f"Type SEND to send {len(drafts)} messages: ").strip() == "SEND":
+            failures = papers.deliver(login(config), drafts)
+            print("\n".join([*failures, f"Sent {len(drafts) - len(failures)} of {len(drafts)}"]))
+        else:
+            print("Nothing sent")
     elif args.command == "email":
         records = load_records(*args.numbers)
         body = args.body.read_text(encoding="utf-8")

@@ -211,3 +211,16 @@ def test_retries_are_logged_and_their_waits_interruptible(caplog):
         assert "waiting 60 s before retrying" in caplog.text
     finally:
         cli.INTERRUPT.clear()
+
+
+def test_outreach_previews_then_sends_only_after_send(tmp_path, monkeypatch, capsys):
+    client = cached_cli(tmp_path, monkeypatch)
+    for answer, sent in [("no", 0), ("SEND", 1)]:
+        monkeypatch.setattr("builtins.input", lambda prompt="", answer=answer: answer)
+        cli.main(["outreach", "spc-digest"])
+        out = capsys.readouterr().out
+        assert out.startswith("1 messages\n") and "=== To ~Spc_One1, via #7 ===" in out
+        assert "ratings [3, 6]" in out and "review of 1 words" in out
+        assert len(client.messages) == sent
+    cli.main(["outreach", "spc-digest", "--spc", "~Someone_Else1"])
+    assert capsys.readouterr().out.startswith("0 messages")
