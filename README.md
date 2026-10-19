@@ -28,13 +28,18 @@ last sync; `download` fetches only what is missing or outdated, into the same fo
 body and sends nothing unless you type `SEND`. `{{fullname}}` in the body becomes each
 recipient's name. Authors cannot be emailed: OpenReview only lets Program Chairs do that.
 
-In the TUI every paper is listed: one row per issue, one GREEN row per paper without issues. `/`
+In the TUI every paper is listed: one row per issue, one GREEN row per paper without issues. `f`
 filters (SPC, paper number, issue), `g` hides or shows GREEN rows, clicking a header sorts, `s`
 syncs, `r` reloads, `q` quits. On the selected paper: Enter or `d` shows its metadata, failed and
-passed checks, and anonymous reviews, `o` opens it on OpenReview, `p` downloads and opens its PDF, `u` downloads its
-supplementary material, `e` opens an email form. `P`, `U` and `E` do the same for every paper
-shown. Downloads, logins and the email `SEND` confirmation run
-in the plain terminal, then the TUI comes back.
+passed checks, and anonymous reviews, `o` opens it on OpenReview, `e` opens an email form, and
+`p`/`u` open its PDF/supplementary material in a dialog, downloading it first if needed. The
+dialog shows the local path and the contents (PDF text, or the file tree of a zip); there `c`
+shows the file in Finder/Explorer, `v` opens it with the default app, `y` copies the path.
+`P`, `U` and `E` download or email for every paper shown. Downloads, logins and the email `SEND`
+confirmation run in the plain terminal, then the TUI comes back.
+
+PDF text comes from xpdf's `pdftotext` (`brew install xpdf`), in reading order so the two AAMAS
+columns come out one after the other; it is cached next to the PDF as `<pdf>.txt`.
 
 Run `sync` daily: each run adds a snapshot, and `report` shows what is new or resolved per SPC
 since the previous one. Credentials come from `OPENREVIEW_USERNAME`/`OPENREVIEW_PASSWORD` or a
