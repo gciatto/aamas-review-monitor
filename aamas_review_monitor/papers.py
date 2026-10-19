@@ -12,6 +12,7 @@ from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from aamas_review_monitor import logger
 from aamas_review_monitor.collector import person, replies
 
 ROLES = ("reviewers", "late-reviewers", "spcs")
@@ -182,10 +183,19 @@ def describe(messages: Plan, role: str, subject: str, body: str) -> str:
     )
 
 
-def send(client: Any, messages: Plan, subject: str, body: str) -> list[str]:
-    """Posts the messages, signed as each paper's SACs; returns the failures."""
+def send(
+    client: Any,
+    messages: Plan,
+    subject: str,
+    body: str,
+    progress: Callable[[int, int], None] | None = None,
+) -> list[str]:
+    """Posts the messages, signed as each paper's SACs; returns the failures. `progress(sent,
+    total)` runs before each message (it may stop the batch there, by raising)."""
     failures = []
-    for record, invitation, parent, members in messages:
+    for count, (record, invitation, parent, members) in enumerate(messages):
+        if progress:
+            progress(count, len(messages))
         try:
             client.post_message(
                 subject,
@@ -195,8 +205,10 @@ def send(client: Any, messages: Plan, subject: str, body: str) -> list[str]:
                 signature=record["prefix"] + record["names"]["senior_area_chairs"],
                 parentGroup=parent,
             )
+            logger.debug("#%s: sent to %d recipients", record["number"], len(members))
         except Exception as e:  # keep going: the other papers' messages are independent
             failures.append(f"#{record['number']}: not sent ({e})")
+            logger.error("#%s: not sent: %s", record["number"], e)
     return failures
 
 

@@ -191,3 +191,23 @@ def test_inspect_downloads_missing_pdf_and_supplementary(tmp_path, monkeypatch, 
     assert "#7: 1 document issues" in capsys.readouterr().out
     cli.main(["inspect", "7"])  # all cached now: nothing downloaded again
     assert len(client.downloads) == 2
+
+
+def test_retries_are_logged_and_their_waits_interruptible(caplog):
+    import time
+
+    import pytest
+
+    retry = cli.LoggedRetry(total=3, backoff_factor=30, status_forcelist=[429])
+    retry = retry.increment("GET", "/notes", error=ConnectionError("reset"))
+    retry = retry.increment("GET", "/notes", error=ConnectionError("reset"))
+    assert "ConnectionError on GET /notes: retry 2 of 3" in caplog.text
+    cli.INTERRUPT.set()
+    try:
+        start = time.monotonic()
+        with pytest.raises(cli.Interrupted):
+            retry.sleep()  # would wait 60 s (30 s, doubled once) without the interruption
+        assert time.monotonic() - start < 5
+        assert "waiting 60 s before retrying" in caplog.text
+    finally:
+        cli.INTERRUPT.clear()

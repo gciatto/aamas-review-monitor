@@ -69,6 +69,7 @@ def fetch(
     for note in mine_notes:
         if progress:
             progress(len(records), len(mine_notes))
+        logger.debug("#%s: fetching groups", note.number)
         paper = f"{prefix}{note.number}/"
         groups = client.get_all_groups(prefix=paper)
         records.append(

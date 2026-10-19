@@ -1,5 +1,6 @@
 """Textual front end: the same checks and report as the CLI, as a filterable, sortable table."""
 
+import logging
 import os
 import subprocess
 import webbrowser
@@ -23,6 +24,7 @@ from textual.widgets import (
     Header,
     Input,
     ProgressBar,
+    RichLog,
     Select,
     Static,
     TextArea,
@@ -30,6 +32,7 @@ from textual.widgets import (
 )
 
 from aamas_review_monitor import __main__ as cli
+from aamas_review_monitor import logger
 from aamas_review_monitor import documents, papers
 from aamas_review_monitor.checks import (
     GREEN,
@@ -195,9 +198,15 @@ class Legend(ModalScreen):
 
 
 class Busy(ModalScreen):
-    """Blocks the UI while a background job talks to OpenReview."""
+    """Blocks the UI while a background job runs: progress, its log (steps, retries, waits,
+    failures), and a way to interrupt it."""
 
-    DEFAULT_CSS = "Busy {" + DIALOG_CSS + " width: 60; height: auto; padding: 1 2; } }"
+    DEFAULT_CSS = (
+        "Busy {" + DIALOG_CSS + " width: 90%; height: auto; padding: 1 2; } }"
+        " Busy RichLog { height: 12; border: round $panel; } Busy Button { margin-top: 1; }"
+    )
+    BINDINGS = [("escape", "interrupt", "Interrupt")]
+    STYLES = {logging.WARNING: "yellow", logging.ERROR: "bold red"}
 
     def __init__(self, label: str) -> None:
         super().__init__()
@@ -207,9 +216,36 @@ class Busy(ModalScreen):
         with Vertical():
             yield Static(self.label)
             yield ProgressBar(total=None, show_eta=False)  # bounces until a total is known
+            yield RichLog(id="log", max_lines=2000, wrap=True)
+            yield Button("Interrupt (Esc)", id="interrupt", variant="warning")
 
     def progress(self, done: int, total: int) -> None:
         self.query_one(ProgressBar).update(total=total, progress=done)
+
+    def write(self, level: int, message: str) -> None:
+        self.query_one(RichLog).write(Text(message, self.STYLES.get(level, "")))
+
+    @on(Button.Pressed, "#interrupt")
+    def action_interrupt(self) -> None:
+        cli.INTERRUPT.set()
+        button = self.query_one(Button)
+        button.label, button.disabled = "Interrupting after the current step…", True
+        self.write(logging.WARNING, "Interrupting: work already done is kept")
+
+
+class DialogLog(logging.Handler):
+    """Forwards the package's log records, emitted by a job's thread, to its Busy dialog."""
+
+    def __init__(self, app: App, busy: Busy) -> None:
+        super().__init__(logging.DEBUG)
+        self.app, self.busy = app, busy
+        self.setFormatter(logging.Formatter("%(asctime)s  %(message)s", "%H:%M:%S"))
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self.app.call_from_thread(self.busy.write, record.levelno, self.format(record))
+        except RuntimeError:  # emitted by the UI thread itself
+            self.busy.write(record.levelno, self.format(record))
 
 
 class Login(ModalScreen[tuple[str, str] | None]):
@@ -474,8 +510,14 @@ class Monitor(App):
         offline: bool,
     ) -> None:
         def progress(count: int, total: int) -> None:
+            if cli.INTERRUPT.is_set():
+                raise cli.Interrupted
             self.call_from_thread(busy.progress, count, total)
 
+        cli.INTERRUPT.clear()
+        handler, level = DialogLog(self, busy), logger.level
+        logger.addHandler(handler)
+        logger.setLevel(logging.DEBUG)  # per-paper steps go to the dialog, not the terminal
         try:
             client = None if offline else cli.resume(self.config)
             if client is None and not offline:
@@ -487,10 +529,19 @@ class Monitor(App):
                     return
                 client = cli.login(self.config, *credentials)
             result = job(client, progress)
+        except cli.Interrupted:
+            self.call_from_thread(busy.dismiss)
+            self.call_from_thread(self.action_reload)  # show what was done before stopping
+            message = f"{label.rstrip('…')} interrupted: completed steps are kept"
+            self.call_from_thread(self.notify, message, severity="warning")
+            return
         except Exception as e:  # shown to the user; the app keeps running
             self.call_from_thread(busy.dismiss)
             self.call_from_thread(self.notify, f"{label} failed: {e}", severity="error")
             return
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(level)
         self.call_from_thread(busy.dismiss)
         self.call_from_thread(done, result)
 
@@ -540,9 +591,12 @@ class Monitor(App):
             for count, record in enumerate(records):
                 progress(count, len(records))
                 try:  # after the retries, one failure must not stop the other downloads
-                    found += papers.download(client, record, field, cli.DIR_PAPERS) is not None
+                    path = papers.download(client, record, field, cli.DIR_PAPERS)
+                    found += path is not None
+                    logger.debug("#%s: %s", record["number"], path.name if path else f"no {field}")
                 except Exception as e:
                     failures.append(f"#{record['number']}: {e}")
+                    logger.error("#%s: download failed: %s", record["number"], e)
             progress(len(records), len(records))
             return found, failures
 
@@ -569,9 +623,14 @@ class Monitor(App):
             for count, record in enumerate(records):
                 progress(count, len(records))
                 try:
-                    documents.inspect_paper(record, self.config, cli.DIR_PAPERS, lambda: client)
+                    found = documents.inspect_paper(
+                        record, self.config, cli.DIR_PAPERS, lambda: client
+                    )
+                    logger.debug("#%s: %d document issues", record["number"], len(found))
                 except (OSError, subprocess.CalledProcessError) as e:
                     failures.append(f"#{record['number']}: {e}")
+                    logger.error("#%s: not inspected: %s", record["number"], e)
+            progress(len(records), len(records))
             return failures
 
         def done(failures: list[str]) -> None:
@@ -607,7 +666,9 @@ class Monitor(App):
                     return
                 self.online(
                     f"Sending {len(messages)} messages…",
-                    lambda client, _: papers.send(client, messages, form["subject"], form["body"]),
+                    lambda client, progress: papers.send(
+                        client, messages, form["subject"], form["body"], progress
+                    ),
                     lambda failures: self.notify(
                         "\n".join([*failures, f"Sent {len(messages) - len(failures)}"]),
                         severity="error" if failures else "information",

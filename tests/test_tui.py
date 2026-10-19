@@ -254,3 +254,45 @@ def test_tui_bulk_inspect_downloads_what_is_missing(tmp_path, monkeypatch):
             assert client.downloads == [("pdf", "abc")] and not isinstance(app.screen, Login)
 
     asyncio.run(scenario())
+
+
+def test_bulk_job_logs_its_steps_and_can_be_interrupted(tmp_path, monkeypatch):
+    import copy
+    import threading
+
+    from aamas_review_monitor import papers
+
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    (record,) = papers.load(cli.DIR_PAPERS, [7])
+    second = copy.deepcopy(record) | {"number": 8}
+    papers.save([second], cli.DIR_PAPERS, [])
+    release, started = threading.Event(), threading.Event()
+
+    def slow(field_name, id):
+        client.downloads.append(id)
+        started.set()
+        release.wait(5)
+        return b"%PDF"
+
+    monkeypatch.setattr(client, "get_attachment", slow)
+    lines: list[str] = []
+    monkeypatch.setattr(tui.Busy, "write", lambda self, level, message: lines.append(message))
+    notes: list[str] = []
+    monkeypatch.setattr(app, "notify", lambda message, **kw: notes.append(message))
+
+    async def scenario():
+        async with app.run_test() as pilot:
+            await pilot.press("P")  # papers 7 and 8
+            await pilot.pause()
+            assert isinstance(app.screen, Busy)
+            await asyncio.to_thread(started.wait, 5)
+            await pilot.press("escape")  # interrupt while #7 is downloading
+            release.set()
+            await settle(app, pilot)
+            assert not isinstance(app.screen, Busy)
+
+    asyncio.run(scenario())
+    assert client.downloads == ["abc"]  # stopped before the second paper
+    assert any("Interrupting" in line for line in lines)
+    assert any("#7: pdf_v1.pdf" in line for line in lines)
+    assert any("interrupted: completed steps are kept" in n for n in notes)

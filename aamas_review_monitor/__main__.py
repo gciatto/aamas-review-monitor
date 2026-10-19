@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import functools
 import getpass
@@ -6,16 +8,20 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 import textwrap
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
+from types import TracebackType
 from typing import Any
 
 from requests.adapters import HTTPAdapter
+from urllib3.connectionpool import ConnectionPool
+from urllib3.response import BaseHTTPResponse
 from urllib3.util.retry import Retry
 
-from aamas_review_monitor import documents, papers
+from aamas_review_monitor import documents, logger, papers
 from aamas_review_monitor.checks import (
     Issue,
     check,
@@ -43,11 +49,52 @@ def load_config() -> dict:
     return config | (json.loads(local.read_text(encoding="utf-8")) if local.is_file() else {})
 
 
+class Interrupted(BaseException):
+    """The user stopped a running job. A BaseException, so per-paper `except Exception`
+    handlers let it through instead of recording it as one more failure."""
+
+
+# ponytail: one job runs at a time (the TUI blocks while it does), so one flag is enough
+INTERRUPT = threading.Event()
+
+
+class LoggedRetry(Retry):
+    """Retry that logs each retry and its wait, and gives up the wait if INTERRUPT is set."""
+
+    def increment(
+        self,
+        method: str | None = None,
+        url: str | None = None,
+        response: BaseHTTPResponse | None = None,
+        error: Exception | None = None,
+        _pool: ConnectionPool | None = None,
+        _stacktrace: TracebackType | None = None,
+    ) -> LoggedRetry:
+        retry = super().increment(method, url, response, error, _pool, _stacktrace)
+        reason = f"HTTP {response.status}" if response is not None else type(error).__name__
+        done = len(retry.history)  # urllib3 counts `total` down, so the budget is done + left
+        budget = done + retry.total if isinstance(retry.total, int) else "∞"
+        logger.warning("%s on %s %s: retry %d of %s", reason, method, url, done, budget)
+        return retry
+
+    def sleep(self, response: Any = None) -> None:
+        after = (
+            self.get_retry_after(response) if response and self.respect_retry_after_header else None
+        )
+        wait = after if after is not None else self.get_backoff_time()
+        if wait > 0:
+            logger.warning(
+                "waiting %.0f s before retrying%s", wait, " (Retry-After)" if after else ""
+            )
+        if INTERRUPT.wait(wait):
+            raise Interrupted
+
+
 def tune(client: Any, config: dict) -> Any:
     """Sets the client's retry policy from `config`: exponential backoff with jitter on rate
     limits (429), server errors (5xx) and connection failures, honouring Retry-After. Only
     reads are retried: a message POST is never resent, so no email can go out twice."""
-    retry = Retry(
+    retry = LoggedRetry(
         total=config["retries"],
         connect=config["retries"],
         backoff_factor=config["backoff_seconds"],
@@ -118,8 +165,6 @@ def load_snapshots() -> tuple[dict | None, dict | None]:
 
 
 def main(argv: list[str] | None = None) -> None:
-    # Only the application configures logging; importing the package leaves it alone.
-    logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(prog="aamas_review_monitor")
     retries = parser.add_argument_group("retries (OpenReview reads; defaults from the config)")
     retries.add_argument("--retries", type=int, help="retries after a failure (config: retries)")
@@ -163,6 +208,10 @@ def main(argv: list[str] | None = None) -> None:
     for cmd in (download_cmd, email_cmd, inspect_cmd):
         cmd.add_argument("numbers", type=int, nargs="*", help="papers (default: all)")
     args = parser.parse_args(argv)
+    # Only the application configures logging; importing the package leaves it alone. The TUI
+    # shows records in its job dialog, so nothing may write to the terminal under it.
+    handlers = [logging.NullHandler()] if args.command == "tui" else None
+    logging.basicConfig(level=logging.INFO, handlers=handlers)
 
     overrides = ("retries", "backoff_seconds", "backoff_max_seconds")
     config = load_config() | {
