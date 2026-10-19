@@ -128,8 +128,20 @@ def test_inspection_is_cached_per_attachment_version(tmp_path, monkeypatch):
     found = documents.inspect_paper(record, CONFIG, tmp_path)
     assert [code for code, _ in found] == ["page_limit"]
     assert documents.inspection(record, CONFIG, tmp_path) == found
+    cache = tmp_path / "7" / documents.FILE_INSPECTION
+    cache.write_text(cache.read_text().replace('"checks"', '"older checks"'))
+    assert documents.inspection(record, CONFIG, tmp_path) is None  # run before new checks
+    documents.inspect_paper(record, CONFIG, tmp_path)
     record["content"]["pdf"]["value"] = "/pdf/v2.pdf"  # a new upload makes the results stale
     assert documents.inspection(record, CONFIG, tmp_path) is None
+
+
+def test_chatbot_phrases_and_marker_words_in_the_pdf():
+    leftover = BODY + "Certainly! Here is the related work section you asked for.\n"
+    assert (YELLOW, "chatbot_phrases") in codes(doc([FIRST, leftover] + paper(7)[1:]))
+    dense = BODY + "We delve into the intricate realm and showcase pivotal results. " * 4
+    assert (YELLOW, "marker_words") in codes(doc([FIRST, dense] + paper(7)[1:]))
+    assert not {c for _, c in codes(doc(paper(8)))} & {"chatbot_phrases", "marker_words"}
 
 
 def test_pdffonts_output_of_xpdf_and_poppler():

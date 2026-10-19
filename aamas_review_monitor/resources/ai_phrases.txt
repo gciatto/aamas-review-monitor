@@ -1,0 +1,31 @@
+# Phrases chatbots produce and people rarely write in a paper or a review, matched
+# case-insensitively anywhere in the text (line breaks and curly quotes don't matter).
+# One per line; lines starting with # are comments. A match is a hint for a person to read.
+as an ai language model
+as a large language model
+as an ai assistant
+i'm sorry, but i can't
+i'm sorry, but i cannot
+i cannot fulfill
+my knowledge cutoff
+knowledge cutoff date
+as of my last update
+as of my last knowledge update
+regenerate response
+certainly! here is
+certainly! here's
+certainly, here is
+sure! here is
+sure! here's
+here is a revised version
+here's a revised version
+here is the revised
+here's the revised
+here is a review of
+here's a review of
+in this revised version
+i hope this helps
+feel free to adjust
+let me know if you need
+let me know if you'd like
+[insert

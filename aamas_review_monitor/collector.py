@@ -2,7 +2,8 @@
 
 `fetch` returns one record per paper the signed-in SAC supervises (content, replies, groups): it
 is cached locally, never put in snapshots. `summarize` turns a record into snapshot metadata
-(assignments, scores, word counts, reply counts): no titles, abstracts, PDFs or review text.
+(assignments, scores, word counts, reply counts, which listed marker phrases and words a review
+uses): no titles, abstracts, PDFs or review text.
 """
 
 import re
@@ -11,7 +12,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
-from aamas_review_monitor import logger
+from aamas_review_monitor import logger, markers
 
 
 def _score(value: Any) -> int | None:
@@ -142,6 +143,9 @@ def summarize(record: dict, config: dict) -> dict:
                 "created": _date(r, "cdate", "tcdate"),
                 "modified": _date(r, "tmdate", "mdate", "cdate"),
                 "fingerprint": fingerprint(text(r["content"])),
+                # only entries of the fixed lists in resources/, never review text
+                "phrases": markers.phrases(text(r["content"])),
+                "markers": markers.words(text(r["content"]))[0],
             }
             for r in replies(record, "review")
         ],

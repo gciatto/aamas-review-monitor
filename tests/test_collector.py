@@ -103,6 +103,8 @@ def test_fetch_and_summarize_keep_only_process_metadata():
                 "words": 203,
                 "created": "2026-11-01",
                 "modified": "2026-11-03",
+                "phrases": [],
+                "markers": {},
             },
             {
                 "reviewer": f"{SUB}7/Reviewer_hidden",
@@ -111,6 +113,8 @@ def test_fetch_and_summarize_keep_only_process_metadata():
                 "words": 1,
                 "created": "2026-11-01",
                 "modified": "2026-11-03",
+                "phrases": [],
+                "markers": {},
             },
         ],
         "meta_review": True,

@@ -1,0 +1,44 @@
+# Words whose use jumped in scientific writing after chatbots spread (studies of "excess
+# vocabulary"), excluding ones common in computer science anyway (robust, novel, leverage,
+# comprehensive, crucial...). One word form per line; lines starting with # are comments.
+# Only their density over a whole text means anything, and only as a hint.
+delve
+delves
+delved
+delving
+showcase
+showcases
+showcased
+showcasing
+underscore
+underscores
+underscored
+underscoring
+intricate
+intricacies
+meticulous
+meticulously
+pivotal
+commendable
+noteworthy
+realm
+realms
+tapestry
+multifaceted
+invaluable
+garner
+garnered
+garnering
+elucidate
+elucidates
+elucidating
+unveil
+unveils
+unveiled
+unveiling
+adeptly
+seamlessly
+groundbreaking
+paramount
+nuances
+notably

@@ -7,6 +7,8 @@ from collections.abc import Callable
 from datetime import date
 from typing import IO, Any, NamedTuple, TypeVar
 
+from aamas_review_monitor import markers
+
 RED, YELLOW, GREEN = "RED", "YELLOW", "GREEN"
 ICONS = {RED: "🔴", YELLOW: "🟡", GREEN: "🟢"}
 
@@ -196,6 +198,39 @@ def short_review(paper: dict, ctx: Context) -> list[Finding]:
         for r in paper["reviews"]
         if r["words"] < ctx.config["reviews_words_min"]
     ]
+
+
+@paper_check
+def review_chatbot_phrases(paper: dict, ctx: Context) -> list[Finding]:
+    """No leftover chatbot phrases in reviews
+
+    YELLOW for each review containing a phrase chatbots produce and people rarely write, such
+    as "as an AI language model" or "here is a revised version" (the list is in
+    resources/ai_phrases.txt). A hint to read the review, not proof.
+    """
+    return [
+        Finding(
+            YELLOW, f"review with chatbot phrases: {'; '.join(r['phrases'][:3])}", r["reviewer"]
+        )
+        for r in paper["reviews"]
+        if r.get("phrases")
+    ]
+
+
+@paper_check
+def review_marker_words(paper: dict, ctx: Context) -> list[Finding]:
+    """No review dense with chatbot-favoured words
+
+    YELLOW for each review with at least {ai_markers_min} words such as "delve", "intricate" or
+    "showcase" (resources/ai_words.txt) and more than {ai_markers_per_1000_max} of them per
+    1000 words. Many people write like this too: a weak hint, to be read before anything else.
+    """
+    found = []
+    for r in paper["reviews"]:
+        described = markers.dense(r.get("markers", {}), r["words"], ctx.config)
+        if described:
+            found.append(Finding(YELLOW, f"review with {described}", r["reviewer"]))
+    return found
 
 
 def similarity(a: list[int], b: list[int]) -> float:

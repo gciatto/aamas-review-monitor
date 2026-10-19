@@ -183,3 +183,29 @@ def test_phase_names_the_next_date():
     assert phase(CONFIG, date(2026, 11, 24)) == "Rebuttal: discussion starts 25 Nov, tomorrow"
     assert phase(CONFIG, date(2026, 12, 9)) == "Meta-reviews: meta-reviews due 9 Dec, today"
     assert phase(CONFIG, date(2026, 12, 10)).startswith("Decisions")
+
+
+def test_markers_match_listed_phrases_and_measure_word_density():
+    from aamas_review_monitor import markers
+
+    text = "As an AI\nlanguage model, I\u2019m sorry, but I can\u2019t. We delve-\nd deeper."
+    assert markers.phrases(text) == ["as an ai language model", "i'm sorry, but i can't"]
+    counts, total = markers.words("We delve into intricate, intricate matters. " * 2)
+    assert (counts, total) == ({"intricate": 4, "delve": 2}, 12)
+    assert markers.dense(counts, total, CONFIG) == (
+        "500.0 marker words per 1000 (intricate ×4, delve ×2)"
+    )
+    assert markers.dense({"delve": 2}, 10, CONFIG) is None  # fewer than ai_markers_min
+    assert markers.dense({"delve": 9}, 5000, CONFIG) is None  # sparse in a long text
+
+
+def test_reviews_with_chatbot_phrases_or_dense_marker_words():
+    p = paper()
+    p["reviews"][0] |= {"phrases": ["here is a review of"]}
+    p["reviews"][1] |= {"markers": {"delve": 4, "intricate": 3}, "words": 400}
+    p["reviews"][2] |= {"markers": {"delve": 1}}  # one is nothing
+    assert issues(p, "2026-10-19") == {
+        (YELLOW, "review_chatbot_phrases:~R_01"),
+        (YELLOW, "review_marker_words:~R_11"),
+    }
+    assert issues(paper(), "2026-10-19") == set()  # old snapshots have neither field

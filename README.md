@@ -69,6 +69,8 @@ Defaults follow the AAMAS 2027 timeline: 50% of reviews by 26 Oct, all by 13 Nov
 | No reviewer behind on several papers | 🟡 a reviewer who owes reviews on 2 or more of your papers |
 | Reviews long enough | 🟡 a review under 150 words |
 | Reviews written for this paper | 🟡 a review that shares 60% or more of its phrases with the same reviewer's review of another paper |
+| No leftover chatbot phrases in reviews | 🟡 a review containing a phrase like "as an AI language model" or "here is a review of" |
+| No review dense with chatbot-favoured words | 🟡 a review with 3 or more words like "delve", "intricate", "showcase", and more than 3 per 1000 words |
 | Confident reviewers | 🟡 every reviewer's confidence is 2 or lower |
 | Ratings within the allowed spread | 🟡 ratings 3 or more points apart |
 | No undiscussed disagreement | 🔴 ratings 3 or more apart and no reviewer has commented, from 25 Nov |
@@ -101,6 +103,29 @@ stale.
 | Supplementary material is one small zip | 🟡 not a zip, or over 25 MB |
 | Anonymous supplementary material | 🔴 a `.git` folder; 🟡 home folder paths or emails in its files |
 | Code available for the experiments | 🟡 experiments, but no code in the supplementary material and no code link |
+| No leftover chatbot phrases | 🟡 a phrase like "as an AI language model", "Certainly! Here is" or "[insert" in the PDF |
+| Not dense with chatbot-favoured words | 🟡 3 or more words like "delve", "intricate", "showcase", and more than 3 per 1000 words |
+
+#### Signs of generated text
+
+Four of the checks above look for signs of text written by a chatbot, in reviews and in PDFs.
+They are plain string matching against two lists you can read and edit:
+[`ai_phrases.txt`](aamas_review_monitor/resources/ai_phrases.txt) (phrases people rarely write,
+like "as an AI language model") and [`ai_words.txt`](aamas_review_monitor/resources/ai_words.txt)
+(words whose use jumped in scientific writing once chatbots spread, like "delve"). No model is
+involved and nothing leaves your machine. They never give a probability, because no simple
+method can estimate one reliably for a single text:
+
+- **A leftover phrase** is concrete: you can find it in the text and judge it in seconds. Most
+  generated text has none, so its absence proves nothing.
+- **Many marker words** is a weak hint. Plenty of people, and many non-native writers, write
+  like this, so it is only a reason to read the text. The thresholds (`ai_markers_min`,
+  `ai_markers_per_1000_max`) are rough guesses: no real reviews or papers were used to tune
+  them.
+
+Only the list entries a review matches are kept in snapshots, never its text. AAMAS forbids
+using AI to write reviews; what authors may do is up to the venue's policy, so treat a flag on
+a paper as a question, not a finding.
 
 Every threshold and date can be changed (see [Configuration](#configuration)). Adding a check
 takes one documented function; see [`AGENTS.md`](AGENTS.md).
@@ -284,8 +309,9 @@ elsewhere.
 
 ## Data and confidentiality
 
-- Snapshots keep only process metadata: assignments, ratings, word counts, comment dates, and
-  MinHash fingerprints of reviews (comparable, but the text can't be recovered from them).
+- Snapshots keep only process metadata: assignments, ratings, word counts, comment dates,
+  MinHash fingerprints of reviews (comparable, but the text can't be recovered from them), and
+  which entries of the marker lists a review matches.
 - Paper content, reviews, PDFs, extracted text and document check results are cached in
   `~/.aamas-review-monitor/papers/`, and what the app sent in `history.jsonl` next to it.
 - **Run it in your own terminal, not through an AI coding assistant.** Its output and its cache

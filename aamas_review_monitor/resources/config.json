@@ -32,5 +32,7 @@
   "meta_reviews_words_min": 80,
   "pages_max": 8,
   "pages_min": 6,
-  "supplementary_mb_max": 25
+  "supplementary_mb_max": 25,
+  "ai_markers_min": 3,
+  "ai_markers_per_1000_max": 3
 }

@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from aamas_review_monitor import papers
+from aamas_review_monitor import markers, papers
 from aamas_review_monitor.checks import RED, YELLOW, Finding, Issue, registrar, run
 
 FILE_INSPECTION = "inspection.json"
@@ -314,6 +314,30 @@ def code_available(doc: Document) -> list[Finding]:
     return [Finding(YELLOW, "experiments, but no code in the supplementary or linked")]
 
 
+@document_check
+def chatbot_phrases(doc: Document) -> list[Finding]:
+    """No leftover chatbot phrases
+
+    YELLOW when the PDF contains a phrase chatbots produce and people rarely write, such as "as
+    an AI language model", "Certainly! Here is" or "[insert" (the list is in
+    resources/ai_phrases.txt). A hint to read the passage, not proof.
+    """
+    found = markers.phrases("\f".join(doc.pages))
+    return [Finding(YELLOW, f"chatbot phrases: {'; '.join(found[:3])}")] if found else []
+
+
+@document_check
+def marker_words(doc: Document) -> list[Finding]:
+    """Not dense with chatbot-favoured words
+
+    YELLOW when the PDF has at least {ai_markers_min} words such as "delve", "intricate" or
+    "showcase" (resources/ai_words.txt) and more than {ai_markers_per_1000_max} of them per
+    1000 words. Many people write like this too: a weak hint, to be read before anything else.
+    """
+    described = markers.dense(*markers.words("\f".join(doc.pages)), doc.config)
+    return [Finding(YELLOW, described)] if described else []
+
+
 def _versions(record: dict, config: dict, directory: Path) -> dict[str, str | None]:
     files = {
         key: papers.attachment(record, config[key], directory)
@@ -343,6 +367,7 @@ def inspect_paper(
     found = run(DOCUMENT_CHECKS, doc)
     result = {
         "versions": _versions(record, config, directory),
+        "checks": [f.__name__ for f in DOCUMENT_CHECKS],
         "findings": [[c, *f] for c, f in found],
     }
     file = directory / str(record["number"]) / FILE_INSPECTION
@@ -352,12 +377,15 @@ def inspect_paper(
 
 
 def inspection(record: dict, config: dict, directory: Path) -> list[tuple[str, Finding]] | None:
-    """Cached document check results for the current attachments; None if not (re)run yet."""
+    """Cached document check results for the current attachments; None if not (re)run yet, or
+    run before the current set of checks."""
     file = directory / str(record["number"]) / FILE_INSPECTION
     if not file.is_file():
         return None
     result = json.loads(file.read_text(encoding="utf-8"))
     if result["versions"] != _versions(record, config, directory):
+        return None
+    if result.get("checks") != [f.__name__ for f in DOCUMENT_CHECKS]:
         return None
     return [
         (code, Finding(severity, message, detail))

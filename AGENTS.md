@@ -15,6 +15,7 @@ aamas_review_monitor/     the package, at the repo root (renamed by rename-templ
   checks.py       deterministic per-paper checks, SPC-grouped report, CSV
   papers.py       record cache, metadata/reviews text, attachment downloads, emails
   documents.py    on-request document checks (xpdf tools, zipfile), cached per PDF version
+  markers.py      signs of generated text: fixed phrase and word lists (resources/ai_*.txt), no model
   outreach.py     email templates (resources/templates/*.txt) -> per-SPC / per-paper drafts
   tui.py          Textual app; network jobs run in worker threads behind a blocking Busy dialog
   screens.py      the TUI's screens and dialogs (details, attachment, legend, Busy, forms, Confirm)
@@ -58,7 +59,8 @@ against the synthetic fixtures in `tests/` (`FakeClient` mimics the openreview-p
 `conftest.py` makes any real `OpenReviewClient` fail and points every data path at a temporary
 folder). Never send real emails or comments: sending must keep requiring a typed `SEND`, and
 must keep recording each message in the history (`papers.deliver`, `papers.post_comments`). Keep
-checks deterministic; never add LLM calls or scientific judgments.
+checks deterministic; never add LLM calls or scientific judgments (generated-text checks
+stay string matching against the lists, and never report a probability).
 
 ## Conventions
 
