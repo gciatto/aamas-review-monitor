@@ -1,3 +1,15 @@
 {
-  "default_name": "stranger"
+  "venue_id": "ifaamas.org/AAMAS/2027/Conference",
+  "url_api": "https://api2.openreview.net",
+  "url_forum": "https://openreview.net/forum?id=",
+  "field_rating": "rating",
+  "field_confidence": "confidence",
+  "deadline_reviews": "2026-11-13",
+  "deadline_meta_reviews": "2026-12-09",
+  "reviewers_min": 3,
+  "reviews_warning_days": 5,
+  "reviews_critical_days": 2,
+  "reviews_words_min": 150,
+  "scores_spread_max": 3,
+  "meta_reviews_warning_days": 2
 }
