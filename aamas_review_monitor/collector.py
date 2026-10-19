@@ -6,6 +6,7 @@ is cached locally, never put in snapshots. `summarize` turns a record into snaps
 """
 
 import re
+import zlib
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -50,6 +51,8 @@ def fetch(
             ("reviewers", "Reviewers"),
             ("review", "Official_Review"),
             ("meta_review", "Meta_Review"),
+            ("reviewers_anon", "Reviewer_"),
+            ("area_chairs_anon", "Area_Chair_"),
         ]
     }
     prefix = f"{venue_id}/{names['submission']}"
@@ -82,13 +85,47 @@ def fetch(
     return records
 
 
-def summarize(record: dict, config: dict) -> dict:
-    def field(content: dict, key: str) -> int | None:
-        return _score(content.get(config[key], {}).get("value"))
+def _date(reply: dict, *keys: str) -> str | None:
+    """ISO date of the first timestamp present among `keys` (OpenReview uses milliseconds)."""
+    for key in keys:
+        if reply.get(key):
+            return datetime.fromtimestamp(reply[key] / 1000, timezone.utc).date().isoformat()
+    return None
 
+
+def fingerprint(text: str, size: int = 32) -> list[int]:
+    """MinHash of the text's 5-word shingles: compares texts without storing them."""
+    words = text.lower().split()
+    shingles = {" ".join(words[i : i + 5]) for i in range(max(len(words) - 4, 1))}
+    return [min(zlib.crc32(f"{k}:{s}".encode()) for s in shingles) for k in range(size)]
+
+
+def _role(record: dict, signature: str) -> str:
+    name = signature.removeprefix(record["prefix"])
+    names = record["names"]
+    if name.startswith(names.get("reviewers_anon", "Reviewer_")):
+        return "reviewer"
+    if name.startswith(names.get("area_chairs_anon", "Area_Chair_")):
+        return "spc"
+    return "authors" if name == "Authors" else "other"
+
+
+def _value(content: dict, key: str) -> Any:
+    return content.get(key, {}).get("value")
+
+
+def summarize(record: dict, config: dict) -> dict:
+    def text(content: dict) -> str:
+        return " ".join(f["value"] for f in content.values() if isinstance(f.get("value"), str))
+
+    meta = replies(record, "meta_review")
+    rebuttals = [_date(r, "cdate", "tcdate") for r in replies(record, "Rebuttal")]
+    venueid = str(_value(record["content"], "venueid") or "")
     return {
         "number": record["number"],
         "url": config["url_forum"] + record["id"],
+        "status": next((s for s in ("Withdrawn", "Desk_Rejected") if s in venueid), "active"),
+        "findings_opt_in": _value(record["content"], config["field_findings_opt_in"]),
         "spcs": [
             person(record, m) for m in record["groups"].get(record["names"]["area_chairs"], [])
         ],
@@ -98,14 +135,33 @@ def summarize(record: dict, config: dict) -> dict:
         "reviews": [
             {
                 "reviewer": person(record, r["signatures"][0]),
-                "rating": field(r["content"], "field_rating"),
-                "confidence": field(r["content"], "field_confidence"),
+                "rating": _score(_value(r["content"], config["field_rating"])),
+                "confidence": _score(_value(r["content"], config["field_confidence"])),
                 "words": _words(r["content"]),
+                "created": _date(r, "cdate", "tcdate"),
+                "modified": _date(r, "tmdate", "mdate", "cdate"),
+                "fingerprint": fingerprint(text(r["content"])),
             }
             for r in replies(record, "review")
         ],
-        "meta_review": bool(replies(record, "meta_review")),
+        "meta_review": bool(meta),
+        "meta": {
+            "words": _words(meta[0]["content"]),
+            "proceedings": _value(meta[0]["content"], config["field_meta_proceedings"]),
+            "findings": _value(meta[0]["content"], config["field_meta_findings"]),
+        }
+        if meta
+        else None,
         "comments": len(replies(record, "Official_Comment")),
+        "posts": [
+            {
+                "who": person(record, r["signatures"][0]),
+                "role": _role(record, r["signatures"][0]),
+                "date": _date(r, "cdate", "tcdate"),
+            }
+            for r in replies(record, "Official_Comment")
+        ],
+        "rebuttal": min((d for d in rebuttals if d), default=None),
     }
 
 

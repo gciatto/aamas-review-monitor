@@ -2,10 +2,10 @@
 
 import csv
 import inspect
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Callable
 from datetime import date
-from typing import IO, NamedTuple
+from typing import IO, Any, NamedTuple, TypeVar
 
 RED, YELLOW, GREEN = "RED", "YELLOW", "GREEN"
 
@@ -25,25 +25,41 @@ class Finding(NamedTuple):
     detail: str = ""  # tells apart several findings of one check, e.g. one per reviewer
 
 
-Check = Callable[[dict, dict, date], list[Finding]]
+class Context(NamedTuple):
+    config: dict
+    today: date
+    papers: list[dict]  # every paper of the snapshot, for checks that look across papers
 
-# Paper checks, in display order. Convention for each one (see `paper_check`):
+
+Check = Callable[[dict, Context], list[Finding]]
+F = TypeVar("F", bound=Callable[..., list[Finding]])
+
+# Checks, in display order. Convention for each one (see `registrar`):
 # - the function name is the issue code (stable across days, used by the history diff);
-# - the docstring's first line says what holds when the paper passes ("SPC assigned");
+# - the docstring's first line says what holds when the paper passes ("SPC assigned"), with no
+#   placeholders (passed-check lists show it without a configuration at hand);
 # - the rest says what is flagged and how severely, with {config_key} placeholders that the
 #   legend fills in from the configuration.
 CHECKS: list[Check] = []
 
 
-def paper_check(function: Check) -> Check:
-    """Registers a paper check; it must follow the docstring convention above."""
-    assert function.__doc__ and "\n\n" in inspect.cleandoc(function.__doc__), function.__name__
-    CHECKS.append(function)
-    return function
+def registrar(registry: list) -> Callable[[F], F]:
+    """A decorator adding checks to `registry`; they must follow the docstring convention."""
+
+    def register(function: F) -> F:
+        doc = inspect.cleandoc(function.__doc__ or "")
+        assert "\n\n" in doc, f"{function.__name__}: docstring needs a label and a description"
+        registry.append(function)
+        return function
+
+    return register
 
 
-def _days(config: dict, key: str, today: date) -> int:
-    return (date.fromisoformat(config[key]) - today).days
+paper_check = registrar(CHECKS)
+
+
+def _days(ctx: Context, key: str) -> int:
+    return (date.fromisoformat(ctx.config[key]) - ctx.today).days
 
 
 def _deadline(missing: int, what: str, days: int, warning: int, critical: int) -> list[Finding]:
@@ -55,12 +71,39 @@ def _deadline(missing: int, what: str, days: int, warning: int, critical: int) -
     return [Finding(severity, f"{missing} {what} missing, {days} days left")]
 
 
-def _spread(paper: dict) -> list[int]:
+def _ratings(paper: dict) -> list[int]:
     return sorted(r["rating"] for r in paper["reviews"] if r["rating"] is not None)
 
 
+def _disagree(paper: dict, ctx: Context) -> bool:
+    ratings = _ratings(paper)
+    return bool(ratings) and ratings[-1] - ratings[0] >= ctx.config["scores_spread_max"]
+
+
+def _pending(paper: dict) -> list[str]:
+    """Assigned reviewers without a review, when identities match (else none can be named)."""
+    reviewed = {r["reviewer"] for r in paper["reviews"]}
+    pending = [m for m in paper["reviewers"] if m not in reviewed]
+    return pending if len(pending) == len(paper["reviewers"]) - len(paper["reviews"]) else []
+
+
+def _posts(paper: dict, role: str | None = None) -> list[dict]:
+    return [p for p in paper.get("posts", []) if role is None or p["role"] == role]
+
+
 @paper_check
-def no_spc(paper: dict, config: dict, today: date) -> list[Finding]:
+def active_submission(paper: dict, ctx: Context) -> list[Finding]:
+    """Submission active
+
+    YELLOW when the paper was withdrawn or desk rejected: it needs no further review action, and
+    no other check runs on it.
+    """
+    status = paper.get("status", "active")
+    return [] if status == "active" else [Finding(YELLOW, f"{status.replace('_', ' ').lower()}")]
+
+
+@paper_check
+def no_spc(paper: dict, ctx: Context) -> list[Finding]:
     """SPC assigned
 
     RED when the paper has no SPC (Area Chair) assigned.
@@ -69,17 +112,41 @@ def no_spc(paper: dict, config: dict, today: date) -> list[Finding]:
 
 
 @paper_check
-def few_reviewers(paper: dict, config: dict, today: date) -> list[Finding]:
+def few_reviewers(paper: dict, ctx: Context) -> list[Finding]:
     """Enough reviewers assigned
 
     RED when fewer than {reviewers_min} reviewers are assigned.
     """
     count = len(paper["reviewers"])
-    return [Finding(RED, f"{count} reviewers assigned")] if count < config["reviewers_min"] else []
+    return (
+        [Finding(RED, f"{count} reviewers assigned")] if count < ctx.config["reviewers_min"] else []
+    )
 
 
 @paper_check
-def missing_reviews(paper: dict, config: dict, today: date) -> list[Finding]:
+def reviews_behind(paper: dict, ctx: Context) -> list[Finding]:
+    """Reviews on track with the milestones
+
+    YELLOW when, past a milestone of reviews_milestones (date: share of reviews due, now
+    {reviews_milestones}), fewer reviews are in than that share, until the last
+    {reviews_warning_days} days before the review deadline (then "Reviews on schedule" applies).
+    """
+    if _days(ctx, "deadline_reviews") <= ctx.config["reviews_warning_days"]:
+        return []
+    passed = [
+        (d, share) for d, share in ctx.config["reviews_milestones"].items() if d <= str(ctx.today)
+    ]
+    if not passed or not paper["reviewers"]:
+        return []
+    when, share = max(passed)
+    done, total = len(paper["reviews"]), len(paper["reviewers"])
+    if done < share * total:
+        return [Finding(YELLOW, f"{done} of {total} reviews in, {share:.0%} due by {when}")]
+    return []
+
+
+@paper_check
+def missing_reviews(paper: dict, ctx: Context) -> list[Finding]:
     """Reviews on schedule
 
     Counts assigned reviewers without a submitted review. From {reviews_warning_days} days
@@ -89,14 +156,35 @@ def missing_reviews(paper: dict, config: dict, today: date) -> list[Finding]:
     return _deadline(
         max(len(paper["reviewers"]) - len(paper["reviews"]), 0),
         "reviews",
-        _days(config, "deadline_reviews", today),
-        config["reviews_warning_days"],
-        config["reviews_critical_days"],
+        _days(ctx, "deadline_reviews"),
+        ctx.config["reviews_warning_days"],
+        ctx.config["reviews_critical_days"],
     )
 
 
 @paper_check
-def short_review(paper: dict, config: dict, today: date) -> list[Finding]:
+def late_reviewer(paper: dict, ctx: Context) -> list[Finding]:
+    """No reviewer behind on several papers
+
+    YELLOW for each reviewer of this paper who, past the first review milestone, still owes
+    reviews on {reviewers_late_papers_min} or more of your papers: one reminder covers them all.
+    """
+    if not ctx.config["reviews_milestones"] or str(ctx.today) < min(
+        ctx.config["reviews_milestones"]
+    ):
+        return []
+    owed = Counter(
+        m for p in ctx.papers if p.get("status", "active") == "active" for m in _pending(p)
+    )
+    return [
+        Finding(YELLOW, f"{m} owes reviews on {owed[m]} of your papers", m)
+        for m in _pending(paper)
+        if owed[m] >= ctx.config["reviewers_late_papers_min"]
+    ]
+
+
+@paper_check
+def short_review(paper: dict, ctx: Context) -> list[Finding]:
     """Reviews long enough
 
     YELLOW for each submitted review shorter than {reviews_words_min} words (all text fields
@@ -105,82 +193,224 @@ def short_review(paper: dict, config: dict, today: date) -> list[Finding]:
     return [
         Finding(YELLOW, f"review of {r['words']} words", r["reviewer"])
         for r in paper["reviews"]
-        if r["words"] < config["reviews_words_min"]
+        if r["words"] < ctx.config["reviews_words_min"]
     ]
 
 
+def similarity(a: list[int], b: list[int]) -> float:
+    """Estimated Jaccard similarity of two texts from their MinHash fingerprints."""
+    return sum(x == y for x, y in zip(a, b)) / max(len(a), 1)
+
+
 @paper_check
-def disagreement(paper: dict, config: dict, today: date) -> list[Finding]:
+def recycled_review(paper: dict, ctx: Context) -> list[Finding]:
+    """Reviews written for this paper
+
+    YELLOW when a review shares {reviews_similarity_max} or more of its 5-word phrases
+    (estimated from fingerprints, not text) with a review by the same reviewer on another of
+    your papers.
+    """
+    found = []
+    for review in paper["reviews"]:
+        for other in ctx.papers:
+            if other["number"] == paper["number"]:
+                continue
+            for twin in other["reviews"]:
+                same = twin["reviewer"] == review["reviewer"] and review.get("fingerprint")
+                score = (
+                    similarity(review["fingerprint"], twin.get("fingerprint", [])) if same else 0
+                )
+                if score >= ctx.config["reviews_similarity_max"]:
+                    message = (
+                        f"review {score:.0%} similar to the same reviewer's on #{other['number']}"
+                    )
+                    found.append(
+                        Finding(YELLOW, message, f"{review['reviewer']}@{other['number']}")
+                    )
+    return found
+
+
+@paper_check
+def low_confidence(paper: dict, ctx: Context) -> list[Finding]:
+    """Confident reviewers
+
+    YELLOW when at least two reviews are in and every reviewer's confidence is
+    {confidence_low_max} or lower, which may point to an expertise mismatch.
+    """
+    confidences = [r["confidence"] for r in paper["reviews"] if r["confidence"] is not None]
+    if len(confidences) >= 2 and max(confidences) <= ctx.config["confidence_low_max"]:
+        return [Finding(YELLOW, f"all confidences low: {sorted(confidences)}")]
+    return []
+
+
+@paper_check
+def disagreement(paper: dict, ctx: Context) -> list[Finding]:
     """Ratings within the allowed spread
 
     YELLOW when the highest and lowest ratings differ by {scores_spread_max} or more.
     """
-    ratings = _spread(paper)
-    if ratings and ratings[-1] - ratings[0] >= config["scores_spread_max"]:
-        return [Finding(YELLOW, f"ratings {ratings}")]
-    return []
+    return [Finding(YELLOW, f"ratings {_ratings(paper)}")] if _disagree(paper, ctx) else []
 
 
 @paper_check
-def no_discussion(paper: dict, config: dict, today: date) -> list[Finding]:
+def no_discussion(paper: dict, ctx: Context) -> list[Finding]:
     """No undiscussed disagreement
 
-    RED when, after the review deadline ({deadline_reviews}), ratings differ by
-    {scores_spread_max} or more and nobody has posted a comment.
+    RED when, from the discussion start ({discussion_start}), ratings differ by
+    {scores_spread_max} or more and no reviewer has posted a comment.
     """
-    ratings = _spread(paper)
-    disagree = ratings and ratings[-1] - ratings[0] >= config["scores_spread_max"]
-    if disagree and _days(config, "deadline_reviews", today) < 0 and not paper["comments"]:
-        return [Finding(RED, "reviewers disagree and nobody has commented")]
-    return []
+    if not _disagree(paper, ctx) or _days(ctx, "discussion_start") > 0:
+        return []
+    discussed = _posts(paper, "reviewer") if "posts" in paper else paper["comments"]
+    return [] if discussed else [Finding(RED, "reviewers disagree and none has commented")]
 
 
 @paper_check
-def missing_meta_review(paper: dict, config: dict, today: date) -> list[Finding]:
+def long_discussion(paper: dict, ctx: Context) -> list[Finding]:
+    """Discussion within the expected length
+
+    YELLOW when there are more comments than one per reviewer plus one per SPC (meta-reviewer),
+    which may mean a stuck discussion.
+    """
+    expected = len(paper["reviewers"]) + len(paper["spcs"])
+    count = len(_posts(paper)) if "posts" in paper else paper["comments"]
+    return [Finding(YELLOW, f"{count} comments, {expected} expected")] if count > expected else []
+
+
+@paper_check
+def missing_acknowledgement(paper: dict, ctx: Context) -> list[Finding]:
+    """Rebuttal acknowledged
+
+    Counts reviewers who, since the authors' rebuttal, neither updated their review nor
+    commented. From {acknowledgements_warning_days} days before the acknowledgement deadline
+    ({deadline_acknowledgements}) it is YELLOW, once overdue RED.
+    """
+    since = paper.get("rebuttal")
+    if not since:
+        return []
+    active = {p["who"] for p in _posts(paper, "reviewer") if (p["date"] or "") > since}
+    silent = [
+        r
+        for r in paper["reviews"]
+        if (r.get("modified") or "") <= since and r["reviewer"] not in active
+    ]
+    warning = ctx.config["acknowledgements_warning_days"]
+    days = _days(ctx, "deadline_acknowledgements")
+    return _deadline(len(silent), "acknowledgements", days, warning, -1)
+
+
+@paper_check
+def inactive_spc(paper: dict, ctx: Context) -> list[Finding]:
+    """SPC active in the discussion
+
+    YELLOW, from {spcs_inactive_days} days after the discussion start ({discussion_start}), for
+    each SPC of this paper who has posted no comment on any of your papers in the last
+    {spcs_inactive_days} days.
+    """
+    quiet = ctx.config["spcs_inactive_days"]
+    if -_days(ctx, "discussion_start") < quiet:
+        return []
+    found = []
+    for spc in paper["spcs"]:
+        dates = [
+            p["date"] for q in ctx.papers for p in _posts(q, "spc") if p["who"] == spc and p["date"]
+        ]
+        last = max(dates, default=None)
+        if last is None or (ctx.today - date.fromisoformat(last)).days >= quiet:
+            found.append(Finding(YELLOW, f"{spc} silent since {last or 'the start'}", spc))
+    return found
+
+
+@paper_check
+def missing_meta_review(paper: dict, ctx: Context) -> list[Finding]:
     """Meta-review on schedule
 
     RED when there is no meta-review from {meta_reviews_warning_days} days before its
     deadline ({deadline_meta_reviews}) on.
     """
-    days, warning = (
-        _days(config, "deadline_meta_reviews", today),
-        config["meta_reviews_warning_days"],
-    )
+    warning = ctx.config["meta_reviews_warning_days"]
+    days = _days(ctx, "deadline_meta_reviews")
     return _deadline(0 if paper["meta_review"] else 1, "meta-review", days, warning, warning)
 
 
-def check_paper(paper: dict, config: dict, today: date) -> list[Issue]:
-    issues = []
-    for function in CHECKS:
-        for f in function(paper, config, today):
-            code = function.__name__ + (f":{f.detail}" if f.detail else "")
-            issues.append(
-                Issue(
-                    paper["number"], f.severity, code, f.message, paper["url"], tuple(paper["spcs"])
-                )
-            )
-    return issues
+@paper_check
+def short_meta_review(paper: dict, ctx: Context) -> list[Finding]:
+    """Meta-review long enough
+
+    YELLOW when the meta-review has fewer than {meta_reviews_words_min} words.
+    """
+    meta = paper.get("meta")
+    if meta and meta["words"] < ctx.config["meta_reviews_words_min"]:
+        return [Finding(YELLOW, f"meta-review of {meta['words']} words")]
+    return []
 
 
-def _doc(function: Check) -> tuple[str, str]:
+@paper_check
+def missing_recommendation(paper: dict, ctx: Context) -> list[Finding]:
+    """Proceedings and Findings recommendations given
+
+    YELLOW when the meta-review lacks the Proceedings ({field_meta_proceedings}) or the
+    Findings ({field_meta_findings}) recommendation.
+    """
+    meta = paper.get("meta")
+    missing = [kind for kind in ("proceedings", "findings") if meta and not meta[kind]]
+    return [Finding(YELLOW, f"no {' or '.join(missing)} recommendation")] if missing else []
+
+
+@paper_check
+def findings_consistency(paper: dict, ctx: Context) -> list[Finding]:
+    """Findings recommendation respects the authors' choice
+
+    YELLOW when the meta-review recommends accepting the paper in Findings although the authors
+    opted out of Findings ({field_findings_opt_in} = No).
+    """
+    meta = paper.get("meta") or {}
+    if paper.get("findings_opt_in") == "No" and str(meta.get("findings", "")).startswith("Accept"):
+        return [Finding(YELLOW, "Findings accept, but the authors opted out of Findings")]
+    return []
+
+
+def run(checks: list, subject: Any, *args: Any) -> list[tuple[str, Finding]]:
+    """(code, finding) pairs from running `checks` on `subject`; a check's name is its code."""
+    found = []
+    for function in checks:
+        for f in function(subject, *args):
+            found.append((function.__name__ + (f":{f.detail}" if f.detail else ""), f))
+        if function is active_submission and found:
+            break  # withdrawn or desk rejected: nothing else applies
+    return found
+
+
+def check_paper(paper: dict, ctx: Context) -> list[Issue]:
+    spcs = tuple(paper["spcs"])
+    return [
+        Issue(paper["number"], f.severity, code, f.message, paper["url"], spcs)
+        for code, f in run(CHECKS, paper, ctx)
+    ]
+
+
+def _doc(function: Callable) -> tuple[str, str]:
     label, _, description = inspect.cleandoc(function.__doc__ or "").partition("\n\n")
     return label, " ".join(description.split())
 
 
-def legend(config: dict) -> list[tuple[str, str, str]]:
+def legend(config: dict, checks: list | None = None) -> list[tuple[str, str, str]]:
     """(code, label, description) of every check, thresholds filled in from `config`."""
-    return [(f.__name__, _doc(f)[0], _doc(f)[1].format_map(config)) for f in CHECKS]
+    return [
+        (f.__name__, _doc(f)[0], _doc(f)[1].format_map(config))
+        for f in (CHECKS if checks is None else checks)
+    ]
 
 
-def passed(issues: list[Issue]) -> list[str]:
+def passed(issues: list[Issue], checks: list | None = None) -> list[str]:
     """Labels of the checks a paper passes, given its issues."""
     failed = {i.code.split(":")[0] for i in issues}
-    return [_doc(f)[0] for f in CHECKS if f.__name__ not in failed]
+    return [_doc(f)[0] for f in (CHECKS if checks is None else checks) if f.__name__ not in failed]
 
 
 def check(snapshot: dict, config: dict) -> list[Issue]:
-    today = date.fromisoformat(snapshot["taken_at"][:10])
-    issues = [i for p in snapshot["papers"] for i in check_paper(p, config, today)]
+    ctx = Context(config, date.fromisoformat(snapshot["taken_at"][:10]), snapshot["papers"])
+    issues = [i for p in snapshot["papers"] for i in check_paper(p, ctx)]
     return sorted(issues, key=lambda i: (i.severity != RED, i.number, i.code))
 
 

@@ -54,7 +54,8 @@ def fields(content: dict, skip: tuple[str, ...] = ()) -> list[tuple[str, str]]:
 
 
 def metadata_fields(record: dict, config: dict) -> list[tuple[str, str]]:
-    return fields(record["content"], (config["field_pdf"], config["field_supplementary"]))
+    skip = (config["field_pdf"], config["field_supplementary"], "venue", "venueid")
+    return fields(record["content"], skip)
 
 
 def review_blocks(record: dict, reveal: bool = False) -> list[tuple[str, list[tuple[str, str]]]]:

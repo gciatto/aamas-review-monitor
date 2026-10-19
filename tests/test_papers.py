@@ -35,7 +35,9 @@ def test_download_reuses_current_copy(tmp_path):
 
 def test_metadata_and_reviews_keep_reviewers_anonymous():
     rec = record()
-    assert papers.metadata(rec, CONFIG) == "#7  https://openreview.net/forum?id=abc\ntitle: A Paper"
+    assert papers.metadata(rec, CONFIG) == (
+        "#7  https://openreview.net/forum?id=abc\ntitle: A Paper\nfindings_of_AAMAS_2027: No"
+    )
     anonymous = papers.reviews(rec)
     assert "== Official_Review by Reviewer_aB3x" in anonymous and "~Rev_A1" not in anonymous
     assert "== Meta_Review by Area_Chair_9jqi\nmetareview: fine" in anonymous
