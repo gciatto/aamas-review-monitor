@@ -2,7 +2,6 @@
 
 import logging
 import os
-import subprocess
 import webbrowser
 from collections.abc import Callable, Iterable
 from datetime import date
@@ -651,16 +650,16 @@ class Monitor(App):
 
         def job(client: Any, progress: Callable[[int, int], None]) -> tuple[int, list[str]]:
             records, found, failures = core.records(*numbers), 0, []
-            for count, record in enumerate(records):
-                progress(count, len(records))
-                try:  # after the retries, one failure must not stop the other downloads
-                    path = papers.download(client, record, field, core.DIR_PAPERS)
+            progress(0, len(records))
+            downloads = core.download_each(client, records, field)
+            for count, (record, path, error) in enumerate(downloads, 1):
+                if error:
+                    failures.append(f"#{record['number']}: {error}")
+                    logger.error("#%s: download failed: %s", record["number"], error)
+                else:
                     found += path is not None
                     logger.debug("#%s: %s", record["number"], path.name if path else f"no {field}")
-                except Exception as e:
-                    failures.append(f"#{record['number']}: {e}")
-                    logger.error("#%s: download failed: %s", record["number"], e)
-            progress(len(records), len(records))
+                progress(count, len(records))  # may stop the job here
             return found, failures
 
         def done(result: tuple[int, list[str]]) -> None:
@@ -683,17 +682,15 @@ class Monitor(App):
 
         def job(client: Any, progress: Callable[[int, int], None]) -> list[str]:
             failures = []
-            for count, record in enumerate(records):
-                progress(count, len(records))
-                try:
-                    found = documents.inspect_paper(
-                        record, self.config, core.DIR_PAPERS, lambda: client
-                    )
+            progress(0, len(records))
+            results = core.inspect_each(records, self.config, lambda: client)
+            for count, (record, found, error) in enumerate(results, 1):
+                if error:
+                    failures.append(f"#{record['number']}: {error}")
+                    logger.error("#%s: not inspected: %s", record["number"], error)
+                else:
                     logger.debug("#%s: %d document issues", record["number"], len(found))
-                except (OSError, subprocess.CalledProcessError) as e:
-                    failures.append(f"#{record['number']}: {e}")
-                    logger.error("#%s: not inspected: %s", record["number"], e)
-            progress(len(records), len(records))
+                progress(count, len(records))  # may stop the job here
             return failures
 
         def done(failures: list[str]) -> None:

@@ -6,9 +6,10 @@ from __future__ import annotations
 import getpass
 import json
 import os
+import subprocess
 import threading
 from datetime import date, datetime, timezone
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import TracebackType
 from typing import Any, NamedTuple
@@ -211,3 +212,27 @@ def freshness(latest: dict | None, config: dict, now: datetime | None = None) ->
     line = f"Snapshot of {taken.astimezone():%Y-%m-%d %H:%M}, {age} old"
     limit = config["snapshot_stale_hours"]
     return f"⚠ {line}: older than {limit} h, sync first?" if hours > limit else line
+
+
+def download_each(
+    client: Any, records: list[dict], field: str
+) -> Iterator[tuple[dict, Path | None, Exception | None]]:
+    """Downloads `field` of each paper, keeping current cached copies. Yields (record, path or
+    None if it has no such file, error): after the retries, one failure doesn't stop the rest."""
+    for record in records:
+        try:
+            yield record, papers.download(client, record, field, DIR_PAPERS), None
+        except Exception as e:
+            yield record, None, e
+
+
+def inspect_each(
+    records: list[dict], config: dict, connect: Callable[[], Any]
+) -> Iterator[tuple[dict, list, Exception | None]]:
+    """Runs the document checks of each paper, downloading what is missing through `connect()`.
+    Yields (record, [(code, Finding)], error): a missing tool or file stops only that paper."""
+    for record in records:
+        try:
+            yield record, documents.inspect_paper(record, config, DIR_PAPERS, connect), None
+        except (OSError, subprocess.CalledProcessError) as e:
+            yield record, [], e

@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import functools
 import logging
-import subprocess
 import sys
 import textwrap
 import webbrowser
@@ -137,11 +136,9 @@ def main(argv: list[str] | None = None) -> None:
         )
     elif args.command == "inspect":
         connect = functools.cache(lambda: core.login(config))  # logs in only to download
-        for record in load_records(*args.numbers):
-            try:
-                found = documents.inspect_paper(record, config, core.DIR_PAPERS, connect)
-            except (FileNotFoundError, subprocess.CalledProcessError) as e:
-                print(f"#{record['number']}: not inspected ({e})")
+        for record, found, error in core.inspect_each(load_records(*args.numbers), config, connect):
+            if error:
+                print(f"#{record['number']}: not inspected ({error})")
                 continue
             print(f"#{record['number']}: {len(found) or 'no'} document issues")
             print("\n".join(f"  {f.severity:6} {f.message}" for _, f in found))
@@ -167,11 +164,9 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "download":
         records, client = load_records(*args.numbers), core.login(config)
         field = config["field_supplementary" if args.supplementary else "field_pdf"]
-        for count, record in enumerate(records, 1):
-            try:  # after the retries, one failure must not stop the other downloads
-                result = papers.download(client, record, field, core.DIR_PAPERS) or f"no {field}"
-            except Exception as e:
-                result = f"failed ({e})"
+        downloads = core.download_each(client, records, field)
+        for count, (record, path, error) in enumerate(downloads, 1):
+            result = f"failed ({error})" if error else path or f"no {field}"
             print(f"[{count}/{len(records)}] #{record['number']}: {result}")
     elif args.command == "templates":
         for t in outreach.templates():
