@@ -45,12 +45,11 @@ from aamas_review_monitor.checks import (
     RED,
     YELLOW,
     Issue,
-    check,
     green_rows,
     legend,
     matches,
     passed,
-    report,
+    summary,
 )
 
 ICONS = {RED: "🔴", YELLOW: "🟡", GREEN: "🟢"}
@@ -472,6 +471,7 @@ class Monitor(App):
         self.hide_green = False
         # papers whose current PDF went through the document checks
         self.inspected: set[int] = set()
+        self.latest: dict | None = None  # the latest snapshot
         self.papers: list[dict] = []  # the latest snapshot's
         self.sent: list[dict] = []  # the history, newest first
 
@@ -510,17 +510,16 @@ class Monitor(App):
         self.query_one("#issues", DataTable).focus()
 
     def action_reload(self) -> None:
-        latest, previous = core.load_snapshots()
-        self.papers = latest["papers"] if latest else []
-        if latest is None:
+        state = core.current(self.config)
+        self.latest, self.inspected = state.latest, state.inspected
+        self.papers = state.latest["papers"] if state.latest else []
+        if state.latest is None:
             self.issues = []
             text = f"No snapshots in {core.DIR_SNAPSHOTS}: press s to sync"
         else:
-            extra, self.inspected = documents.snapshot_issues(latest, self.config, core.DIR_PAPERS)
-            self.issues = check(latest, self.config) + extra
-            self.issues += green_rows(latest, self.issues)
-            summary = report(latest, self.config, previous, extra)
-            text = summary.split("\n\n")[0]  # the summary lines
+            self.issues = state.issues + green_rows(state.latest, state.issues)
+            lines = summary(state.latest, self.config, state.previous, state.documents)
+            text = "\n".join(lines)
             for severity, icon in ICONS.items():
                 text = text.replace(f" {severity}", f" {icon}")
         self.query_one("#summary", Static).update(text)
@@ -637,7 +636,7 @@ class Monitor(App):
     def action_comment(self, every: bool = False) -> None:
         if not (numbers := self.scope(every)):
             return
-        records = papers.load(core.DIR_PAPERS) if core.DIR_PAPERS.is_dir() else []
+        records = core.records()
         draft, _ = outreach.comments(self.issues, records, set(numbers[:1]), True)
         text = draft[0].text if draft and not every else None
         if not every and not draft:
@@ -691,9 +690,9 @@ class Monitor(App):
         def chosen(template: outreach.Template | None) -> None:
             if template is None:
                 return
-            latest, _ = core.load_snapshots()
+            latest = self.latest
             today = date.fromisoformat(latest["taken_at"][:10]) if latest else date.today()
-            records = papers.load(core.DIR_PAPERS) if core.DIR_PAPERS.is_dir() else []
+            records = core.records()
             drafts, unreachable = outreach.compose(
                 template, self.issues, records, self.config, today, spcs, numbers
             )
@@ -760,7 +759,7 @@ class Monitor(App):
     def show_details(self, number: int) -> None:
         mine = [i for i in self.issues if i.number == number and i.severity != GREEN]
         try:
-            (record,) = papers.load(core.DIR_PAPERS, [number])
+            (record,) = core.records(number)
         except FileNotFoundError:
             record = None
         inspected = number in self.inspected
@@ -871,7 +870,7 @@ class Monitor(App):
         field = self.config[key]
         if not every:  # one paper: show it, downloading first only if needed
             try:
-                (record,) = papers.load(core.DIR_PAPERS, numbers)
+                (record,) = core.records(*numbers)
             except FileNotFoundError:
                 self.notify(f"#{numbers[0]} is not cached: press s to sync", severity="error")
                 return
@@ -889,7 +888,7 @@ class Monitor(App):
             return
 
         def job(client: Any, progress: Callable[[int, int], None]) -> tuple[int, list[str]]:
-            records, found, failures = papers.load(core.DIR_PAPERS, numbers), 0, []
+            records, found, failures = core.records(*numbers), 0, []
             for count, record in enumerate(records):
                 progress(count, len(records))
                 try:  # after the retries, one failure must not stop the other downloads
@@ -915,7 +914,7 @@ class Monitor(App):
         if not (numbers := self.scope(every)):
             return
         try:
-            records = papers.load(core.DIR_PAPERS, numbers)
+            records = core.records(*numbers)
         except FileNotFoundError as e:
             self.notify(f"Not cached: {e.filename}. Press s to sync", severity="error")
             return
@@ -954,7 +953,7 @@ class Monitor(App):
             if not form:
                 return
             try:
-                messages = papers.plan(papers.load(core.DIR_PAPERS, numbers), form["role"])
+                messages = papers.plan(core.records(*numbers), form["role"])
             except FileNotFoundError as e:
                 self.notify(f"Not cached: {e.filename}. Press s to sync", severity="error")
                 return

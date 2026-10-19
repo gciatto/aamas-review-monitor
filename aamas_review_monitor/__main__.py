@@ -112,15 +112,13 @@ def main(argv: list[str] | None = None) -> None:
 
         Monitor(config).run()
     elif args.command in ("report", "show", "issues"):
-        latest, previous = core.load_snapshots()
-        if latest is None:
+        state = core.current(config)
+        if (latest := state.latest) is None:
             sys.exit(f"No snapshots in {core.DIR_SNAPSHOTS}: run `sync` first")
         if args.command == "report":
-            extra, _ = documents.snapshot_issues(latest, config, core.DIR_PAPERS)
-            print(report(latest, config, previous, extra, args.filter, args.green))
+            print(report(latest, config, state.previous, state.documents, args.filter, args.green))
             if args.csv:
-                issues = check(latest, config) + extra
-                issues += green_rows(latest, issues) if args.green else []
+                issues = state.issues + (green_rows(latest, state.issues) if args.green else [])
                 with args.csv.open("w", newline="", encoding="utf-8") as file:
                     write_csv([i for i in issues if matches(i, args.filter)], file)
             return
@@ -178,15 +176,14 @@ def main(argv: list[str] | None = None) -> None:
             print(f"{t.key:20} {t.name} (to {t.audience}): {t.description}")
     elif args.command == "outreach":
         chosen = {t.key: t for t in outreach.templates()}.get(args.template)
-        latest, _ = core.load_snapshots()
-        if chosen is None or latest is None:
+        state = core.current(config)
+        if chosen is None or state.latest is None:
             sys.exit("Unknown template: see `templates`" if chosen is None else "Run `sync` first")
-        extra, _ = documents.snapshot_issues(latest, config, core.DIR_PAPERS)
-        today = date.fromisoformat(latest["taken_at"][:10])
+        today = date.fromisoformat(state.latest["taken_at"][:10])
         drafts, unreachable = outreach.compose(
             chosen,
-            check(latest, config) + extra,
-            papers.load(core.DIR_PAPERS) if core.DIR_PAPERS.is_dir() else [],
+            state.issues,
+            core.records(),
             config,
             today,
             set(args.spc) if args.spc else None,
@@ -199,13 +196,12 @@ def main(argv: list[str] | None = None) -> None:
         else:
             print("Nothing sent")
     elif args.command == "comment":
-        latest, _ = core.load_snapshots()
-        if latest is None:
+        state = core.current(config)
+        if state.latest is None:
             sys.exit("Run `sync` first")
-        extra, _ = documents.snapshot_issues(latest, config, core.DIR_PAPERS)
         records = load_records(*args.numbers)
         to_post, skipped = outreach.comments(
-            check(latest, config) + extra, records, {r["number"] for r in records}, args.spcs
+            state.issues, records, {r["number"] for r in records}, args.spcs
         )
         if args.text:
             text = args.text.read_text(encoding="utf-8")
@@ -256,7 +252,7 @@ def main(argv: list[str] | None = None) -> None:
 def document_lines(number: int, config: dict) -> list[str]:
     """Cached document check results of a paper, as report lines."""
     try:
-        (record,) = papers.load(core.DIR_PAPERS, [number])
+        (record,) = core.records(number)
     except FileNotFoundError:
         return []
     found = documents.inspection(record, config, core.DIR_PAPERS)
@@ -270,7 +266,7 @@ def document_lines(number: int, config: dict) -> list[str]:
 
 def load_records(*numbers: int) -> list[dict]:
     try:
-        return papers.load(core.DIR_PAPERS, list(numbers))
+        return core.records(*numbers)
     except FileNotFoundError as e:
         sys.exit(f"Not cached: {e.filename}. Is the paper yours? Run `sync` first")
 

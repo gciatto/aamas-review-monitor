@@ -458,6 +458,32 @@ def matches(issue: Issue, needle: str) -> bool:
     return needle.lower() in f"{issue.severity} #{issue.number} {spcs} {issue.message}".lower()
 
 
+def _changes(snapshot: dict, config: dict, previous: dict) -> tuple[int, list[Issue]]:
+    """How many paper-check issues are new since `previous`, and the ones resolved since."""
+    now = {(i.number, i.code) for i in check(snapshot, config)}
+    before = check(previous, config)
+    then = {(i.number, i.code) for i in before}
+    return len(now - then), [i for i in before if (i.number, i.code) not in now]
+
+
+def summary(
+    snapshot: dict, config: dict, previous: dict | None = None, extra: list[Issue] | None = None
+) -> list[str]:
+    """Papers per status and, given `previous`, the changes since. `extra` issues (document
+    checks) count in the status but not in the changes."""
+    status = {p["number"]: GREEN for p in snapshot["papers"]}
+    for i in check(snapshot, config) + (extra or []):
+        status[i.number] = RED if RED in (status[i.number], i.severity) else YELLOW
+    counts = {s: list(status.values()).count(s) for s in (RED, YELLOW, GREEN)}
+    lines = [f"{len(status)} papers: " + ", ".join(f"{n} {s}" for s, n in counts.items())]
+    if previous:
+        new, resolved = _changes(snapshot, config, previous)
+        lines.append(
+            f"Since {previous['taken_at'][:16]}: {new} new issues, {len(resolved)} resolved"
+        )
+    return lines
+
+
 def report(
     snapshot: dict,
     config: dict,
@@ -466,31 +492,16 @@ def report(
     needle: str = "",
     green: bool = False,
 ) -> str:
-    """Summary, changes since `previous`, and issues grouped by SPC. `extra` issues (document
-    checks) count in the summary but not in the history diff; `needle` filters the listing,
-    `green` adds a row for each paper without issues."""
+    """Summary, changes since `previous`, and issues grouped by SPC. `needle` filters the
+    listing, `green` adds a row for each paper without issues."""
     issues = sorted(
         check(snapshot, config) + (extra or []), key=lambda i: (i.severity != RED, i.number, i.code)
     )
-    status = {p["number"]: GREEN for p in snapshot["papers"]}
-    for i in issues:
-        status[i.number] = RED if RED in (status[i.number], i.severity) else YELLOW
-    counts = {s: list(status.values()).count(s) for s in (RED, YELLOW, GREEN)}
-    lines = [f"{len(status)} papers: " + ", ".join(f"{n} {s}" for s, n in counts.items())]
-
+    lines = summary(snapshot, config, previous, extra)
     resolved: dict[str, int] = defaultdict(int)
-    if previous:
-        now = {(i.number, i.code) for i in check(snapshot, config)}
-        before = check(previous, config)
-        for i in before:
-            if (i.number, i.code) not in now:
-                for spc in i.spcs or ("(no SPC)",):
-                    resolved[spc] += 1
-        then = {(i.number, i.code) for i in before}
-        lines.append(
-            f"Since {previous['taken_at'][:16]}: {len(now - then)} new issues, "
-            f"{len(then - now)} resolved"
-        )
+    for i in _changes(snapshot, config, previous)[1] if previous else []:
+        for spc in i.spcs or ("(no SPC)",):
+            resolved[spc] += 1
 
     by_spc: dict[str, list[Issue]] = defaultdict(list)
     for i in issues + (green_rows(snapshot, issues) if green else []):

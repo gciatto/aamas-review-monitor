@@ -10,14 +10,15 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
-from typing import Any
+from typing import Any, NamedTuple
 
 from requests.adapters import HTTPAdapter
 from urllib3.connectionpool import ConnectionPool
 from urllib3.response import BaseHTTPResponse
 from urllib3.util.retry import Retry
 
-from aamas_review_monitor import logger, papers
+from aamas_review_monitor import documents, logger, papers
+from aamas_review_monitor.checks import Issue, check
 from aamas_review_monitor.collector import fetch, snapshot
 from aamas_review_monitor.resources import FILE_CONFIG
 
@@ -151,3 +152,29 @@ def load_snapshots() -> tuple[dict | None, dict | None]:
     files = sorted(DIR_SNAPSHOTS.glob("*.json"))[-2:][::-1]
     latest, previous, *_ = [json.loads(f.read_text(encoding="utf-8")) for f in files] + [None] * 2
     return latest, previous
+
+
+class State(NamedTuple):
+    """What the front ends work on: the latest snapshot and the one before it, its open issues
+    (paper and cached document checks), and the papers whose current PDF was inspected."""
+
+    latest: dict | None
+    previous: dict | None
+    issues: list[Issue]
+    documents: list[Issue]  # the document checks' issues, also in `issues`
+    inspected: set[int]
+
+
+def current(config: dict) -> State:
+    latest, previous = load_snapshots()
+    if latest is None:
+        return State(None, None, [], [], set())
+    extra, inspected = documents.snapshot_issues(latest, config, DIR_PAPERS)
+    return State(latest, previous, check(latest, config) + extra, extra, inspected)
+
+
+def records(*numbers: int) -> list[dict]:
+    """Cached records of the papers (all if none given); FileNotFoundError if one is missing."""
+    if not numbers and not DIR_PAPERS.is_dir():
+        return []
+    return papers.load(DIR_PAPERS, list(numbers))
