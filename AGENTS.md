@@ -52,6 +52,12 @@ checks deterministic; never add LLM calls or scientific judgments.
 
 ## Conventions
 
+- Paper checks live in `checks.py`, one `@paper_check` function each, named after its issue
+  code (keep names stable: the history diff keys on them). Docstring: first line = what holds
+  when the paper passes ("SPC assigned"); then a blank line and what is flagged, with which
+  severity, using `{config_key}` placeholders for thresholds. Both legends (`legend` command,
+  `l` in the TUI) and the passed-checks lists are generated from these docstrings.
+
 - Commits follow Conventional Commits (`<type>[(scope)][!]: <description>`); semantic-release
   derives the next version from them, so pick the type carefully (`feat` = minor, `fix` =
   patch, `!` = major; `chore`/`docs`/`style`/`test`/`ci` don't release).

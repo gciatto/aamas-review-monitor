@@ -12,6 +12,7 @@ uv sync
 uv run aamas_review_monitor sync                 # fetch papers and a snapshot (asks for credentials)
 uv run aamas_review_monitor report [--csv FILE]  # action queue, diff vs previous snapshot
 uv run aamas_review_monitor tui                  # the same, as an interactive table
+uv run aamas_review_monitor legend               # what each check verifies, current thresholds
 uv run aamas_review_monitor show N               # metadata and issues of paper N
 uv run aamas_review_monitor issues N             # issues of paper N
 uv run aamas_review_monitor reviews N [--reveal] # reviews and meta-reviews, reviewers anonymous
@@ -30,8 +31,8 @@ recipient's name. Authors cannot be emailed: OpenReview only lets Program Chairs
 
 In the TUI every paper is listed with an icon (🔴 serious, 🟡 needs attention, 🟢 fine): one row
 per issue, one 🟢 row per paper without issues. `f` filters (SPC, paper number, issue, or a
-color name), `g` hides or shows 🟢 rows, clicking a header sorts, `s` syncs, `r` reloads, `q`
-quits. On the selected paper: Enter or `d` shows its metadata, failed and passed checks, and
+color name), `g` hides or shows 🟢 rows, clicking a header sorts, `l` shows the legend, `s` syncs, `r`
+reloads, `q` quits. On the selected paper: Enter or `d` shows its metadata, failed and passed checks, and
 anonymous reviews, `o` opens it on OpenReview, `e` opens an email form, and `p`/`u` open its
 PDF/supplementary material in a dialog, downloading it first if needed. The dialog shows the
 local path and the contents (PDF text, or the file tree of a zip); there `c` shows the file in
