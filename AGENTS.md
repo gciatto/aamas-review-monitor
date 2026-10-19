@@ -51,8 +51,9 @@ one tagged line each. Foreign hooks are never overwritten. `--no-verify` skips t
 Never run `sync`/`report`, read `~/.aamas-review-monitor/` (or `$AAMAS_MONITOR_DATA`), or
 otherwise touch real OpenReview data: AAMAS forbids exposing submissions to AI. Develop
 against the synthetic fixtures in `tests/` (`FakeClient` mimics the openreview-py calls;
-`conftest.py` makes any real `OpenReviewClient` fail). Never send real emails: `email` must
-keep requiring a typed `SEND`. Keep
+`conftest.py` makes any real `OpenReviewClient` fail and points every data path at a temporary
+folder). Never send real emails or comments: sending must keep requiring a typed `SEND`, and
+must keep recording each message in the history (`papers.deliver`, `papers.post_comments`). Keep
 checks deterministic; never add LLM calls or scientific judgments.
 
 ## Conventions
