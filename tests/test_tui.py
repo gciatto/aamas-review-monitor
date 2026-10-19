@@ -227,3 +227,25 @@ def test_command_palette_offers_every_action(tmp_path, monkeypatch):
             assert not any(c.title == "Legend" for c in app.get_system_commands(app.screen))
 
     asyncio.run(scenario())
+
+
+def test_tui_bulk_inspect_downloads_what_is_missing(tmp_path, monkeypatch):
+    from aamas_review_monitor import documents
+
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "A Paper\nAnonymous Author(s)\f")
+    monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {})
+    monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
+
+    async def scenario():
+        async with app.run_test() as pilot:
+            await pilot.press("I")
+            await settle(app, pilot)
+            assert client.downloads == [("pdf", "abc")]
+            assert 7 in app.inspected and any(i.code == "template" for i in app.issues)
+            monkeypatch.setattr(cli, "resume", lambda config: None)  # cached: no login needed
+            await pilot.press("I")
+            await settle(app, pilot)
+            assert client.downloads == [("pdf", "abc")] and not isinstance(app.screen, Login)
+
+    asyncio.run(scenario())

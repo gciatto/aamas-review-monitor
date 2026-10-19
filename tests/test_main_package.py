@@ -159,3 +159,33 @@ def test_browse_and_attachment(tmp_path, monkeypatch, capsys):
         archive.writestr("code/main.py", "print()")
     cli.main(["attachment", "7", "--supplementary", "--contents"])
     assert capsys.readouterr().out.splitlines()[1] == "code/main.py  (7 bytes)"
+
+
+def test_inspect_downloads_missing_pdf_and_supplementary(tmp_path, monkeypatch, capsys):
+    import io
+    import zipfile
+
+    from aamas_review_monitor import documents
+
+    client = cached_cli(tmp_path, monkeypatch)
+    record = cli.DIR_PAPERS / "7" / "record.json"
+    data = json.loads(record.read_text())
+    data["content"]["supplementary_material"] = {"value": "/attachment/s1.zip"}
+    record.write_text(json.dumps(data))
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("main.py", "print()")
+    attachments = {"pdf": b"%PDF", "supplementary_material": buffer.getvalue()}
+    monkeypatch.setattr(
+        client,
+        "get_attachment",
+        lambda field, id: client.downloads.append(field) or attachments[field],
+    )
+    monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "A Paper\nAnonymous Author(s)\f")
+    monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {})
+    monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
+    cli.main(["inspect"])  # every paper: downloads what is missing
+    assert sorted(client.downloads) == ["pdf", "supplementary_material"]
+    assert "#7: 1 document issues" in capsys.readouterr().out
+    cli.main(["inspect", "7"])  # all cached now: nothing downloaded again
+    assert len(client.downloads) == 2
