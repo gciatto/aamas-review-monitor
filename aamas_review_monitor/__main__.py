@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from aamas_review_monitor import papers
-from aamas_review_monitor.checks import check, report, write_csv
+from aamas_review_monitor.checks import check, passed, report, write_csv
 from aamas_review_monitor.collector import fetch, snapshot
 from aamas_review_monitor.resources import FILE_CONFIG
 
@@ -112,7 +112,12 @@ def main(argv: list[str] | None = None) -> None:
         if args.command == "show":
             print(papers.metadata(load_records(args.number)[0], config) + "\n")
         mine = [i for i in check(latest, config) if i.number == args.number]
-        print("\n".join(f"{i.severity:6} {i.message}" for i in mine) or "No issues")
+        print(
+            "\n".join(
+                [f"{i.severity:6} {i.message}" for i in mine]
+                + [f"{'GREEN':6} {label}" for label in passed(mine)]
+            )
+        )
     elif args.command == "reviews":
         print(papers.reviews(load_records(args.number)[0], args.reveal))
     elif args.command == "download":

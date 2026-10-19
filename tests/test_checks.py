@@ -1,6 +1,6 @@
 from datetime import date
 
-from aamas_review_monitor.checks import RED, YELLOW, check_paper
+from aamas_review_monitor.checks import LABELS, RED, YELLOW, check_paper, passed
 
 CONFIG = {
     "deadline_reviews": "2026-11-13",
@@ -66,3 +66,10 @@ def test_quality_signals():
 def test_meta_review_deadline():
     assert issues(paper(), "2026-12-08") == {(RED, "missing_meta_review")}
     assert issues(paper(meta_review=True), "2026-12-20") == set()
+
+
+def test_passed_lists_the_checks_without_issues():
+    found = check_paper(paper(spcs=[], words=10), CONFIG, date(2026, 10, 19))
+    labels = passed(found)
+    assert "SPC assigned" not in labels and "reviews long enough" not in labels
+    assert "enough reviewers assigned" in labels and len(labels) == len(LABELS) - 2

@@ -67,6 +67,24 @@ def check_paper(paper: dict, config: dict, today: date) -> list[Issue]:
     return [Issue(paper["number"], s, c, m, paper["url"], spcs) for s, c, m in found]
 
 
+# What each check verifies, by issue code (codes may carry a ":<detail>" suffix)
+LABELS = {
+    "no_spc": "SPC assigned",
+    "few_reviewers": "enough reviewers assigned",
+    "missing_reviews": "reviews on schedule",
+    "short_review": "reviews long enough",
+    "disagreement": "ratings within the allowed spread",
+    "no_discussion": "no undiscussed disagreement",
+    "missing_meta_review": "meta-review on schedule",
+}
+
+
+def passed(issues: list[Issue]) -> list[str]:
+    """Labels of the checks a paper passes, given its issues."""
+    failed = {i.code.split(":")[0] for i in issues}
+    return [label for code, label in LABELS.items() if code not in failed]
+
+
 def check(snapshot: dict, config: dict) -> list[Issue]:
     today = date.fromisoformat(snapshot["taken_at"][:10])
     issues = [i for p in snapshot["papers"] for i in check_paper(p, config, today)]
