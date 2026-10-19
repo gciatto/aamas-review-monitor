@@ -144,6 +144,18 @@ def test_meta_review_checks():
     assert issues(opted_out, "2026-12-08") == {(YELLOW, "findings_consistency")}
 
 
+def test_meta_review_against_the_ratings_of_your_papers():
+    others = [paper(n, ratings=(n, n, n)) for n in range(2, 10)]  # means 2..9
+    meta = {"words": 200, "proceedings": "Strong Accept", "findings": "Accept"}
+    weak = paper(1, ratings=(1, 1, 2), meta_review=True, meta=meta)
+    assert (YELLOW, "meta_vs_ratings") in issues(weak, "2026-10-19", *others)
+    assert (YELLOW, "meta_vs_ratings") not in issues(weak, "2026-10-19", *others[:5])  # too few
+    strong = paper(1, ratings=(9, 9, 9), meta_review=True, meta=meta | {"proceedings": "Reject"})
+    assert (YELLOW, "meta_vs_ratings") in issues(strong, "2026-10-19", *others)
+    fair = paper(1, ratings=(5, 6, 6), meta_review=True, meta=meta)
+    assert (YELLOW, "meta_vs_ratings") not in issues(fair, "2026-10-19", *others)
+
+
 def test_passed_lists_the_checks_without_issues():
     found = check_paper(paper(spcs=[], words=10), ctx("2026-10-19"))
     labels = passed(found)

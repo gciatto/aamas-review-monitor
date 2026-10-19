@@ -357,6 +357,31 @@ def missing_recommendation(paper: dict, ctx: Context) -> list[Finding]:
     return [Finding(YELLOW, f"no {' or '.join(missing)} recommendation")] if missing else []
 
 
+def _mean(paper: dict) -> float | None:
+    ratings = _ratings(paper)
+    return sum(ratings) / len(ratings) if ratings else None
+
+
+@paper_check
+def meta_vs_ratings(paper: dict, ctx: Context) -> list[Finding]:
+    """Meta-review in line with the ratings
+
+    YELLOW when the Proceedings recommendation is "Strong Accept" for a paper whose mean rating
+    is in the bottom quarter of your papers, or "Reject" for one in the top quarter. Ranking
+    within your papers needs no knowledge of the rating scale; it needs at least 8 rated papers.
+    """
+    recommendation, mean = str((paper.get("meta") or {}).get("proceedings") or ""), _mean(paper)
+    means = sorted(m for p in ctx.papers if (m := _mean(p)) is not None)
+    if mean is None or len(means) < 8 or recommendation not in ("Strong Accept", "Reject"):
+        return []
+    low, high = means[len(means) // 4], means[-(len(means) // 4) - 1]
+    if recommendation == "Strong Accept" and mean < low:
+        return [Finding(YELLOW, f"Strong Accept, but mean rating {mean:.1f} is in your bottom 25%")]
+    if recommendation == "Reject" and mean > high:
+        return [Finding(YELLOW, f"Reject, but mean rating {mean:.1f} is in your top 25%")]
+    return []
+
+
 @paper_check
 def findings_consistency(paper: dict, ctx: Context) -> list[Finding]:
     """Findings recommendation respects the authors' choice

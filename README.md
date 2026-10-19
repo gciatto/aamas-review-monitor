@@ -63,7 +63,7 @@ the current thresholds:
   text on two papers) or low-confidence reviews, rating disagreement without reviewer comments,
   overlong discussions (more comments than one per reviewer plus one per SPC), rebuttals not
   acknowledged (no review update or comment since), silent SPCs, missing, short or incomplete
-  meta-reviews, Findings recommendations against the authors' opt-out, withdrawn papers;
+  meta-reviews, Strong Accept/Reject at odds with how the ratings rank among your papers, Findings recommendations against the authors' opt-out, withdrawn papers;
 - **document checks**, on request (`inspect`, `i`): page limit (appendices count), too short,
   page size, fonts, AAMAS 2027 template, anonymous mode and identifying text, OpenReview title
   and abstract vs. the PDF, supplementary format, anonymity and code availability. Their
