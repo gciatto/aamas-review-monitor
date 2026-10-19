@@ -4,6 +4,8 @@
   "url_forum": "https://openreview.net/forum?id=",
   "field_rating": "rating",
   "field_confidence": "confidence",
+  "field_pdf": "pdf",
+  "field_supplementary": "supplementary_material",
   "deadline_reviews": "2026-11-13",
   "deadline_meta_reviews": "2026-12-09",
   "reviewers_min": 3,

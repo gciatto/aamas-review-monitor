@@ -1,9 +1,15 @@
 from types import SimpleNamespace as NS
 
-from aamas_review_monitor.collector import collect
+from aamas_review_monitor.collector import fetch, summarize
 
 VENUE = "ifaamas.org/AAMAS/2027/Conference"
 SUB = f"{VENUE}/Submission"
+CONFIG = {
+    "venue_id": VENUE,
+    "url_forum": "https://openreview.net/forum?id=",
+    "field_rating": "rating",
+    "field_confidence": "confidence",
+}
 
 
 def reply(kind, sig, **content):
@@ -15,9 +21,13 @@ def reply(kind, sig, **content):
 
 
 class FakeClient:
-    """Mimics the openreview-py v2 calls the collector makes; no network."""
+    """Mimics the openreview-py v2 calls the app makes; no network, records messages."""
 
     profile = NS(id="~Sac_Chair1")
+
+    def __init__(self):
+        self.messages = []
+        self.downloads = []
 
     def get_group(self, id):
         return NS(content={"area_chairs_name": {"value": "Area_Chairs"}})
@@ -45,37 +55,35 @@ class FakeClient:
                 summary="word " * 200,
             ),
             reply("Official_Review", "Reviewer_hidden", rating=3, summary="short"),
-            reply("Official_Comment", "Area_Chair_zz", comment="please discuss"),
+            reply("Meta_Review", "Area_Chair_9jqi", metareview="fine"),
+            reply("Official_Comment", "Area_Chair_9jqi", comment="please discuss"),
         ]
-        return [NS(id="abc", number=7, details={"replies": replies}), NS(id="x", number=70)]
+        content = {"title": {"value": "A Paper"}, "pdf": {"value": "/pdf/v1.pdf"}}
+        return [
+            NS(id="abc", number=7, content=content, details={"replies": replies}),
+            NS(id="x", number=70, content={}, details=None),
+        ]
+
+    def get_attachment(self, field_name, id):
+        self.downloads.append((field_name, id))
+        return b"%PDF"
+
+    def post_message(self, *args, **kwargs):
+        self.messages.append((args, kwargs))
 
 
-def test_collect_keeps_only_process_metadata():
-    snap = collect(
-        FakeClient(),
-        {
-            "venue_id": VENUE,
-            "url_forum": "https://openreview.net/forum?id=",
-            "field_rating": "rating",
-            "field_confidence": "confidence",
-        },
-    )
-    assert snap["papers"] == [
-        {
-            "number": 7,
-            "url": "https://openreview.net/forum?id=abc",
-            "spcs": ["~Spc_One1"],
-            "reviewers": ["~Rev_A1", "~Rev_B1", "~Rev_C1"],
-            "reviews": [
-                {"reviewer": "~Rev_A1", "rating": 6, "confidence": 4, "words": 203},
-                {
-                    "reviewer": f"{SUB}7/Reviewer_hidden",
-                    "rating": 3,
-                    "confidence": None,
-                    "words": 1,
-                },
-            ],
-            "meta_review": False,
-            "comments": 1,
-        }
-    ]
+def test_fetch_and_summarize_keep_only_process_metadata():
+    (record,) = fetch(FakeClient(), CONFIG)
+    assert record["number"] == 7 and record["content"]["title"]["value"] == "A Paper"
+    assert summarize(record, CONFIG) == {
+        "number": 7,
+        "url": "https://openreview.net/forum?id=abc",
+        "spcs": ["~Spc_One1"],
+        "reviewers": ["~Rev_A1", "~Rev_B1", "~Rev_C1"],
+        "reviews": [
+            {"reviewer": "~Rev_A1", "rating": 6, "confidence": 4, "words": 203},
+            {"reviewer": f"{SUB}7/Reviewer_hidden", "rating": 3, "confidence": None, "words": 1},
+        ],
+        "meta_review": True,
+        "comments": 1,
+    }
