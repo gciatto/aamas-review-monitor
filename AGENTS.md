@@ -8,9 +8,10 @@ secrets, Renovate) lives in `README.md`; do not duplicate it here.
 ```
 aamas_review_monitor/     the package, at the repo root (renamed by rename-template.sh)
   __init__.py     `__version__` and the package logger (logging is configured only in `__main__.py`)
-  __main__.py     CLI (`sync`, `report`, `tui`), data dir and snapshot storage
-  collector.py    read-only OpenReview v2 -> snapshot dict (process metadata only)
+  __main__.py     CLI, login (cached token), data dir and snapshot storage
+  collector.py    read-only OpenReview v2 -> per-paper records -> snapshot (process metadata only)
   checks.py       deterministic per-paper checks, SPC-grouped report, CSV
+  papers.py       record cache, metadata/reviews text, attachment downloads, emails
   tui.py          Textual app over `checks` (sync runs suspended, so prompts work)
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
 tests/            pytest unit tests
@@ -44,7 +45,9 @@ one tagged line each. Foreign hooks are never overwritten. `--no-verify` skips t
 
 Never run `sync`/`report`, read `~/.aamas-review-monitor/` (or `$AAMAS_MONITOR_DATA`), or
 otherwise touch real OpenReview data: AAMAS forbids exposing submissions to AI. Develop
-against the synthetic fixtures in `tests/` (`FakeClient` mimics the openreview-py calls). Keep
+against the synthetic fixtures in `tests/` (`FakeClient` mimics the openreview-py calls;
+`conftest.py` makes any real `OpenReviewClient` fail). Never send real emails: `email` must
+keep requiring a typed `SEND`. Keep
 checks deterministic; never add LLM calls or scientific judgments.
 
 ## Conventions

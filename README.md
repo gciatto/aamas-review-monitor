@@ -1,20 +1,36 @@
 # AAMAS Review Monitor
 
-Read-only monitor for an AAMAS 2027 Senior Area Chair: it pulls the review-process state of the
-papers assigned to you from OpenReview and prints an action queue grouped by SPC (Area Chair),
-with each paper GREEN/YELLOW/RED. Colors describe process health, never scientific quality.
+Monitor for an AAMAS 2027 Senior Area Chair: it pulls the review-process state of the papers
+assigned to you from OpenReview and prints an action queue grouped by SPC (Area Chair), with
+each paper GREEN/YELLOW/RED. Colors describe process health, never scientific quality. It also
+shows each paper's metadata and reviews, downloads PDFs, and emails reviewers or SPCs.
 
 ## Usage
 
 ```bash
 uv sync
-uv run aamas_review_monitor sync                 # fetch a snapshot (asks for credentials)
+uv run aamas_review_monitor sync                 # fetch papers and a snapshot (asks for credentials)
 uv run aamas_review_monitor report [--csv FILE]  # action queue, diff vs previous snapshot
 uv run aamas_review_monitor tui                  # the same, as an interactive table
+uv run aamas_review_monitor show N               # metadata and issues of paper N
+uv run aamas_review_monitor issues N             # issues of paper N
+uv run aamas_review_monitor reviews N [--reveal] # reviews and meta-reviews, reviewers anonymous
+uv run aamas_review_monitor download [N ...] [--supplementary]  # PDFs, or supplementary material
+uv run aamas_review_monitor email ROLE [N ...] --subject S --body FILE
 ```
 
-In the TUI: `/` filters (SPC, paper number, issue), clicking a header sorts, `o` or Enter opens
-the paper on OpenReview, `s` syncs, `r` reloads, `q` quits.
+Paper lists default to all your papers. `sync` caches each paper (content, reviews, groups) in
+`~/.aamas-review-monitor/papers/N/` and reports PDFs or supplementary material updated since the
+last sync; `download` fetches only what is missing or outdated, into the same folder.
+
+`email` sends one message per paper, signed as that paper's SACs, to `reviewers`,
+`late-reviewers` (assigned but no review yet) or `spcs`. It prints the recipients, subject and
+body and sends nothing unless you type `SEND`. `{{fullname}}` in the body becomes each
+recipient's name. Authors cannot be emailed: OpenReview only lets Program Chairs do that.
+
+In the TUI: `/` filters (SPC, paper number, issue), clicking a header sorts, `d` shows the
+paper's metadata, issues and anonymous reviews, `o` or Enter opens it on OpenReview, `s` syncs,
+`r` reloads, `q` quits.
 
 Run `sync` daily: each run adds a snapshot, and `report` shows what is new or resolved per SPC
 since the previous one. Credentials come from `OPENREVIEW_USERNAME`/`OPENREVIEW_PASSWORD` or a
@@ -25,7 +41,7 @@ to log out.
 Checks: missing SPC, fewer than `reviewers_min` reviewers, missing reviews near/after the review
 deadline, reviews under `reviews_words_min` words, rating spread of `scores_spread_max` or more,
 disagreement with no comments after the deadline, missing meta-review near/after its deadline.
-Thresholds, deadlines and review field names are in
+Thresholds, deadlines and field names are in
 [`resources/config.json`](aamas_review_monitor/resources/config.json); override any of them in
 `~/.aamas-review-monitor/config.json`. Verify `deadline_*`, `field_rating` and
 `field_confidence` against the venue before relying on the report.
@@ -34,13 +50,14 @@ Thresholds, deadlines and review field names are in
 
 AAMAS 2027 forbids sharing submission content with AI systems. Hence:
 
-- everything is deterministic Python; no LLM, no telemetry, nothing is written to OpenReview;
-- snapshots keep only process metadata (assignments, scores, word counts, comment counts): no
-  titles, abstracts, PDFs or review text;
+- everything is deterministic Python; no LLM, no telemetry; only `email` writes to OpenReview,
+  after you type `SEND`;
+- snapshots keep only process metadata (assignments, scores, word counts, comment counts); paper
+  content, reviews and PDFs are cached separately under `papers/`;
 - data lives in `~/.aamas-review-monitor/` (override with `AAMAS_MONITOR_DATA`), mode 0700,
   outside the repository;
-- **run `sync` and `report` in your own terminal, not through a coding agent**: their output and
-  the snapshots name reviewers and SPCs and carry their scores.
+- **run every command in your own terminal, not through a coding agent**: their output and the
+  cache carry submissions, reviews and the identities of reviewers and SPCs.
 
 Development uses synthetic fixtures only (`tests/`).
 
@@ -50,9 +67,10 @@ Development uses synthetic fixtures only (`tests/`).
 <root directory>
 ├── aamas_review_monitor/                     # main package (renamed into your project name)
 │   ├── __init__.py                   # package version and logger
-│   ├── __main__.py                   # CLI: sync, report (also `python -m aamas_review_monitor`)
+│   ├── __main__.py                   # CLI (also `python -m aamas_review_monitor`)
 │   ├── collector.py                  # read-only OpenReview v2 collector
 │   ├── checks.py                     # deterministic checks and report
+│   ├── papers.py                     # paper cache: metadata, reviews, downloads, emails
 │   ├── tui.py                        # Textual interface over the same checks
 │   └── resources/                    # non-code files shipped with the package
 │       ├── __init__.py               # paths to the resource files (DIR_RESOURCES, FILE_*)
@@ -60,7 +78,9 @@ Development uses synthetic fixtures only (`tests/`).
 ├── tests/                            # pytest suite, synthetic data only
 │   ├── test_githooks.py              # tests for scripts/githooks.py
 │   ├── test_checks.py                # checks
+│   ├── conftest.py                   # blocks real OpenReview clients in every test
 │   ├── test_collector.py             # collector against a fake OpenReview client
+│   ├── test_papers.py                # cache, downloads, emails (fake client)
 │   ├── test_tui.py                   # TUI driven headlessly
 │   └── test_main_package.py          # CLI report end to end
 ├── scripts/
