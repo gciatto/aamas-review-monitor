@@ -19,7 +19,9 @@ aamas_review_monitor/     the package, at the repo root (renamed by rename-templ
   tui.py          Textual app; network jobs run in worker threads behind a blocking Busy dialog
   screens.py      the TUI's screens and dialogs (details, attachment, legend, Busy, forms, Confirm)
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
-tests/            pytest unit tests
+tests/            pytest unit tests: test_core.py covers the shared services without a front end;
+                  test_tui.py drives the app, and waits for a job's visible effect (`done`),
+                  never for a fixed time or a quiet spell
 docs/             README screenshots (Textual SVGs of synthetic data only: never real papers)
 scripts/          githooks.py: installs/removes local Git hooks (poe install-hooks)
 .github/workflows/

@@ -219,8 +219,9 @@ retries and waits are logged to the terminal, and `ctrl+c` interrupts.
 `email` (or `e`) writes through each paper's OpenReview message invitation, signed as that
 paper's Senior Area Chairs. Messages can go to its reviewers, to its late reviewers (assigned,
 no review yet), or to its SPCs. `{{fullname}}` in the body becomes each recipient's name. Before
-anything is sent, you see every recipient group and the full message, and you confirm by typing
-`SEND`. OpenReview doesn't let SACs email authors.
+anything is sent, you see every message in full, with whom it goes to and through which paper,
+the same preview as for templates (with the same warnings about repeats and old snapshots), and
+you confirm by typing `SEND`. OpenReview doesn't let SACs email authors.
 
 ### Templates
 
