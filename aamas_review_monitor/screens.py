@@ -283,6 +283,9 @@ class Confirm(ModalScreen[bool]):
             yield Input(placeholder="Type SEND to send, Esc to cancel", id="confirm")
             yield Button("Send", id="confirm-send", variant="error")
 
+    def on_mount(self) -> None:
+        self.query_one("#confirm", Input).focus()  # ready to type SEND, or Esc
+
     @on(Input.Submitted, "#confirm")
     @on(Button.Pressed, "#confirm-send")
     def submit(self) -> None:

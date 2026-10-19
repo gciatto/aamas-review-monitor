@@ -164,8 +164,7 @@ def test_tui_email_sends_only_after_typing_send(tmp_path, monkeypatch):
                 await pilot.click("#send")
                 assert isinstance(app.screen, Confirm)
                 assert "=== To late-reviewers of #7 (2), via #7 ===" in app.screen.summary
-                app.screen.query_one("#confirm").value = answer
-                await pilot.click("#confirm-send")
+                await pilot.press(*answer, "enter")  # the dialog starts in its SEND box
                 await done(app, pilot, lambda: bool(notes) and not isinstance(app.screen, Confirm))
                 assert len(client.messages) == (answer == "SEND"), notes
 
@@ -349,8 +348,7 @@ def test_spc_tab_lists_issues_per_spc_and_sends_a_digest(tmp_path, monkeypatch):
             assert isinstance(app.screen, Confirm)
             assert "=== To ~Spc_One1, via #7 ===" in app.screen.summary
             assert "ratings [3, 6]" in app.screen.summary
-            app.screen.query_one("#confirm").value = "SEND"
-            await pilot.click("#confirm-send")
+            await pilot.press(*"SEND", "enter")
             await done(app, pilot, lambda: bool(app.sent))
             panel = str(app.query_one("#spc-issues").render())
             assert "Sent to them from this app" in panel and "email to ~Spc_One1 via #7" in panel
@@ -398,8 +396,7 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             await pilot.click("#comment-post")
             assert isinstance(app.screen, Confirm)
             assert app.screen.summary.startswith("1 comments, readable by PCs, SACs\n")
-            app.screen.query_one("#confirm").value = "SEND"
-            await pilot.click("#confirm-send")
+            await pilot.press(*"SEND", "enter")
             await done(app, pilot, lambda: bool(app.sent))
 
             ((_, _, note),) = client.comments
