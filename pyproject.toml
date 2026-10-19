@@ -1,7 +1,7 @@
 [project]
 name = "aamas-review-monitor"
 version = "1.0.2"
-description = "A Python project template using uv"
+description = "Read-only, deterministic OpenReview process monitor for AAMAS 2027 Senior Area Chairs"
 readme = "README.md"
 authors = [
     { name = "Giovanni Ciatto", email = "giovanni.ciatto@unibo.it" }

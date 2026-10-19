@@ -1,16 +1,42 @@
-# uv-powered Python Project Template
+# AAMAS Review Monitor
 
-A Python project template built with [uv](https://docs.astral.sh/uv/).
-It already includes: 
-- [Ruff](https://docs.astral.sh/ruff/) for linting and formatting;
-- [mypy](https://mypy.readthedocs.io/) for type checking;
-- [pytest](https://docs.pytest.org/) for testing;
-- [coverage](https://coverage.readthedocs.io/) for test coverage reporting;
-- [Poe the Poet](https://poethepoet.natn.io/) for task management;
-- [Renovate](https://docs.renovatebot.com/) configuration for automated dependency updates;
-- [semantic-release](https://semantic-release.gitbook.io/semantic-release/) configuration with conventional commits for automated releases to PyPI.
+Read-only monitor for an AAMAS 2027 Senior Area Chair: it pulls the review-process state of the
+papers assigned to you from OpenReview and prints an action queue grouped by SPC (Area Chair),
+with each paper GREEN/YELLOW/RED. Colors describe process health, never scientific quality.
 
-The template starts with a minimal package named `aamas_review_monitor`, which will be renamed when you create a new repository from this template.
+## Usage
+
+```bash
+uv sync
+uv run aamas_review_monitor sync                 # fetch a snapshot (asks for credentials)
+uv run aamas_review_monitor report [--csv FILE]  # action queue, diff vs previous snapshot
+```
+
+Run `sync` daily: each run adds a snapshot, and `report` shows what is new or resolved per SPC
+since the previous one. Credentials come from `OPENREVIEW_USERNAME`/`OPENREVIEW_PASSWORD` or a
+prompt; they are never stored.
+
+Checks: missing SPC, fewer than `reviewers_min` reviewers, missing reviews near/after the review
+deadline, reviews under `reviews_words_min` words, rating spread of `scores_spread_max` or more,
+disagreement with no comments after the deadline, missing meta-review near/after its deadline.
+Thresholds, deadlines and review field names are in
+[`resources/config.json`](aamas_review_monitor/resources/config.json); override any of them in
+`~/.aamas-review-monitor/config.json`. Verify `deadline_*`, `field_rating` and
+`field_confidence` against the venue before relying on the report.
+
+## Confidentiality
+
+AAMAS 2027 forbids sharing submission content with AI systems. Hence:
+
+- everything is deterministic Python; no LLM, no telemetry, nothing is written to OpenReview;
+- snapshots keep only process metadata (assignments, scores, word counts, comment counts): no
+  titles, abstracts, PDFs or review text;
+- data lives in `~/.aamas-review-monitor/` (override with `AAMAS_MONITOR_DATA`), mode 0700,
+  outside the repository;
+- **run `sync` and `report` in your own terminal, not through a coding agent**: their output and
+  the snapshots name reviewers and SPCs and carry their scores.
+
+Development uses synthetic fixtures only (`tests/`).
 
 ## Project Structure
 
@@ -18,18 +44,17 @@ The template starts with a minimal package named `aamas_review_monitor`, which w
 <root directory>
 ├── aamas_review_monitor/                     # main package (renamed into your project name)
 │   ├── __init__.py                   # package version and logger
-│   ├── __main__.py                   # application entry point (also `python -m aamas_review_monitor`)
-│   ├── greeting.py                   # example module
-│   ├── model/                        # example subpackage
-│   │   └── __init__.py
+│   ├── __main__.py                   # CLI: sync, report (also `python -m aamas_review_monitor`)
+│   ├── collector.py                  # read-only OpenReview v2 collector
+│   ├── checks.py                     # deterministic checks and report
 │   └── resources/                    # non-code files shipped with the package
 │       ├── __init__.py               # paths to the resource files (DIR_RESOURCES, FILE_*)
-│       ├── config.json               # example configuration
-│       └── greeting.txt              # example long string (e.g. a prompt)
-├── tests/                            # pytest test suite
+│       └── config.json               # venue, deadlines, thresholds
+├── tests/                            # pytest suite, synthetic data only
 │   ├── test_githooks.py              # tests for scripts/githooks.py
-│   ├── test_aamas_review_monitor.py          # tests for the example package
-│   └── test_model.py                 # pytest examples
+│   ├── test_checks.py                # checks
+│   ├── test_collector.py             # collector against a fake OpenReview client
+│   └── test_main_package.py          # CLI report end to end
 ├── scripts/
 │   └── githooks.py                   # installs/removes local Git hooks
 ├── .github/                          # configuration of GitHub Actions

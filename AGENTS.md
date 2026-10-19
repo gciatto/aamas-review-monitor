@@ -8,9 +8,9 @@ secrets, Renovate) lives in `README.md`; do not duplicate it here.
 ```
 aamas_review_monitor/     the package, at the repo root (renamed by rename-template.sh)
   __init__.py     `__version__` and the package logger (logging is configured only in `__main__.py`)
-  __main__.py     `main()`: the `[project.scripts]` entry point and `python -m aamas_review_monitor`
-  greeting.py     example module
-  model/          example subpackage
+  __main__.py     CLI (`sync`, `report`), data dir and snapshot storage
+  collector.py    read-only OpenReview v2 -> snapshot dict (process metadata only)
+  checks.py       deterministic per-paper checks, SPC-grouped report, CSV
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
 tests/            pytest unit tests
 scripts/          githooks.py: installs/removes local Git hooks (poe install-hooks)
@@ -38,6 +38,13 @@ Hooks (`scripts/githooks.py`, never tracked): `pre-commit` runs static-checks,
 AI assistants' signatures (Claude, Codex, Copilot, ... trailers or "Generated with" footers),
 `pre-push` runs static-checks + tests. The two message checks share `.git/hooks/commit-msg`,
 one tagged line each. Foreign hooks are never overwritten. `--no-verify` skips them once.
+
+## Confidentiality (hard rule)
+
+Never run `sync`/`report`, read `~/.aamas-review-monitor/` (or `$AAMAS_MONITOR_DATA`), or
+otherwise touch real OpenReview data: AAMAS forbids exposing submissions to AI. Develop
+against the synthetic fixtures in `tests/` (`FakeClient` mimics the openreview-py calls). Keep
+checks deterministic; never add LLM calls or scientific judgments.
 
 ## Conventions
 
