@@ -20,7 +20,8 @@ scripts/          githooks.py: installs/removes local Git hooks (poe install-hoo
 .github/workflows/
   check.yml       static-checks + coverage, then tests on ubuntu/windows/macos x Python 3.10-3.13,
                   then deploy.yml
-  deploy.yml      semantic-release (dry run off main/master and on the initial commit)
+  deploy.yml      semantic-release to GitHub releases only, wheel kept as an artifact (dry run
+                  off main/master and on the initial commit)
   init.yml        one-shot: renames the template in repos created from it, then deletes itself
 ```
 
@@ -81,7 +82,7 @@ checks deterministic; never add LLM calls or scientific judgments.
 ## Releases
 
 Conventional Commits drive semantic-release (`release.config.mjs`), which runs
-`uv version <next> && uv build && uv publish` (to TestPyPI while the repo name contains
-`template`) in its prepare step, before the release commit and tag: a failed upload leaves
-neither. `pyproject.toml` is the only version source; never bump it by hand.
+`uv version <next> && uv build` in its prepare step and attaches the wheel and sdist to a
+GitHub release. Nothing goes to PyPI; `deploy.yml` also keeps `dist/` as a workflow artifact on
+every run. `pyproject.toml` is the only version source; never bump it by hand.
 `CHANGELOG.md` is generated.
