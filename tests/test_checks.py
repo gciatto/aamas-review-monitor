@@ -1,6 +1,6 @@
 from datetime import date
 
-from aamas_review_monitor.checks import LABELS, RED, YELLOW, check_paper, passed
+from aamas_review_monitor.checks import CHECKS, RED, YELLOW, check_paper, legend, passed
 
 CONFIG = {
     "deadline_reviews": "2026-11-13",
@@ -71,5 +71,16 @@ def test_meta_review_deadline():
 def test_passed_lists_the_checks_without_issues():
     found = check_paper(paper(spcs=[], words=10), CONFIG, date(2026, 10, 19))
     labels = passed(found)
-    assert "SPC assigned" not in labels and "reviews long enough" not in labels
-    assert "enough reviewers assigned" in labels and len(labels) == len(LABELS) - 2
+    assert "SPC assigned" not in labels and "Reviews long enough" not in labels
+    assert "Enough reviewers assigned" in labels and len(labels) == len(CHECKS) - 2
+
+
+def test_legend_comes_from_the_check_docstrings():
+    entries = {code: (label, text) for code, label, text in legend(CONFIG)}
+    assert list(entries) == [f.__name__ for f in CHECKS]
+    assert entries["few_reviewers"] == (
+        "Enough reviewers assigned",
+        "RED when fewer than 3 reviewers are assigned.",
+    )
+    assert "deadline (2026-11-13) it is YELLOW" in entries["missing_reviews"][1]
+    assert all(label and text and "{" not in text for label, text in entries.values())

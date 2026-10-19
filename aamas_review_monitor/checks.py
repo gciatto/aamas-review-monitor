@@ -1,7 +1,9 @@
 """Deterministic process checks over a snapshot. They flag review-process health, never quality."""
 
 import csv
+import inspect
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import date
 from typing import IO, NamedTuple
 
@@ -17,72 +19,163 @@ class Issue(NamedTuple):
     spcs: tuple[str, ...]
 
 
-def _deadline(
-    missing: int, what: str, days: int, warning: int, critical: int
-) -> tuple[str, str] | None:
+class Finding(NamedTuple):
+    severity: str
+    message: str
+    detail: str = ""  # tells apart several findings of one check, e.g. one per reviewer
+
+
+Check = Callable[[dict, dict, date], list[Finding]]
+
+# Paper checks, in display order. Convention for each one (see `paper_check`):
+# - the function name is the issue code (stable across days, used by the history diff);
+# - the docstring's first line says what holds when the paper passes ("SPC assigned");
+# - the rest says what is flagged and how severely, with {config_key} placeholders that the
+#   legend fills in from the configuration.
+CHECKS: list[Check] = []
+
+
+def paper_check(function: Check) -> Check:
+    """Registers a paper check; it must follow the docstring convention above."""
+    assert function.__doc__ and "\n\n" in inspect.cleandoc(function.__doc__), function.__name__
+    CHECKS.append(function)
+    return function
+
+
+def _days(config: dict, key: str, today: date) -> int:
+    return (date.fromisoformat(config[key]) - today).days
+
+
+def _deadline(missing: int, what: str, days: int, warning: int, critical: int) -> list[Finding]:
     if not missing or days > warning:
-        return None
+        return []
     if days < 0:
-        return RED, f"{missing} {what} missing, {-days} days overdue"
-    return (RED if days <= critical else YELLOW), f"{missing} {what} missing, {days} days left"
+        return [Finding(RED, f"{missing} {what} missing, {-days} days overdue")]
+    severity = RED if days <= critical else YELLOW
+    return [Finding(severity, f"{missing} {what} missing, {days} days left")]
 
 
-def check_paper(paper: dict, config: dict, today: date) -> list[Issue]:
-    found: list[tuple[str, str, str]] = []
-    reviews, reviewers = paper["reviews"], paper["reviewers"]
-    days_reviews = (date.fromisoformat(config["deadline_reviews"]) - today).days
-    days_meta = (date.fromisoformat(config["deadline_meta_reviews"]) - today).days
+def _spread(paper: dict) -> list[int]:
+    return sorted(r["rating"] for r in paper["reviews"] if r["rating"] is not None)
 
-    if not paper["spcs"]:
-        found.append((RED, "no_spc", "no SPC assigned"))
-    if len(reviewers) < config["reviewers_min"]:
-        found.append((RED, "few_reviewers", f"{len(reviewers)} reviewers assigned"))
-    late = _deadline(
-        max(len(reviewers) - len(reviews), 0),
+
+@paper_check
+def no_spc(paper: dict, config: dict, today: date) -> list[Finding]:
+    """SPC assigned
+
+    RED when the paper has no SPC (Area Chair) assigned.
+    """
+    return [] if paper["spcs"] else [Finding(RED, "no SPC assigned")]
+
+
+@paper_check
+def few_reviewers(paper: dict, config: dict, today: date) -> list[Finding]:
+    """Enough reviewers assigned
+
+    RED when fewer than {reviewers_min} reviewers are assigned.
+    """
+    count = len(paper["reviewers"])
+    return [Finding(RED, f"{count} reviewers assigned")] if count < config["reviewers_min"] else []
+
+
+@paper_check
+def missing_reviews(paper: dict, config: dict, today: date) -> list[Finding]:
+    """Reviews on schedule
+
+    Counts assigned reviewers without a submitted review. From {reviews_warning_days} days
+    before the review deadline ({deadline_reviews}) it is YELLOW, from {reviews_critical_days}
+    days before and once overdue RED.
+    """
+    return _deadline(
+        max(len(paper["reviewers"]) - len(paper["reviews"]), 0),
         "reviews",
-        days_reviews,
+        _days(config, "deadline_reviews", today),
         config["reviews_warning_days"],
         config["reviews_critical_days"],
     )
-    if late:
-        found.append((late[0], "missing_reviews", late[1]))
-    for r in reviews:
-        if r["words"] < config["reviews_words_min"]:
-            found.append((YELLOW, f"short_review:{r['reviewer']}", f"review of {r['words']} words"))
-    ratings = [r["rating"] for r in reviews if r["rating"] is not None]
-    if ratings and max(ratings) - min(ratings) >= config["scores_spread_max"]:
-        found.append((YELLOW, "disagreement", f"ratings {sorted(ratings)}"))
-        if days_reviews < 0 and not paper["comments"]:
-            found.append((RED, "no_discussion", "reviewers disagree and nobody has commented"))
-    late = _deadline(
-        0 if paper["meta_review"] else 1,
-        "meta-review",
-        days_meta,
-        config["meta_reviews_warning_days"],
+
+
+@paper_check
+def short_review(paper: dict, config: dict, today: date) -> list[Finding]:
+    """Reviews long enough
+
+    YELLOW for each submitted review shorter than {reviews_words_min} words (all text fields
+    counted together).
+    """
+    return [
+        Finding(YELLOW, f"review of {r['words']} words", r["reviewer"])
+        for r in paper["reviews"]
+        if r["words"] < config["reviews_words_min"]
+    ]
+
+
+@paper_check
+def disagreement(paper: dict, config: dict, today: date) -> list[Finding]:
+    """Ratings within the allowed spread
+
+    YELLOW when the highest and lowest ratings differ by {scores_spread_max} or more.
+    """
+    ratings = _spread(paper)
+    if ratings and ratings[-1] - ratings[0] >= config["scores_spread_max"]:
+        return [Finding(YELLOW, f"ratings {ratings}")]
+    return []
+
+
+@paper_check
+def no_discussion(paper: dict, config: dict, today: date) -> list[Finding]:
+    """No undiscussed disagreement
+
+    RED when, after the review deadline ({deadline_reviews}), ratings differ by
+    {scores_spread_max} or more and nobody has posted a comment.
+    """
+    ratings = _spread(paper)
+    disagree = ratings and ratings[-1] - ratings[0] >= config["scores_spread_max"]
+    if disagree and _days(config, "deadline_reviews", today) < 0 and not paper["comments"]:
+        return [Finding(RED, "reviewers disagree and nobody has commented")]
+    return []
+
+
+@paper_check
+def missing_meta_review(paper: dict, config: dict, today: date) -> list[Finding]:
+    """Meta-review on schedule
+
+    RED when there is no meta-review from {meta_reviews_warning_days} days before its
+    deadline ({deadline_meta_reviews}) on.
+    """
+    days, warning = (
+        _days(config, "deadline_meta_reviews", today),
         config["meta_reviews_warning_days"],
     )
-    if late:
-        found.append((late[0], "missing_meta_review", late[1]))
-    spcs = tuple(paper["spcs"])
-    return [Issue(paper["number"], s, c, m, paper["url"], spcs) for s, c, m in found]
+    return _deadline(0 if paper["meta_review"] else 1, "meta-review", days, warning, warning)
 
 
-# What each check verifies, by issue code (codes may carry a ":<detail>" suffix)
-LABELS = {
-    "no_spc": "SPC assigned",
-    "few_reviewers": "enough reviewers assigned",
-    "missing_reviews": "reviews on schedule",
-    "short_review": "reviews long enough",
-    "disagreement": "ratings within the allowed spread",
-    "no_discussion": "no undiscussed disagreement",
-    "missing_meta_review": "meta-review on schedule",
-}
+def check_paper(paper: dict, config: dict, today: date) -> list[Issue]:
+    issues = []
+    for function in CHECKS:
+        for f in function(paper, config, today):
+            code = function.__name__ + (f":{f.detail}" if f.detail else "")
+            issues.append(
+                Issue(
+                    paper["number"], f.severity, code, f.message, paper["url"], tuple(paper["spcs"])
+                )
+            )
+    return issues
+
+
+def _doc(function: Check) -> tuple[str, str]:
+    label, _, description = inspect.cleandoc(function.__doc__ or "").partition("\n\n")
+    return label, " ".join(description.split())
+
+
+def legend(config: dict) -> list[tuple[str, str, str]]:
+    """(code, label, description) of every check, thresholds filled in from `config`."""
+    return [(f.__name__, _doc(f)[0], _doc(f)[1].format_map(config)) for f in CHECKS]
 
 
 def passed(issues: list[Issue]) -> list[str]:
     """Labels of the checks a paper passes, given its issues."""
     failed = {i.code.split(":")[0] for i in issues}
-    return [label for code, label in LABELS.items() if code not in failed]
+    return [_doc(f)[0] for f in CHECKS if f.__name__ not in failed]
 
 
 def check(snapshot: dict, config: dict) -> list[Issue]:

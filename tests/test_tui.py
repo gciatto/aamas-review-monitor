@@ -34,7 +34,7 @@ def test_tui_lists_and_filters_issues(tmp_path, monkeypatch):
             assert isinstance(app.screen, Paper)
             text = app.screen.text.plain
             assert "Not cached" in text and "🔴 no SPC assigned" in text
-            assert "🟢 enough reviewers assigned" in text
+            assert "🟢 Enough reviewers assigned" in text
             await pilot.press("escape")
             assert not isinstance(app.screen, Paper)
 
