@@ -35,6 +35,8 @@ def test_tui_lists_and_filters_issues(tmp_path, monkeypatch):
             text = app.screen.text.plain
             assert "Not cached" in text and "🔴 no SPC assigned" in text
             assert "🟢 Enough reviewers assigned" in text
+            await pilot.press("p", "f", "i")  # table actions are off on the details screen
+            assert isinstance(app.screen, Paper)
             await pilot.press("escape")
             assert not isinstance(app.screen, Paper)
             await pilot.press("l")

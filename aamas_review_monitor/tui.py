@@ -305,6 +305,10 @@ COMMANDS = [
 ]  # fmt: skip
 
 
+# Actions that work on the main table, so only while it is on screen
+TABLE_ACTIONS = {a.split("(")[0] for _, _, a in COMMANDS}
+
+
 class Monitor(App):
     TITLE = "AAMAS Review Monitor"
     # Lowercase keys act on the selected paper; uppercase ones on all the papers shown, hidden
@@ -440,8 +444,10 @@ class Monitor(App):
                 yield SystemCommand(title, help, partial(self.run_action, action))
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
-        # While a job runs, the UI only allows quitting
-        return action == "quit" or not isinstance(self.screen, Busy)
+        # While a job runs, the UI only allows quitting; the table's actions need the table
+        if isinstance(self.screen, Busy):
+            return action == "quit"
+        return action not in TABLE_ACTIONS or bool(self.screen.query("#issues"))
 
     def online(
         self,
