@@ -1,0 +1,18 @@
+Name: SPC digest
+Description: Each SPC gets every open issue on the papers they supervise
+Audience: spcs
+Codes: *
+Subject: AAMAS 2027: status of your papers ($papers)
+---
+Dear {{fullname}},
+
+Here is where the reviewing of the papers you are supervising as SPC stands. These are the
+points that currently need attention:
+
+$issues
+
+Each link opens the paper's forum on OpenReview. Thank you for taking care of them, and let me
+know if anything blocks you.
+
+Best regards,
+Your Senior Area Chair

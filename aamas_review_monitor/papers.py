@@ -10,7 +10,7 @@ import sys
 import zipfile
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, NamedTuple
 
 from aamas_review_monitor import logger
 from aamas_review_monitor.collector import person, replies
@@ -183,6 +183,43 @@ def describe(messages: Plan, role: str, subject: str, body: str) -> str:
     )
 
 
+class Draft(NamedTuple):
+    """One message, fully composed: sent through `record`'s message `invitation`."""
+
+    record: dict
+    invitation: str
+    parent: str
+    members: list[str]
+    subject: str
+    body: str
+    to: str  # who it is for, for previews and logs ("reviewers of #7", "~Ada_Lovelace1")
+
+
+def deliver(
+    client: Any, drafts: list[Draft], progress: Callable[[int, int], None] | None = None
+) -> list[str]:
+    """Posts the drafts, each signed as its paper's SACs; returns the failures.
+    `progress(sent, total)` runs before each message (it may stop the batch there, by raising)."""
+    failures = []
+    for count, d in enumerate(drafts):
+        if progress:
+            progress(count, len(drafts))
+        try:
+            client.post_message(
+                d.subject,
+                d.members,
+                d.body,
+                invitation=d.invitation,
+                signature=d.record["prefix"] + d.record["names"]["senior_area_chairs"],
+                parentGroup=d.parent,
+            )
+            logger.debug("%s: sent to %d recipients", d.to, len(d.members))
+        except Exception as e:  # keep going: the other messages are independent
+            failures.append(f"{d.to}: not sent ({e})")
+            logger.error("%s: not sent: %s", d.to, e)
+    return failures
+
+
 def send(
     client: Any,
     messages: Plan,
@@ -190,26 +227,12 @@ def send(
     body: str,
     progress: Callable[[int, int], None] | None = None,
 ) -> list[str]:
-    """Posts the messages, signed as each paper's SACs; returns the failures. `progress(sent,
-    total)` runs before each message (it may stop the batch there, by raising)."""
-    failures = []
-    for count, (record, invitation, parent, members) in enumerate(messages):
-        if progress:
-            progress(count, len(messages))
-        try:
-            client.post_message(
-                subject,
-                members,
-                body,
-                invitation=invitation,
-                signature=record["prefix"] + record["names"]["senior_area_chairs"],
-                parentGroup=parent,
-            )
-            logger.debug("#%s: sent to %d recipients", record["number"], len(members))
-        except Exception as e:  # keep going: the other papers' messages are independent
-            failures.append(f"#{record['number']}: not sent ({e})")
-            logger.error("#%s: not sent: %s", record["number"], e)
-    return failures
+    """The same message to each paper's recipients; returns the failures."""
+    drafts = [
+        Draft(r, invitation, parent, members, subject, body, f"#{r['number']}")
+        for r, invitation, parent, members in messages
+    ]
+    return deliver(client, drafts, progress)
 
 
 def email(

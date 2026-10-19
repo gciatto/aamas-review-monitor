@@ -1,0 +1,15 @@
+Name: Review deadline
+Description: The reviewers of each paper still missing reviews as the review deadline approaches
+Audience: late-reviewers
+Codes: missing_reviews
+Subject: AAMAS 2027: review of paper $paper due $deadline_reviews
+---
+Dear {{fullname}},
+
+A friendly reminder: your review of AAMAS 2027 paper $paper ($url) is due on
+$deadline_reviews, in $days_reviews days.
+
+Thank you for your work for AAMAS.
+
+Best regards,
+The Senior Area Chair

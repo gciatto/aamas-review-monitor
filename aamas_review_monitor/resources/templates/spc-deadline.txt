@@ -1,0 +1,17 @@
+Name: Meta-review deadline
+Description: SPCs whose papers still lack a meta-review as the deadline approaches
+Audience: spcs
+Codes: missing_meta_review
+Subject: AAMAS 2027: meta-reviews due $deadline_meta_reviews
+---
+Dear {{fullname}},
+
+A friendly reminder: meta-reviews are due on $deadline_meta_reviews, in $days_meta_reviews days.
+These papers still need one:
+
+$issues
+
+Please remember both the Proceedings and the Findings recommendations.
+
+Best regards,
+Your Senior Area Chair

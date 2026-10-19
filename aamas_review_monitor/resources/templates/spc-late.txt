@@ -1,0 +1,17 @@
+Name: Late SPCs
+Description: SPCs with overdue or stalled SPC work: meta-reviews, discussions, acknowledgements
+Audience: spcs
+Codes: missing_meta_review, short_meta_review, missing_recommendation, no_discussion, inactive_spc, missing_acknowledgement, findings_consistency
+Subject: AAMAS 2027: SPC actions pending ($papers)
+---
+Dear {{fullname}},
+
+Some SPC actions on your papers are pending or overdue:
+
+$issues
+
+The meta-review deadline is $deadline_meta_reviews ($days_meta_reviews days from now). Could you
+take care of these as soon as possible?
+
+Best regards,
+Your Senior Area Chair
