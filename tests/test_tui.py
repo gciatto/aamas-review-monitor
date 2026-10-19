@@ -47,21 +47,30 @@ def test_tui_lists_and_filters_issues(tmp_path, monkeypatch):
     asyncio.run(scenario())
 
 
-async def until(pilot, condition, timeout=15):
-    """Waits for `condition()` to hold, e.g. for a background job's effect."""
+async def until(pilot, condition, timeout=15, state=lambda: ""):
+    """Waits for `condition()` to hold, e.g. for a background job's effect; on a timeout, says
+    what `state()` was."""
     waited = 0.0
     while not condition() and waited < timeout:
         await pilot.pause(0.02)
         waited += 0.02
-    assert condition(), "timed out"
+    assert condition(), f"timed out: {state()}"
 
 
 async def done(app, pilot, effect):
     """Waits for the job started by the last key or click to end with its visible `effect`.
     Waiting for an effect, not for a quiet spell, is what makes this deterministic: a job may
     start some ticks after the key, from a dismissed dialog's callback."""
-    jobs = lambda: isinstance(app.screen, Busy) or any(w.is_running for w in app.workers)  # noqa: E731
-    await until(pilot, lambda: effect() and not jobs())
+
+    def running():
+        return [f"{w.name} ({w.state.name})" for w in app.workers if w.is_running]
+
+    def state():
+        return f"screen {app.screen!r}, effect {effect()}, running {running()}"
+
+    await until(
+        pilot, lambda: effect() and not isinstance(app.screen, Busy) and not running(), state=state
+    )
 
 
 def cached_monitor(tmp_path, monkeypatch):
