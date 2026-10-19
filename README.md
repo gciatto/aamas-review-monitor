@@ -104,15 +104,15 @@ tools (`pdftotext`, `pdfinfo`, `pdffonts`): `brew install xpdf` on macOS, or
 `apt install poppler-utils` on Debian and Ubuntu.
 
 ```bash
-pip install "git+https://github.com/gciatto/amas-review-monitor.git"
+pip install "git+https://github.com/gciatto/aamas-review-monitor.git"
 ```
 
 To install a fixed release, use its tag, or the wheel attached to the release on
-[GitHub](https://github.com/gciatto/amas-review-monitor/releases) (replace `X.Y.Z`):
+[GitHub](https://github.com/gciatto/aamas-review-monitor/releases) (replace `X.Y.Z`):
 
 ```bash
-pip install "git+https://github.com/gciatto/amas-review-monitor.git@vX.Y.Z"
-pip install https://github.com/gciatto/amas-review-monitor/releases/download/vX.Y.Z/aamas_review_monitor-X.Y.Z-py3-none-any.whl
+pip install "git+https://github.com/gciatto/aamas-review-monitor.git@vX.Y.Z"
+pip install https://github.com/gciatto/aamas-review-monitor/releases/download/vX.Y.Z/aamas_review_monitor-X.Y.Z-py3-none-any.whl
 ```
 
 `pipx install …` or `uv tool install …` with the same URLs keeps it in an environment of its
