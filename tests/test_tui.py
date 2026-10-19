@@ -187,3 +187,23 @@ def test_tui_inspects_the_pdf_and_shows_the_results(tmp_path, monkeypatch):
             assert "template" in codes
 
     asyncio.run(scenario())
+
+
+def test_tui_bulk_download_survives_a_failure(tmp_path, monkeypatch):
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+
+    def broken(field_name, id):
+        raise ConnectionError("rate limited")
+
+    monkeypatch.setattr(client, "get_attachment", broken)
+    notes: list[str] = []
+    monkeypatch.setattr(app, "notify", lambda message, **kw: notes.append(message))
+
+    async def scenario():
+        async with app.run_test() as pilot:
+            await pilot.press("P")
+            await settle(app, pilot)
+            assert not isinstance(app.screen, Busy)
+
+    asyncio.run(scenario())
+    assert notes == ["#7: rate limited\n0 of 1 papers have pdf: cached"]

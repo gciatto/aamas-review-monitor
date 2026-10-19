@@ -11,6 +11,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 from aamas_review_monitor import documents, papers
 from aamas_review_monitor.checks import Issue, check, legend, passed, report, write_csv
 from aamas_review_monitor.collector import fetch, snapshot
@@ -30,6 +33,26 @@ def load_config() -> dict:
     return config | (json.loads(local.read_text(encoding="utf-8")) if local.is_file() else {})
 
 
+def tune(client: Any, config: dict) -> Any:
+    """Sets the client's retry policy from `config`: exponential backoff with jitter on rate
+    limits (429), server errors (5xx) and connection failures, honouring Retry-After. Only
+    reads are retried: a message POST is never resent, so no email can go out twice."""
+    retry = Retry(
+        total=config["retries"],
+        connect=config["retries"],
+        backoff_factor=config["backoff_seconds"],
+        backoff_max=config["backoff_max_seconds"],
+        backoff_jitter=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        raise_on_status=False,
+        respect_retry_after_header=True,
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_maxsize=128)
+    for prefix in ("https://", "http://"):
+        client.session.mount(prefix, adapter)
+    return client
+
+
 def resume(config: dict) -> Any | None:
     """A client from the cached session token; None if there is none or it expired."""
     import openreview  # type: ignore[import-untyped]
@@ -39,7 +62,7 @@ def resume(config: dict) -> Any | None:
     client = openreview.api.OpenReviewClient(
         baseurl=config["url_api"], token=FILE_TOKEN.read_text(encoding="utf-8").strip()
     )
-    return client if client.profile is not None else None  # expired: no profile
+    return tune(client, config) if client.profile is not None else None  # expired: no profile
 
 
 def login(config: dict, username: str | None = None, password: str | None = None) -> Any:
@@ -59,7 +82,7 @@ def login(config: dict, username: str | None = None, password: str | None = None
     DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
     FILE_TOKEN.touch(mode=0o600)
     FILE_TOKEN.write_text(client.token, encoding="utf-8")
-    return client
+    return tune(client, config)
 
 
 def sync(
@@ -88,6 +111,14 @@ def main(argv: list[str] | None = None) -> None:
     # Only the application configures logging; importing the package leaves it alone.
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(prog="aamas_review_monitor")
+    retries = parser.add_argument_group("retries (OpenReview reads; defaults from the config)")
+    retries.add_argument("--retries", type=int, help="retries after a failure (config: retries)")
+    retries.add_argument(
+        "--backoff", type=float, dest="backoff_seconds", help="first wait in seconds, then doubling"
+    )
+    retries.add_argument(
+        "--backoff-max", type=float, dest="backoff_max_seconds", help="longest wait in seconds"
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("sync", help="fetch papers and a new snapshot from OpenReview (read-only)")
     report_cmd = commands.add_parser("report", help="action queue from the latest snapshot")
@@ -111,7 +142,10 @@ def main(argv: list[str] | None = None) -> None:
         cmd.add_argument("numbers", type=int, nargs="*", help="papers (default: all)")
     args = parser.parse_args(argv)
 
-    config = load_config()
+    overrides = ("retries", "backoff_seconds", "backoff_max_seconds")
+    config = load_config() | {
+        k: getattr(args, k) for k in overrides if getattr(args, k) is not None
+    }
     if args.command == "sync":
         file, changes = sync(config)
         print("\n".join([*changes, f"Saved {file}"]))
@@ -168,8 +202,12 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "download":
         records, client = load_records(*args.numbers), login(config)
         field = config["field_supplementary" if args.supplementary else "field_pdf"]
-        for record in records:
-            print(f"#{record['number']}: {papers.download(client, record, field, DIR_PAPERS)}")
+        for count, record in enumerate(records, 1):
+            try:  # after the retries, one failure must not stop the other downloads
+                result = papers.download(client, record, field, DIR_PAPERS) or f"no {field}"
+            except Exception as e:
+                result = f"failed ({e})"
+            print(f"[{count}/{len(records)}] #{record['number']}: {result}")
     elif args.command == "email":
         records = load_records(*args.numbers)
         body = args.body.read_text(encoding="utf-8")

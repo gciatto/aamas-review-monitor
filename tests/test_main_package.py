@@ -69,3 +69,34 @@ def test_inspect_prints_document_issues_and_show_includes_them(tmp_path, monkeyp
     assert (
         "RED    no AAMAS 2027 copyright block" in out and "GREEN  Anonymous submission mode" in out
     )
+
+
+def test_retry_policy_comes_from_config_and_command_line(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    import requests
+
+    from aamas_review_monitor import papers
+    from aamas_review_monitor.collector import fetch
+    from tests.test_collector import FakeClient
+
+    client = cli.tune(SimpleNamespace(session=requests.Session()), cli.load_config())
+    retry = client.session.get_adapter("https://api2.openreview.net").max_retries
+    assert (retry.total, retry.connect, retry.backoff_factor, retry.backoff_max) == (8, 8, 1, 120)
+    assert 429 in retry.status_forcelist and "POST" not in retry.allowed_methods
+
+    class Flaky(FakeClient):
+        def get_attachment(self, field_name, id):
+            raise ConnectionError("still down after the retries")
+
+    seen: list[dict] = []
+    monkeypatch.setattr(cli, "login", lambda config: seen.append(config) or Flaky())
+    monkeypatch.setattr(cli, "DIR_PAPERS", tmp_path)
+    papers.save(fetch(FakeClient(), cli.load_config()), tmp_path, [])
+    cli.main(["--retries", "2", "--backoff", "0.5", "download", "7"])
+    assert (seen[0]["retries"], seen[0]["backoff_seconds"], seen[0]["backoff_max_seconds"]) == (
+        2,
+        0.5,
+        120,
+    )
+    assert capsys.readouterr().out == "[1/1] #7: failed (still down after the retries)\n"

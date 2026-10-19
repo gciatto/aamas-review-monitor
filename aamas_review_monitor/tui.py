@@ -526,18 +526,25 @@ class Monitor(App):
                 )
             return
 
-        def job(client: Any, progress: Callable[[int, int], None]) -> int:
-            records, found = papers.load(cli.DIR_PAPERS, numbers), 0
+        def job(client: Any, progress: Callable[[int, int], None]) -> tuple[int, list[str]]:
+            records, found, failures = papers.load(cli.DIR_PAPERS, numbers), 0, []
             for count, record in enumerate(records):
                 progress(count, len(records))
-                found += papers.download(client, record, field, cli.DIR_PAPERS) is not None
-            return found
+                try:  # after the retries, one failure must not stop the other downloads
+                    found += papers.download(client, record, field, cli.DIR_PAPERS) is not None
+                except Exception as e:
+                    failures.append(f"#{record['number']}: {e}")
+            progress(len(records), len(records))
+            return found, failures
 
-        self.online(
-            f"Downloading {field} of {len(numbers)} papers…",
-            job,
-            lambda found: self.notify(f"{found} of {len(numbers)} papers have {field}: cached"),
-        )
+        def done(result: tuple[int, list[str]]) -> None:
+            found, failures = result
+            summary = f"{found} of {len(numbers)} papers have {field}: cached"
+            self.notify(
+                "\n".join([*failures, summary]), severity="error" if failures else "information"
+            )
+
+        self.online(f"Downloading {field} of {len(numbers)} papers…", job, done)
 
     def action_inspect(self, every: bool = False) -> None:
         if not (numbers := self.scope(every)):
