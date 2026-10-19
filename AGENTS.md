@@ -8,9 +8,10 @@ secrets, Renovate) lives in `README.md`; do not duplicate it here.
 ```
 aamas_review_monitor/     the package, at the repo root (renamed by rename-template.sh)
   __init__.py     `__version__` and the package logger (logging is configured only in `__main__.py`)
-  __main__.py     CLI (`sync`, `report`), data dir and snapshot storage
+  __main__.py     CLI (`sync`, `report`, `tui`), data dir and snapshot storage
   collector.py    read-only OpenReview v2 -> snapshot dict (process metadata only)
   checks.py       deterministic per-paper checks, SPC-grouped report, CSV
+  tui.py          Textual app over `checks` (sync runs suspended, so prompts work)
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
 tests/            pytest unit tests
 scripts/          githooks.py: installs/removes local Git hooks (poe install-hooks)

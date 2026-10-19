@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.10" # Update workflows/check.yml if you change this
 dependencies = [
     "openreview-py>=2.9.0",
+    "textual>=8.2.8",
 ]
 
 [project.scripts]

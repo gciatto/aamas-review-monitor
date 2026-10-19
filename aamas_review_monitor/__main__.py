@@ -48,6 +48,13 @@ def sync(config: dict) -> Path:
     return file
 
 
+def load_snapshots() -> tuple[dict | None, dict | None]:
+    """The latest snapshot and the one before it, either None if missing."""
+    files = sorted(DIR_SNAPSHOTS.glob("*.json"))[-2:][::-1]
+    latest, previous, *_ = [json.loads(f.read_text(encoding="utf-8")) for f in files] + [None] * 2
+    return latest, previous
+
+
 def main(argv: list[str] | None = None) -> None:
     # Only the application configures logging; importing the package leaves it alone.
     logging.basicConfig(level=logging.INFO)
@@ -56,17 +63,22 @@ def main(argv: list[str] | None = None) -> None:
     commands.add_parser("sync", help="fetch a new snapshot from OpenReview (read-only)")
     report_cmd = commands.add_parser("report", help="action queue from the latest snapshot")
     report_cmd.add_argument("--csv", type=Path, help="also write the issues to this CSV file")
+    commands.add_parser("tui", help="interactive terminal UI over the latest snapshot")
     args = parser.parse_args(argv)
 
     config = load_config()
     if args.command == "sync":
         print(f"Saved {sync(config)}")
         return
-    snapshots = sorted(DIR_SNAPSHOTS.glob("*.json"))
-    if not snapshots:
+    if args.command == "tui":
+        from aamas_review_monitor.tui import Monitor
+
+        Monitor(config).run()
+        return
+    latest, previous = load_snapshots()
+    if latest is None:
         sys.exit(f"No snapshots in {DIR_SNAPSHOTS}: run `sync` first")
-    latest, *older = [json.loads(f.read_text(encoding="utf-8")) for f in snapshots[-2:][::-1]]
-    print(report(latest, config, older[0] if older else None))
+    print(report(latest, config, previous))
     if args.csv:
         with args.csv.open("w", newline="", encoding="utf-8") as file:
             write_csv(check(latest, config), file)
