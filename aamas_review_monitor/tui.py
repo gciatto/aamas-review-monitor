@@ -5,7 +5,7 @@ import os
 import webbrowser
 from collections.abc import Callable, Iterable
 from datetime import date
-from functools import partial
+from functools import partial, wraps
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,7 @@ from textual import events, on, work
 from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import (
     DataTable,
@@ -91,6 +92,21 @@ MENU = {
     ],
     "spcs-tab": ["mail"],
 }  # fmt: skip
+
+
+def mounted(handler: Callable) -> Callable:
+    """Skips a panel handler while the main screen is being built or torn down: Textual may
+    deliver resize and row-highlight messages then, when the widgets they update are missing,
+    and an exception in a handler would close the app."""
+
+    @wraps(handler)
+    def guarded(self: "Monitor", *args: Any) -> None:
+        try:
+            handler(self, *args)
+        except NoMatches:
+            pass
+
+    return guarded
 
 
 def numbered(numbers: list[int]) -> str:
@@ -178,6 +194,7 @@ class Monitor(App):
         self.action_reload()
         issues.focus()
 
+    @mounted
     def on_resize(self, event: events.Resize) -> None:
         self.query_one("#paper-panel").display = event.size.width >= self.PANEL_WIDTH_MIN
         self.show_paper()
@@ -236,6 +253,7 @@ class Monitor(App):
         self.show_history()
 
     @on(DataTable.RowHighlighted, "#history")
+    @mounted
     def show_history(self) -> None:
         table, text = self.query_one("#history", DataTable), Text()
         if table.row_count:
@@ -277,6 +295,7 @@ class Monitor(App):
         return str(table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value)
 
     @on(DataTable.RowHighlighted, "#spcs")
+    @mounted
     def show_spc(self) -> None:
         spc, text = self.selected_spc(), Text()
         mine = self.by_spc().get(spc or "", [])
@@ -451,6 +470,7 @@ class Monitor(App):
         self.push_screen(Paper(self.paper_text(number)))
 
     @on(DataTable.RowHighlighted, "#issues")
+    @mounted
     def show_paper(self) -> None:
         """The selected paper's details, beside the queue when the terminal is wide enough."""
         panel = self.query_one("#paper-panel")

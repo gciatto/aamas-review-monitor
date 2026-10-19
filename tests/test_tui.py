@@ -451,3 +451,19 @@ def test_narrow_terminals_hide_the_details_panel(tmp_path, monkeypatch):
             assert not app.query_one("#paper-panel").display
 
     asyncio.run(scenario())
+
+
+def test_panel_handlers_survive_a_screen_being_built_or_torn_down(tmp_path, monkeypatch):
+    app, _, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test() as pilot:
+            for panel in ("#paper-panel", "#spc-panel", "#history-panel"):
+                await app.query_one(panel).remove()  # as during shutdown
+            await pilot.resize_terminal(130, 30)  # on_resize updates the paper panel
+            app.show_spc()
+            app.show_history()
+            await pilot.press("g")
+            assert app.hide_green  # still running and taking keys
+
+    asyncio.run(scenario())
