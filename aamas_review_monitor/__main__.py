@@ -12,6 +12,7 @@ from aamas_review_monitor.resources import FILE_CONFIG
 # Confidential data lives outside the repository, readable only by the user
 DIR_DATA = Path(os.environ.get("AAMAS_MONITOR_DATA", Path.home() / ".aamas-review-monitor"))
 DIR_SNAPSHOTS = DIR_DATA / "snapshots"
+FILE_TOKEN = DIR_DATA / "token"
 
 
 def load_config() -> dict:
@@ -26,11 +27,20 @@ def sync(config: dict) -> Path:
     from aamas_review_monitor.collector import collect
 
     DIR_SNAPSHOTS.mkdir(parents=True, exist_ok=True, mode=0o700)
-    client = openreview.api.OpenReviewClient(
-        baseurl=config["url_api"],
-        username=os.environ.get("OPENREVIEW_USERNAME") or input("OpenReview username: "),
-        password=os.environ.get("OPENREVIEW_PASSWORD") or getpass.getpass("Password: "),
-    )
+    client = None
+    if FILE_TOKEN.is_file():  # an expired token leaves the client without a profile
+        client = openreview.api.OpenReviewClient(
+            baseurl=config["url_api"], token=FILE_TOKEN.read_text(encoding="utf-8").strip()
+        )
+    if client is None or client.profile is None:
+        client = openreview.api.OpenReviewClient(
+            baseurl=config["url_api"],
+            username=os.environ.get("OPENREVIEW_USERNAME") or input("OpenReview username: "),
+            password=os.environ.get("OPENREVIEW_PASSWORD") or getpass.getpass("Password: "),
+            tokenExpiresIn=7 * 24 * 3600,  # the longest OpenReview allows
+        )
+        FILE_TOKEN.touch(mode=0o600)
+        FILE_TOKEN.write_text(client.token, encoding="utf-8")
     snapshot = collect(client, config)
     file = DIR_SNAPSHOTS / (snapshot["taken_at"][:19].replace(":", "") + ".json")
     file.write_text(json.dumps(snapshot, indent=1), encoding="utf-8")

@@ -14,7 +14,9 @@ uv run aamas_review_monitor report [--csv FILE]  # action queue, diff vs previou
 
 Run `sync` daily: each run adds a snapshot, and `report` shows what is new or resolved per SPC
 since the previous one. Credentials come from `OPENREVIEW_USERNAME`/`OPENREVIEW_PASSWORD` or a
-prompt; they are never stored.
+prompt and are never stored; the resulting 1-week session token is kept in
+`~/.aamas-review-monitor/token` (mode 0600), so you log in about once a week. Delete that file
+to log out.
 
 Checks: missing SPC, fewer than `reviewers_min` reviewers, missing reviews near/after the review
 deadline, reviews under `reviews_words_min` words, rating spread of `scores_spread_max` or more,
