@@ -1,0 +1,201 @@
+# uv-powered Python Project Template
+
+A Python project template built with [uv](https://docs.astral.sh/uv/).
+It already includes: 
+- [Ruff](https://docs.astral.sh/ruff/) for linting and formatting;
+- [mypy](https://mypy.readthedocs.io/) for type checking;
+- [pytest](https://docs.pytest.org/) for testing;
+- [coverage](https://coverage.readthedocs.io/) for test coverage reporting;
+- [Poe the Poet](https://poethepoet.natn.io/) for task management;
+- [Renovate](https://docs.renovatebot.com/) configuration for automated dependency updates;
+- [semantic-release](https://semantic-release.gitbook.io/semantic-release/) configuration with conventional commits for automated releases to PyPI.
+
+The template starts with a minimal package named `main_package`, which will be renamed when you create a new repository from this template.
+
+## Project Structure
+
+```bash
+<root directory>
+├── main_package/                     # main package (renamed into your project name)
+│   ├── __init__.py                   # package version and logger
+│   ├── __main__.py                   # application entry point (also `python -m main_package`)
+│   ├── greeting.py                   # example module
+│   ├── model/                        # example subpackage
+│   │   └── __init__.py
+│   └── resources/                    # non-code files shipped with the package
+│       ├── __init__.py               # paths to the resource files (DIR_RESOURCES, FILE_*)
+│       ├── config.json               # example configuration
+│       └── greeting.txt              # example long string (e.g. a prompt)
+├── tests/                            # pytest test suite
+│   ├── test_githooks.py              # tests for scripts/githooks.py
+│   ├── test_main_package.py          # tests for the example package
+│   └── test_model.py                 # pytest examples
+├── scripts/
+│   └── githooks.py                   # installs/removes local Git hooks
+├── .github/                          # configuration of GitHub Actions
+│   └── workflows/
+│       ├── check.yml                 # runs checks and tests on multiple OSs and Python versions
+│       ├── deploy.yml                # releases to PyPI/TestPyPI with semantic-release
+│       └── init.yml                  # initializes repositories created from this template
+├── AGENTS.md                         # notes for coding agents and contributors
+├── CHANGELOG.md                      # generated release changelog
+├── LICENSE                           # license file
+├── package.json                      # Node.js dependencies for semantic-release
+├── pyproject.toml                    # Python project configuration, dependencies, and tasks
+├── renovate.json                     # configuration of Renovate bot for dependency updates
+├── release.config.mjs                # semantic-release configuration
+├── rename-template.sh                # CI helper script used by init.yml to rename the project
+└── uv.lock                           # locked Python dependency versions
+```
+
+## Requirements
+
+- Only [uv](https://docs.astral.sh/uv/getting-started/installation/) and
+    - Node.js and npm, for semantic-release and package publishing.
+
+You can install uv following the instructions in the [documentation](https://docs.astral.sh/uv/getting-started/installation/).
+
+## Python Installation
+
+You can install and handle Python versions with uv:
+
+```bash
+uv python install 3.12
+uv python pin 3.12
+uv python list
+```
+
+## Creating a Project from this Template
+
+1. Create a new repository from this template on GitHub.
+
+2. Let the initialization workflow run.
+
+   The `.github/workflows/init.yml` workflow runs automatically on `main` or
+   `master` when the repository is neither marked as a template nor a fork. It calls
+   `rename-template.sh` to replace the template placeholders with the repository
+   name, removes the initialization workflow, and commits the result.
+
+3. Install dependencies:
+
+    ```bash
+    uv sync
+    ```
+
+4. Run the checks:
+
+    ```bash
+    uv run poe static-checks
+    uv run poe test
+    ```
+
+5. Start building your project in `main_package/` and add tests under `tests/`.
+
+## Main Commands
+
+### Running the Application
+`uv run main_package` (or `uv run python -m main_package`) to run the application entry point defined in `pyproject.toml`.
+
+
+### Dependency Management
+
+| Command | Description |
+| --- | --- |
+| `uv sync` | Create or update the local environment from `pyproject.toml` and `uv.lock`. |
+| `uv run main_package` | Run the application entry point. |
+| `uv add <package>` | Add a runtime dependency. |
+| `uv add --dev <package>` | Add a development dependency. |
+| `uv remove <package>` | Remove a dependency. | 
+| `uv lock` | Update the lock file after dependency changes. |
+| `uv sync --locked` | Sync the environment strictly to the locked versions. |
+
+### Configured Tasks
+
+Project task aliases are defined in [pyproject.toml](pyproject.toml) under `[tool.poe.tasks]` and
+can be run through uv.
+
+| Command | Description |
+| --- | --- |
+| `uv run poe test` | Run the pytest test suite. |
+| `uv run poe coverage` | Run tests through coverage. |
+| `uv run poe coverage-report` | Print a terminal coverage report with missing lines. |
+| `uv run poe coverage-html` | Generate an HTML coverage report in `htmlcov/`. |
+| `uv run poe ruff-check` | Lint: report code problems (unused imports, undefined names, risky patterns, ...). |
+| `uv run poe ruff-fix` | Lint and apply the automatic fixes Ruff knows for those problems. |
+| `uv run poe format-check` | Report files whose layout (quotes, wrapping, spacing) differs from Ruff's style. |
+| `uv run poe format` | Rewrite files into Ruff's style. |
+| `uv run poe mypy` | Type-check `main_package/`, `tests/` and `scripts/` with Mypy. |
+| `uv run poe compile` | Compile `main_package/`, `tests/` and `scripts/` to catch syntax errors. |
+| `uv run poe static-checks` | Run `compile`, `format-check`, `ruff-check` and `mypy` (what CI runs); changes nothing. |
+| `uv run poe static-fixes` | Run `ruff-fix`, then `format`; fixes most `static-checks` failures except type errors. |
+| `uv run poe install-hooks [HOOK...]` | Install local Git hooks (see [Git Hooks](#git-hooks); default: all). |
+| `uv run poe uninstall-hooks [HOOK...]` | Remove the hooks installed by `install-hooks`. |
+
+Linting (`ruff-*`) and formatting (`format*`) are separate Ruff tools: the linter finds code
+problems but ignores layout, the formatter fixes layout but never changes what the code does.
+A file can pass one and fail the other, so both run in `static-checks`.
+
+Contributor/agent notes (layout, conventions) are in [`AGENTS.md`](AGENTS.md).
+
+### Git Hooks
+
+Optional and local: they live in `.git/hooks/`, so each clone opts in with
+`uv run poe install-hooks [HOOK...]`. They catch locally what CI would otherwise reject later.
+`git commit/push --no-verify` skips them once. Existing hooks not installed by this script are
+never overwritten.
+
+| Hook | Runs on | Blocks when | Cost | Install it if |
+| --- | --- | --- | --- | --- |
+| `pre-commit` | every `git commit` | `static-checks` fails | a few seconds per commit | you want every commit to be clean |
+| `conventional-commits` | every commit message | the subject is not `<type>[(scope)][!]: <description>` | none | you push to `main`/`master` (releases depend on it) |
+| `no-ai-signature` | every commit message | it has an AI-assistant trailer or "Generated with" footer | none | you use coding assistants |
+| `pre-push` | every `git push` | `static-checks` or tests fail | the whole test suite per push | you'd rather wait locally than for CI to fail |
+
+`pre-commit` and `pre-push` overlap. For small, frequent commits, `pre-push` alone is usually
+enough.
+
+
+## Release a new version on PyPi
+
+New versions are automatically released on PyPi via GitHub Actions, when a push is made on the `main` or `master` branch.
+
+The version number is updated automatically by the `semantic-release` tool, which uses the commit messages to infer the type of the release (major, minor, patch).
+
+It is paramount that the commit messages follow the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification,
+in order for `semantic-release` to compute version numbers correctly.
+
+
+For successfully publishing, configure these repository secrets as needed:
+
+- `PYPI_TOKEN`: token for publishing to PyPI.
+- `TEST_PYPI_TOKEN`: token for publishing to TestPyPI.
+- `RELEASE_TOKEN`: GitHub token used by semantic-release.
+
+The workflow dry-runs releases outside `main` or `master`, and also dry-runs the
+initial commit.
+
+## Automatic updates of dependencies (via Renovate)
+
+The project is configured to use [Renovate](https://docs.renovatebot.com/) to automatically open pull-requests
+to update dependencies declared in `pyproject.toml`.
+
+By default, Renovate will assign such pull-requests to the user who created the repository from this template.
+
+If the project has tests (which is the case for this template), Renovate will only merge such pull-requests
+if all tests pass.
+
+When some test fails, Renovate will leave a comment on the pull-request, so that you can fix the issue manually.
+
+To make Renovate work, you need to enable it for your repository.
+To do so, please follow the instruction at <https://docs.renovatebot.com/getting-started/installing-onboarding/#hosted-githubcom-app>
+
+Finally, please remember to enable PR auto-merging in your repository settings, otherwise Renovate will not be able to merge
+the pull-requests it opens, even if all tests pass.
+To do so, please follow the instructions available [here](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-auto-merge-for-pull-requests-in-your-repository#managing-auto-merge).
+
+> Notice that the combination between Renovate, and Semantic Release may lead to a number of releases being created automatically.
+
+
+## License
+
+This template is distributed under the license included in [LICENSE](LICENSE).

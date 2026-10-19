@@ -1,0 +1,69 @@
+[project]
+name = "template-python-project-uv"
+version = "1.0.2"
+description = "A Python project template using uv"
+readme = "README.md"
+authors = [
+    { name = "Giovanni Ciatto", email = "giovanni.ciatto@unibo.it" }
+]
+requires-python = ">=3.10" # Update workflows/check.yml if you change this
+dependencies = []
+
+[project.scripts]
+main_package = "main_package.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "main_package"
+module-root = ""
+
+[dependency-groups]
+dev = [
+    "coverage>=7.14.0",
+    "mypy>=2.1.0",
+    "poethepoet>=0.45.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.12",
+]
+
+[tool.poe.tasks]
+test = "pytest"
+coverage = "coverage run -m pytest"
+coverage-report = "coverage report -m"
+coverage-html = "coverage html"
+ruff-check = "ruff check"
+ruff-fix = "ruff check --fix"
+format = "ruff format"
+format-check = "ruff format --check"
+mypy = "mypy main_package tests scripts"
+compile = "python -m compileall -q main_package tests scripts"
+static-checks = [
+    "compile",
+    "format-check",
+    "ruff-check",
+    "mypy",
+]
+static-fixes = [
+    "ruff-fix",
+    "format",
+]
+# Local, untracked Git hooks; append hook names to pick some (pre-commit,
+# conventional-commits, no-ai-signature, pre-push)
+install-hooks = "python scripts/githooks.py install"
+uninstall-hooks = "python scripts/githooks.py uninstall"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
