@@ -1,16 +1,18 @@
 import argparse
+import functools
 import getpass
 import json
 import logging
 import os
+import subprocess
 import sys
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from aamas_review_monitor import papers
-from aamas_review_monitor.checks import check, legend, passed, report, write_csv
+from aamas_review_monitor import documents, papers
+from aamas_review_monitor.checks import Issue, check, legend, passed, report, write_csv
 from aamas_review_monitor.collector import fetch, snapshot
 from aamas_review_monitor.resources import FILE_CONFIG
 
@@ -92,6 +94,7 @@ def main(argv: list[str] | None = None) -> None:
     report_cmd.add_argument("--csv", type=Path, help="also write the issues to this CSV file")
     commands.add_parser("tui", help="interactive terminal UI over the latest snapshot")
     commands.add_parser("legend", help="what each check verifies, with current thresholds")
+    inspect_cmd = commands.add_parser("inspect", help="document checks of PDFs (downloads them)")
     show_cmd = commands.add_parser("show", help="metadata and issues of a paper")
     issues_cmd = commands.add_parser("issues", help="issues of a paper")
     reviews_cmd = commands.add_parser("reviews", help="reviews and meta-reviews of a paper")
@@ -104,7 +107,7 @@ def main(argv: list[str] | None = None) -> None:
     email_cmd.add_argument("role", choices=papers.ROLES)
     email_cmd.add_argument("--subject", required=True)
     email_cmd.add_argument("--body", type=Path, required=True, help="text file; {{fullname}} works")
-    for cmd in (download_cmd, email_cmd):
+    for cmd in (download_cmd, email_cmd, inspect_cmd):
         cmd.add_argument("numbers", type=int, nargs="*", help="papers (default: all)")
     args = parser.parse_args(argv)
 
@@ -114,11 +117,17 @@ def main(argv: list[str] | None = None) -> None:
         print("\n".join([*changes, f"Saved {file}"]))
     elif args.command == "legend":
         print(LEGEND_STATUS)
-        for code, label, text in legend(config):
-            print(
-                f"\n{label} ({code})\n"
-                + textwrap.fill(text, 96, initial_indent="    ", subsequent_indent="    ")
-            )
+        sections = [
+            ("Paper checks", None),
+            ("Document checks (run with `inspect`)", documents.DOCUMENT_CHECKS),
+        ]
+        for title, checks in sections:
+            print(f"\n== {title}")
+            for code, label, text in legend(config, checks):
+                print(
+                    f"\n{label} ({code})\n"
+                    + textwrap.fill(text, 96, initial_indent="    ", subsequent_indent="    ")
+                )
     elif args.command == "tui":
         from aamas_review_monitor.tui import Monitor
 
@@ -136,12 +145,24 @@ def main(argv: list[str] | None = None) -> None:
         if args.command == "show":
             print(papers.metadata(load_records(args.number)[0], config) + "\n")
         mine = [i for i in check(latest, config) if i.number == args.number]
+        mine_documents = document_lines(args.number, config)
         print(
             "\n".join(
                 [f"{i.severity:6} {i.message}" for i in mine]
                 + [f"{'GREEN':6} {label}" for label in passed(mine)]
+                + mine_documents
             )
         )
+    elif args.command == "inspect":
+        connect = functools.cache(lambda: login(config))  # logs in only to download
+        for record in load_records(*args.numbers):
+            try:
+                found = documents.inspect_paper(record, config, DIR_PAPERS, connect)
+            except (FileNotFoundError, subprocess.CalledProcessError) as e:
+                print(f"#{record['number']}: not inspected ({e})")
+                continue
+            print(f"#{record['number']}: {len(found) or 'no'} document issues")
+            print("\n".join(f"  {f.severity:6} {f.message}" for _, f in found))
     elif args.command == "reviews":
         print(papers.reviews(load_records(args.number)[0], args.reveal))
     elif args.command == "download":
@@ -153,6 +174,21 @@ def main(argv: list[str] | None = None) -> None:
         records = load_records(*args.numbers)
         body = args.body.read_text(encoding="utf-8")
         papers.email(login(config), records, args.role, args.subject, body)
+
+
+def document_lines(number: int, config: dict) -> list[str]:
+    """Cached document check results of a paper, as report lines."""
+    try:
+        (record,) = papers.load(DIR_PAPERS, [number])
+    except FileNotFoundError:
+        return []
+    found = documents.inspection(record, config, DIR_PAPERS)
+    if found is None:
+        return [f"Document checks not run: `inspect {number}`"]
+    issues = [Issue(number, f.severity, code, f.message, "", ()) for code, f in found]
+    return [f"{i.severity:6} {i.message}" for i in issues] + [
+        f"{'GREEN':6} {label}" for label in passed(issues, documents.DOCUMENT_CHECKS)
+    ]
 
 
 def load_records(*numbers: int) -> list[dict]:

@@ -30,7 +30,7 @@ from textual.widgets import (
 )
 
 from aamas_review_monitor import __main__ as cli
-from aamas_review_monitor import papers
+from aamas_review_monitor import documents, papers
 from aamas_review_monitor.checks import GREEN, RED, YELLOW, Issue, check, legend, passed, report
 
 ICONS = {RED: "🔴", YELLOW: "🟡", GREEN: "🟢"}
@@ -39,8 +39,11 @@ DIALOG_CSS = "align: center middle; & > Vertical { border: thick $accent; backgr
 Job = Callable[[Any, Callable[[int, int], None]], Any]  # (client, progress) -> result
 
 
-def details(number: int, record: dict | None, config: dict, issues: list[Issue]) -> Text:
-    """Colored metadata, checks (failed and passed) and anonymous reviews of one paper."""
+def details(
+    number: int, record: dict | None, config: dict, issues: list[Issue], inspected: bool = False
+) -> Text:
+    """Colored metadata, checks (failed and passed) and anonymous reviews of one paper;
+    passed document checks only if they were run (`inspected`)."""
     text = Text()
 
     def section(title: str) -> None:
@@ -62,6 +65,11 @@ def details(number: int, record: dict | None, config: dict, issues: list[Issue])
         text.append(f"{ICONS[i.severity]} {i.message}\n")
     for label in passed(issues):
         text.append(f"{ICONS[GREEN]} {label}\n")
+    if inspected:
+        for label in passed(issues, documents.DOCUMENT_CHECKS):
+            text.append(f"{ICONS[GREEN]} {label}\n")
+    else:
+        text.append("Document checks not run: press i\n", "italic")
     if record is not None:
         blocks = papers.review_blocks(record)
         section("Reviews and meta-reviews" if blocks else "No reviews yet")
@@ -173,11 +181,16 @@ class Legend(ModalScreen):
         text.append("Status\n", "bold underline")
         text.append(f"{ICONS[RED]} serious, needs you   {ICONS[YELLOW]} needs SPC attention   ")
         text.append(f"{ICONS[GREEN]} no process issue\n")
-        text.append("\nChecks\n", "bold underline")
-        for code, label, description in legend(self.config):
-            text.append(f"\n{label}", "bold cyan")
-            text.append(f"  {code}\n", "dim")
-            text.append(f"{description}\n")
+        sections = [
+            ("Paper checks", None),
+            ("Document checks (press i)", documents.DOCUMENT_CHECKS),
+        ]
+        for title, checks in sections:
+            text.append(f"\n{title}\n", "bold underline")
+            for code, label, description in legend(self.config, checks):
+                text.append(f"\n{label}", "bold cyan")
+                text.append(f"  {code}\n", "dim")
+                text.append(f"{description}\n")
         text.highlight_words([RED], "bold red")
         text.highlight_words([YELLOW], "bold yellow")
         with Vertical():
@@ -285,9 +298,11 @@ class Monitor(App):
         ("p", "download('field_pdf')", "PDF"),
         ("u", "download('field_supplementary')", "Supplementary"),
         ("e", "email", "Email"),
+        ("i", "inspect", "Inspect PDF"),
         Binding("P", "download('field_pdf', True)", "All PDFs", show=False),
         Binding("U", "download('field_supplementary', True)", "All supplementary", show=False),
         Binding("E", "email(True)", "Email all", show=False),
+        Binding("I", "inspect(True)", "Inspect all", show=False),
         ("s", "sync", "Sync"),
         ("r", "reload", "Reload"),
         ("l", "legend", "Legend"),
@@ -300,6 +315,9 @@ class Monitor(App):
         self.config = config
         self.issues: list[Issue] = []  # plus one GREEN row per paper without issues
         self.hide_green = False
+        self.inspected: set[int] = (
+            set()
+        )  # papers whose current PDF went through the document checks
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -321,7 +339,7 @@ class Monitor(App):
             self.issues = []
             text = f"No snapshots in {cli.DIR_SNAPSHOTS}: press s to sync"
         else:
-            self.issues = check(latest, self.config)
+            self.issues = check(latest, self.config) + self.document_issues(latest)
             flagged = {i.number for i in self.issues}
             self.issues += [
                 Issue(p["number"], GREEN, "ok", "all checks pass", p["url"], tuple(p["spcs"]))
@@ -333,6 +351,23 @@ class Monitor(App):
                 text = text.replace(f" {severity}", f" {icon}")
         self.query_one("#summary", Static).update(text)
         self.fill()
+
+    def document_issues(self, latest: dict) -> list[Issue]:
+        """Cached document check results of the snapshot's papers (for current PDFs only)."""
+        found, by_number = [], {p["number"]: p for p in latest["papers"]}
+        self.inspected = set()
+        for record in papers.load(cli.DIR_PAPERS) if cli.DIR_PAPERS.is_dir() else []:
+            paper = by_number.get(record["number"])
+            results = documents.inspection(record, self.config, cli.DIR_PAPERS)
+            if paper is None or results is None:
+                continue
+            self.inspected.add(paper["number"])
+            spcs = tuple(paper["spcs"])
+            found += [
+                Issue(paper["number"], f.severity, c, f.message, paper["url"], spcs)
+                for c, f in results
+            ]
+        return found
 
     def fill(self) -> None:
         table = self.query_one(DataTable)
@@ -381,14 +416,17 @@ class Monitor(App):
             webbrowser.open(issue.url)
 
     def action_details(self) -> None:
-        if not (issue := self.selected()):
-            return
-        mine = [i for i in self.issues if i.number == issue.number and i.severity != GREEN]
+        if issue := self.selected():
+            self.show_details(issue.number)
+
+    def show_details(self, number: int) -> None:
+        mine = [i for i in self.issues if i.number == number and i.severity != GREEN]
         try:
-            (record,) = papers.load(cli.DIR_PAPERS, [issue.number])
+            (record,) = papers.load(cli.DIR_PAPERS, [number])
         except FileNotFoundError:
             record = None
-        self.push_screen(Paper(details(issue.number, record, self.config, mine)))
+        inspected = number in self.inspected
+        self.push_screen(Paper(details(number, record, self.config, mine, inspected)))
 
     def scope(self, every: bool) -> list[int]:
         """The selected paper or, with `every`, all the papers shown."""
@@ -403,23 +441,35 @@ class Monitor(App):
         return action == "quit" or not isinstance(self.screen, Busy)
 
     def online(
-        self, label: str, job: Job, done: Callable[[Any], object], credentials: Any = None
+        self,
+        label: str,
+        job: Job,
+        done: Callable[[Any], object],
+        credentials: Any = None,
+        offline: bool = False,
     ) -> None:
-        """Runs `job` in the background behind a Busy dialog, signing in first if needed."""
+        """Runs `job` in the background behind a Busy dialog, signing in first unless `offline`
+        (then the job gets no client)."""
         busy = Busy(label)
         self.push_screen(busy)
-        self.run_online(busy, label, job, done, credentials)
+        self.run_online(busy, label, job, done, credentials, offline)
 
     @work(thread=True)
     def run_online(
-        self, busy: Busy, label: str, job: Job, done: Callable[[Any], object], credentials: Any
+        self,
+        busy: Busy,
+        label: str,
+        job: Job,
+        done: Callable[[Any], object],
+        credentials: Any,
+        offline: bool,
     ) -> None:
         def progress(count: int, total: int) -> None:
             self.call_from_thread(busy.progress, count, total)
 
         try:
-            client = cli.resume(self.config)
-            if client is None:
+            client = None if offline else cli.resume(self.config)
+            if client is None and not offline:
                 env = (os.environ.get("OPENREVIEW_USERNAME"), os.environ.get("OPENREVIEW_PASSWORD"))
                 credentials = credentials or (env if all(env) else None)
                 if credentials is None:
@@ -488,6 +538,36 @@ class Monitor(App):
             job,
             lambda found: self.notify(f"{found} of {len(numbers)} papers have {field}: cached"),
         )
+
+    def action_inspect(self, every: bool = False) -> None:
+        if not (numbers := self.scope(every)):
+            return
+        try:
+            records = papers.load(cli.DIR_PAPERS, numbers)
+        except FileNotFoundError as e:
+            self.notify(f"Not cached: {e.filename}. Press s to sync", severity="error")
+            return
+
+        def job(client: Any, progress: Callable[[int, int], None]) -> list[str]:
+            failures = []
+            for count, record in enumerate(records):
+                progress(count, len(records))
+                try:
+                    documents.inspect_paper(record, self.config, cli.DIR_PAPERS, lambda: client)
+                except (OSError, subprocess.CalledProcessError) as e:
+                    failures.append(f"#{record['number']}: {e}")
+            return failures
+
+        def done(failures: list[str]) -> None:
+            self.action_reload()
+            ok = len(records) - len(failures)
+            self.notify("\n".join([*failures, f"Inspected {ok} of {len(records)} papers"]))
+            if not every and not failures:
+                self.show_details(numbers[0])
+
+        offline = all(documents.downloaded(r, self.config, cli.DIR_PAPERS) for r in records)
+        label = f"Inspecting {len(records)} papers…" if every else f"Inspecting #{numbers[0]}…"
+        self.online(label, job, done, offline=offline)
 
     def action_email(self, every: bool = False) -> None:
         if not (numbers := self.scope(every)):

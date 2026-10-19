@@ -163,3 +163,27 @@ def test_tui_signs_in_and_syncs_in_background(tmp_path, monkeypatch):
             assert app.query_one("#issues").row_count > 0  # reloaded from the new snapshot
 
     asyncio.run(scenario())
+
+
+def test_tui_inspects_the_pdf_and_shows_the_results(tmp_path, monkeypatch):
+    from aamas_review_monitor import documents
+
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "A Paper\nAnonymous Author(s)\f")
+    monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {"Page size": "612 x 792 pts"})
+    monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
+
+    async def scenario():
+        async with app.run_test() as pilot:
+            await pilot.press("i")
+            await settle(app, pilot)
+            assert client.downloads == [("pdf", "abc")]  # fetched first, then inspected
+            assert isinstance(app.screen, Paper)
+            text = app.screen.text.plain
+            assert "🔴 no AAMAS 2027 copyright block" in text
+            assert "🟢 US Letter pages" in text and "not run" not in text
+            await pilot.press("escape")
+            codes = {i.code for i in app.issues if i.number == 7}
+            assert "template" in codes
+
+    asyncio.run(scenario())

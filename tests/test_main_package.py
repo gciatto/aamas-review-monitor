@@ -35,7 +35,37 @@ def test_run_as_module_without_command_fails():
 
 def test_legend_lists_every_check(capsys):
     from aamas_review_monitor.checks import CHECKS
+    from aamas_review_monitor.documents import DOCUMENT_CHECKS
 
     cli.main(["legend"])
     out = capsys.readouterr().out
-    assert all(f"({f.__name__})" in out for f in CHECKS)
+    assert all(f"({f.__name__})" in out for f in CHECKS + DOCUMENT_CHECKS)
+    assert "{" not in out.replace("{'", "")  # every placeholder filled, labels have none
+
+
+def test_inspect_prints_document_issues_and_show_includes_them(tmp_path, monkeypatch, capsys):
+    from aamas_review_monitor import documents, papers
+    from aamas_review_monitor.collector import fetch, snapshot
+    from tests.test_collector import FakeClient
+
+    config = cli.load_config()
+    monkeypatch.setattr(cli, "DIR_PAPERS", tmp_path / "papers")
+    monkeypatch.setattr(cli, "DIR_SNAPSHOTS", tmp_path / "snapshots")
+    monkeypatch.setattr(cli, "login", lambda config: FakeClient())
+    records = fetch(FakeClient(), config)
+    papers.save(records, cli.DIR_PAPERS, [])
+    cli.DIR_SNAPSHOTS.mkdir()
+    (cli.DIR_SNAPSHOTS / "a.json").write_text(json.dumps(snapshot(records, config)))
+    monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "A Paper\nAnonymous Author(s)\f")
+    monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {"Page size": "595 x 842 pts"})
+    monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
+    cli.main(["show", "7"])
+    assert "Document checks not run: `inspect 7`" in capsys.readouterr().out
+    cli.main(["inspect", "7"])
+    out = capsys.readouterr().out
+    assert out.startswith("#7: 2 document issues") and "RED    page size 595 x 842 pt" in out
+    cli.main(["issues", "7"])
+    out = capsys.readouterr().out
+    assert (
+        "RED    no AAMAS 2027 copyright block" in out and "GREEN  Anonymous submission mode" in out
+    )
