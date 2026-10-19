@@ -18,6 +18,7 @@ uv run aamas_review_monitor issues N             # issues of paper N
 uv run aamas_review_monitor reviews N [--reveal] # reviews and meta-reviews, reviewers anonymous
 uv run aamas_review_monitor download [N ...] [--supplementary]  # PDFs, or supplementary material
 uv run aamas_review_monitor email ROLE [N ...] --subject S --body FILE
+uv run aamas_review_monitor inspect [N ...]      # document checks of PDFs and supplementary zips
 ```
 
 Paper lists default to all your papers. `sync` caches each paper (content, reviews, groups) in
@@ -36,8 +37,9 @@ reloads, `q` quits. On the selected paper: Enter or `d` shows its metadata, fail
 anonymous reviews, `o` opens it on OpenReview, `e` opens an email form, and `p`/`u` open its
 PDF/supplementary material in a dialog, downloading it first if needed. The dialog shows the
 local path and the contents (PDF text, or the file tree of a zip); there `c` shows the file in
-Finder/Explorer, `v` opens it with the default app, `y` copies the path. `P`, `U` and `E`
-download or email for every paper shown.
+Finder/Explorer, `v` opens it with the default app, `y` copies the path. `i` runs the document checks
+on the paper (downloading what is missing) and opens its details. `P`, `U`, `E` and `I`
+download, email or inspect every paper shown.
 
 Syncing, downloading and sending run in the background behind a progress dialog that blocks the
 rest of the UI. If the session token has expired, a sign-in dialog asks for your credentials
@@ -53,13 +55,24 @@ prompt and are never stored; the resulting 1-week session token is kept in
 `~/.aamas-review-monitor/token` (mode 0600), so you log in about once a week. Delete that file
 to log out.
 
-Checks: missing SPC, fewer than `reviewers_min` reviewers, missing reviews near/after the review
-deadline, reviews under `reviews_words_min` words, rating spread of `scores_spread_max` or more,
-disagreement with no comments after the deadline, missing meta-review near/after its deadline.
+Two families of checks, both deterministic and documented by `legend` (or `l` in the TUI) with
+the current thresholds:
+
+- **paper checks**, on every snapshot: assignments, reviews against the 50% milestone and the
+  deadline, reviewers late on several papers, short, recycled (same reviewer, near-identical
+  text on two papers) or low-confidence reviews, rating disagreement without reviewer comments,
+  overlong discussions (more comments than one per reviewer plus one per SPC), rebuttals not
+  acknowledged (no review update or comment since), silent SPCs, missing, short or incomplete
+  meta-reviews, Findings recommendations against the authors' opt-out, withdrawn papers;
+- **document checks**, on request (`inspect`, `i`): page limit (appendices count), too short,
+  page size, fonts, AAMAS 2027 template, anonymous mode and identifying text, OpenReview title
+  and abstract vs. the PDF, supplementary format, anonymity and code availability. Their
+  results are cached per PDF version and show in `show`, `issues`, and the TUI.
+
 Thresholds, deadlines and field names are in
 [`resources/config.json`](aamas_review_monitor/resources/config.json); override any of them in
-`~/.aamas-review-monitor/config.json`. Verify `deadline_*`, `field_rating` and
-`field_confidence` against the venue before relying on the report.
+`~/.aamas-review-monitor/config.json`. Field names and dates come from the AAMAS 2027 pages and
+OpenReview forms, including the meta-review deadline (3–9 December).
 
 ## Confidentiality
 
@@ -67,8 +80,9 @@ AAMAS 2027 forbids sharing submission content with AI systems. Hence:
 
 - everything is deterministic Python; no LLM, no telemetry; only `email` writes to OpenReview,
   after you type `SEND`;
-- snapshots keep only process metadata (assignments, scores, word counts, comment counts); paper
-  content, reviews and PDFs are cached separately under `papers/`;
+- snapshots keep only process metadata (assignments, scores, word counts, comment dates, and
+  MinHash fingerprints of reviews, not their text); paper content, reviews, PDFs and document
+  check results are cached separately under `papers/`;
 - data lives in `~/.aamas-review-monitor/` (override with `AAMAS_MONITOR_DATA`), mode 0700,
   outside the repository;
 - **run every command in your own terminal, not through a coding agent**: their output and the
@@ -86,6 +100,7 @@ Development uses synthetic fixtures only (`tests/`).
 │   ├── collector.py                  # read-only OpenReview v2 collector
 │   ├── checks.py                     # deterministic checks and report
 │   ├── papers.py                     # paper cache: metadata, reviews, downloads, emails
+│   ├── documents.py                  # on-request PDF and supplementary checks
 │   ├── tui.py                        # Textual interface over the same checks
 │   └── resources/                    # non-code files shipped with the package
 │       ├── __init__.py               # paths to the resource files (DIR_RESOURCES, FILE_*)
@@ -96,6 +111,7 @@ Development uses synthetic fixtures only (`tests/`).
 │   ├── conftest.py                   # blocks real OpenReview clients in every test
 │   ├── test_collector.py             # collector against a fake OpenReview client
 │   ├── test_papers.py                # cache, downloads, emails (fake client)
+│   ├── test_documents.py             # document checks on synthetic pages and zips
 │   ├── test_tui.py                   # TUI driven headlessly
 │   └── test_main_package.py          # CLI report end to end
 ├── scripts/

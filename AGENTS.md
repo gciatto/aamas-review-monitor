@@ -12,6 +12,7 @@ aamas_review_monitor/     the package, at the repo root (renamed by rename-templ
   collector.py    read-only OpenReview v2 -> per-paper records -> snapshot (process metadata only)
   checks.py       deterministic per-paper checks, SPC-grouped report, CSV
   papers.py       record cache, metadata/reviews text, attachment downloads, emails
+  documents.py    on-request document checks (xpdf tools, zipfile), cached per PDF version
   tui.py          Textual app; network jobs run in worker threads behind a blocking Busy dialog
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
 tests/            pytest unit tests
@@ -52,11 +53,13 @@ checks deterministic; never add LLM calls or scientific judgments.
 
 ## Conventions
 
-- Paper checks live in `checks.py`, one `@paper_check` function each, named after its issue
-  code (keep names stable: the history diff keys on them). Docstring: first line = what holds
-  when the paper passes ("SPC assigned"); then a blank line and what is flagged, with which
-  severity, using `{config_key}` placeholders for thresholds. Both legends (`legend` command,
-  `l` in the TUI) and the passed-checks lists are generated from these docstrings.
+- Checks are one function each: `@paper_check` in `checks.py` (run on snapshots, `(paper,
+  Context)`), `@document_check` in `documents.py` (on request, `(Document)`). The function name
+  is the issue code (keep names stable: the history diff keys on them). Docstring: first line =
+  what holds when the paper passes ("SPC assigned"), no placeholders; then a blank line and
+  what is flagged, with which severity, using `{config_key}` placeholders for thresholds. Both
+  legends (`legend` command, `l` in the TUI) and the passed-checks lists come from these
+  docstrings. New snapshot fields must be read with `.get`: old snapshots lack them.
 
 - Commits follow Conventional Commits (`<type>[(scope)][!]: <description>`); semantic-release
   derives the next version from them, so pick the type carefully (`feat` = minor, `fix` =
