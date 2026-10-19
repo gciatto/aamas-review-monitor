@@ -1,14 +1,16 @@
 """Textual front end: the same checks and report as the CLI, as a filterable, sortable table."""
 
+import os
 import subprocess
 import sys
 import webbrowser
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from rich.text import Text
-from textual import on
+from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
@@ -20,6 +22,7 @@ from textual.widgets import (
     Footer,
     Header,
     Input,
+    ProgressBar,
     Select,
     Static,
     TextArea,
@@ -30,8 +33,10 @@ from aamas_review_monitor import __main__ as cli
 from aamas_review_monitor import papers
 from aamas_review_monitor.checks import GREEN, RED, YELLOW, Issue, check, passed, report
 
-STYLES = {RED: "bold red", YELLOW: "bold yellow", GREEN: "bold green"}
-RANKS = {RED: 0, YELLOW: 1, GREEN: 2}
+ICONS = {RED: "🔴", YELLOW: "🟡", GREEN: "🟢"}
+RANKS = {ICONS[RED]: 0, ICONS[YELLOW]: 1, ICONS[GREEN]: 2}
+DIALOG_CSS = "align: center middle; & > Vertical { border: thick $accent; background: $surface;"
+Job = Callable[[Any, Callable[[int, int], None]], Any]  # (client, progress) -> result
 
 
 def details(number: int, record: dict | None, config: dict, issues: list[Issue]) -> Text:
@@ -54,11 +59,9 @@ def details(number: int, record: dict | None, config: dict, issues: list[Issue])
         pairs(papers.metadata_fields(record, config))
     section("Checks")
     for i in issues:
-        text.append(f"{i.severity:6} ", STYLES[i.severity])
-        text.append(f"{i.message}\n")
+        text.append(f"{ICONS[i.severity]} {i.message}\n")
     for label in passed(issues):
-        text.append(f"{GREEN:6} ", STYLES[GREEN])
-        text.append(f"{label}\n")
+        text.append(f"{ICONS[GREEN]} {label}\n")
     if record is not None:
         blocks = papers.review_blocks(record)
         section("Reviews and meta-reviews" if blocks else "No reviews yet")
@@ -99,10 +102,7 @@ def os_open(path: Path, reveal: bool = False) -> None:
 class Attachment(ModalScreen):
     """A downloaded attachment: its path, OS actions, and its contents (zip tree or PDF text)."""
 
-    DEFAULT_CSS = """
-    Attachment { align: center middle; }
-    #dialog { width: 90%; height: 90%; border: thick $accent; background: $surface; padding: 0 1; }
-    """
+    DEFAULT_CSS = "Attachment {" + DIALOG_CSS + " width: 90%; height: 90%; padding: 0 1; } }"
     BINDINGS = [
         ("escape,q", "dismiss", "Back"),
         ("c", "folder", "Show in folder"),
@@ -115,7 +115,7 @@ class Attachment(ModalScreen):
         self.path = path
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="dialog"):
+        with Vertical():
             yield Static(Text(str(self.path), "bold cyan"), id="path")
             yield self.contents()
         yield Footer()
@@ -158,8 +158,70 @@ class Attachment(ModalScreen):
         self.notify("Path copied")
 
 
+class Busy(ModalScreen):
+    """Blocks the UI while a background job talks to OpenReview."""
+
+    DEFAULT_CSS = "Busy {" + DIALOG_CSS + " width: 60; height: auto; padding: 1 2; } }"
+
+    def __init__(self, label: str) -> None:
+        super().__init__()
+        self.label = label
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static(self.label)
+            yield ProgressBar(total=None, show_eta=False)  # bounces until a total is known
+
+    def progress(self, done: int, total: int) -> None:
+        self.query_one(ProgressBar).update(total=total, progress=done)
+
+
+class Login(ModalScreen[tuple[str, str] | None]):
+    """Asks for OpenReview credentials; the resulting session token is kept for a week."""
+
+    DEFAULT_CSS = "Login {" + DIALOG_CSS + " width: 60; height: auto; padding: 1 2; } }"
+    BINDINGS = [("escape", "dismiss", "Cancel")]
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static("Sign in to OpenReview")
+            yield Input(placeholder="Username (email)", id="username")
+            yield Input(placeholder="Password", password=True, id="password")
+            yield Button("Sign in", id="signin", variant="primary")
+
+    @on(Input.Submitted, "#password")
+    @on(Button.Pressed, "#signin")
+    def submit(self) -> None:
+        username = self.query_one("#username", Input).value.strip()
+        password = self.query_one("#password", Input).value
+        if username and password:
+            self.dismiss((username, password))
+
+
+class Confirm(ModalScreen[bool]):
+    """Shows the emails about to be sent; True only if the user types SEND."""
+
+    DEFAULT_CSS = "Confirm {" + DIALOG_CSS + " width: 90%; height: 80%; padding: 1 2; } }"
+    BINDINGS = [("escape", "dismiss(False)", "Cancel")]
+
+    def __init__(self, summary: str) -> None:
+        super().__init__()
+        self.summary = summary
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield VerticalScroll(Static(Text(self.summary)))
+            yield Input(placeholder="Type SEND to send, Esc to cancel", id="confirm")
+            yield Button("Send", id="confirm-send", variant="error")
+
+    @on(Input.Submitted, "#confirm")
+    @on(Button.Pressed, "#confirm-send")
+    def submit(self) -> None:
+        self.dismiss(self.query_one("#confirm", Input).value.strip() == "SEND")
+
+
 class Email(Screen[dict | None]):
-    """Collects role, subject and body; sending is confirmed later, in the plain terminal."""
+    """Collects role, subject and body; a Confirm dialog follows before anything is sent."""
 
     BINDINGS = [("escape", "dismiss", "Cancel")]
 
@@ -169,7 +231,7 @@ class Email(Screen[dict | None]):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static(f"Email {self.scope}. Nothing is sent before you type SEND in the terminal.")
+        yield Static(f"Email {self.scope}. Nothing is sent before you confirm by typing SEND.")
         roles = [(role, role) for role in papers.ROLES]
         yield Select(roles, value="late-reviewers", allow_blank=False, id="role")
         yield Input(placeholder="Subject", id="subject")
@@ -193,7 +255,7 @@ class Monitor(App):
     BINDINGS = [
         ("d", "details", "Details"),
         ("o", "open", "Open in browser"),
-        ("g", "toggle_green", "Hide/show GREEN"),
+        ("g", "toggle_green", "Hide/show 🟢"),
         ("p", "download('field_pdf')", "PDF"),
         ("u", "download('field_supplementary')", "Supplementary"),
         ("e", "email", "Email"),
@@ -222,7 +284,7 @@ class Monitor(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.query_one(DataTable).add_columns("Severity", "Paper", "SPC", "Issue")
+        self.query_one(DataTable).add_columns("Status", "Paper", "SPC", "Issue")
         self.action_reload()
         self.query_one(DataTable).focus()
 
@@ -240,6 +302,8 @@ class Monitor(App):
                 if p["number"] not in flagged
             ]
             text = report(latest, self.config, previous).split("\n\n")[0]  # the summary lines
+            for severity, icon in ICONS.items():
+                text = text.replace(f" {severity}", f" {icon}")
         self.query_one("#summary", Static).update(text)
         self.fill()
 
@@ -252,8 +316,7 @@ class Monitor(App):
             if self.hide_green and i.severity == GREEN:
                 continue
             if needle in f"{i.severity} #{i.number} {spcs} {i.message}".lower():
-                severity = Text(i.severity, style=STYLES.get(i.severity, ""))
-                table.add_row(severity, i.number, spcs, i.message, key=str(n))
+                table.add_row(ICONS[i.severity], i.number, spcs, i.message, key=str(n))
 
     def action_toggle_green(self) -> None:
         self.hide_green = not self.hide_green
@@ -305,18 +368,60 @@ class Monitor(App):
         rows = self.query_one(DataTable).rows
         return sorted({self.issues[int(k.value or 0)].number for k in rows})
 
-    def in_terminal(self, job: Callable[[], object]) -> None:
-        # Back to the plain terminal, where login may prompt and email asks for SEND
-        with self.suspend():
-            try:
-                job()
-            except Exception as e:  # keep the TUI alive; the error stays on screen
-                print(f"Failed: {e}")
-            input("Press Enter to return")
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        # While a job runs, the UI only allows quitting
+        return action == "quit" or not isinstance(self.screen, Busy)
+
+    def online(
+        self, label: str, job: Job, done: Callable[[Any], object], credentials: Any = None
+    ) -> None:
+        """Runs `job` in the background behind a Busy dialog, signing in first if needed."""
+        busy = Busy(label)
+        self.push_screen(busy)
+        self.run_online(busy, label, job, done, credentials)
+
+    @work(thread=True)
+    def run_online(
+        self, busy: Busy, label: str, job: Job, done: Callable[[Any], object], credentials: Any
+    ) -> None:
+        def progress(count: int, total: int) -> None:
+            self.call_from_thread(busy.progress, count, total)
+
+        try:
+            client = cli.resume(self.config)
+            if client is None:
+                env = (os.environ.get("OPENREVIEW_USERNAME"), os.environ.get("OPENREVIEW_PASSWORD"))
+                credentials = credentials or (env if all(env) else None)
+                if credentials is None:
+                    self.call_from_thread(busy.dismiss)
+                    self.call_from_thread(self.ask_login, label, job, done)
+                    return
+                client = cli.login(self.config, *credentials)
+            result = job(client, progress)
+        except Exception as e:  # shown to the user; the app keeps running
+            self.call_from_thread(busy.dismiss)
+            self.call_from_thread(self.notify, f"{label} failed: {e}", severity="error")
+            return
+        self.call_from_thread(busy.dismiss)
+        self.call_from_thread(done, result)
+
+    def ask_login(self, label: str, job: Job, done: Callable[[Any], object]) -> None:
+        def signed_in(credentials: tuple[str, str] | None) -> None:
+            if credentials:
+                self.online(label, job, done, credentials)
+
+        self.push_screen(Login(), signed_in)
 
     def action_sync(self) -> None:
-        self.in_terminal(lambda: print(f"Saved {cli.sync(self.config)}"))
-        self.action_reload()
+        def done(result: tuple[Path, list[str]]) -> None:
+            self.action_reload()
+            self.notify("\n".join([*result[1], "Synced with OpenReview"]))
+
+        self.online(
+            "Syncing with OpenReview…",
+            lambda client, progress: cli.sync(self.config, client, progress),
+            done,
+        )
 
     def action_download(self, key: str, every: bool = False) -> None:
         if not (numbers := self.scope(every)):
@@ -331,34 +436,59 @@ class Monitor(App):
             path = papers.attachment(record, field, cli.DIR_PAPERS)
             if path is None:
                 self.notify(f"#{numbers[0]} has no {field}")
-                return
-            if not path.is_file():
-                self.in_terminal(
-                    lambda: papers.download(cli.login(self.config), record, field, cli.DIR_PAPERS)
-                )
-            if path.is_file():
+            elif path.is_file():
                 self.push_screen(Attachment(path))
+            else:
+                self.online(
+                    f"Downloading {field} of #{numbers[0]}…",
+                    lambda client, _: papers.download(client, record, field, cli.DIR_PAPERS),
+                    lambda path: self.push_screen(Attachment(path)),
+                )
             return
 
-        def job() -> None:
-            client = cli.login(self.config)
-            for record in papers.load(cli.DIR_PAPERS, numbers):
-                path = papers.download(client, record, field, cli.DIR_PAPERS)
-                print(f"#{record['number']}: {path or f'no {field}'}")
+        def job(client: Any, progress: Callable[[int, int], None]) -> int:
+            records, found = papers.load(cli.DIR_PAPERS, numbers), 0
+            for count, record in enumerate(records):
+                progress(count, len(records))
+                found += papers.download(client, record, field, cli.DIR_PAPERS) is not None
+            return found
 
-        self.in_terminal(job)
+        self.online(
+            f"Downloading {field} of {len(numbers)} papers…",
+            job,
+            lambda found: self.notify(f"{found} of {len(numbers)} papers have {field}: cached"),
+        )
 
     def action_email(self, every: bool = False) -> None:
         if not (numbers := self.scope(every)):
             return
 
-        def send(form: dict | None) -> None:
-            if form:  # loading inside the job, so a missing cache is reported, not raised
-                self.in_terminal(
-                    lambda: papers.email(
-                        cli.login(self.config), papers.load(cli.DIR_PAPERS, numbers), **form
-                    )
+        def review(form: dict | None) -> None:
+            if not form:
+                return
+            try:
+                messages = papers.plan(papers.load(cli.DIR_PAPERS, numbers), form["role"])
+            except FileNotFoundError as e:
+                self.notify(f"Not cached: {e.filename}. Press s to sync", severity="error")
+                return
+            if not messages:
+                self.notify(f"No {form['role']} to email")
+                return
+
+            def send(confirmed: bool | None) -> None:
+                if not confirmed:
+                    self.notify("Nothing sent")
+                    return
+                self.online(
+                    f"Sending {len(messages)} messages…",
+                    lambda client, _: papers.send(client, messages, form["subject"], form["body"]),
+                    lambda failures: self.notify(
+                        "\n".join([*failures, f"Sent {len(messages) - len(failures)}"]),
+                        severity="error" if failures else "information",
+                    ),
                 )
 
+            self.push_screen(Confirm(papers.describe(messages, **form)), send)
+
         scope = f"paper #{numbers[0]}" if len(numbers) == 1 else f"{len(numbers)} papers"
-        self.push_screen(Email(scope), send)
+        self.push_screen(Email(scope), review)

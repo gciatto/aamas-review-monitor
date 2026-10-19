@@ -6,7 +6,7 @@ from textual.widgets import Static, Tree
 
 from aamas_review_monitor import __main__ as cli
 from aamas_review_monitor import tui
-from aamas_review_monitor.tui import Attachment, Monitor, Paper
+from aamas_review_monitor.tui import Attachment, Busy, Confirm, Login, Monitor, Paper
 from tests.test_checks import CONFIG, paper
 
 
@@ -33,15 +33,21 @@ def test_tui_lists_and_filters_issues(tmp_path, monkeypatch):
             await pilot.press("enter")
             assert isinstance(app.screen, Paper)
             text = app.screen.text.plain
-            assert "Not cached" in text and "RED    no SPC assigned" in text
-            assert "GREEN  enough reviewers assigned" in text
+            assert "Not cached" in text and "🔴 no SPC assigned" in text
+            assert "🟢 enough reviewers assigned" in text
             await pilot.press("escape")
             assert not isinstance(app.screen, Paper)
 
     asyncio.run(scenario())
 
 
-def cached_monitor(tmp_path, monkeypatch, answer="SEND"):
+async def settle(app, pilot):
+    """Waits for background jobs and the screens they open."""
+    await app.workers.wait_for_complete()
+    await pilot.pause()
+
+
+def cached_monitor(tmp_path, monkeypatch):
     """A Monitor over one cached synthetic paper, with a fake client and no real terminal."""
     from aamas_review_monitor import papers
     from aamas_review_monitor.collector import fetch, snapshot
@@ -57,9 +63,7 @@ def cached_monitor(tmp_path, monkeypatch, answer="SEND"):
     snap = snapshot(records, config) | {"taken_at": "2026-10-19T08:00:00"}
     (tmp_path / "snapshots" / "a.json").write_text(json.dumps(snap))
     client = FakeClient()
-    monkeypatch.setattr(cli, "login", lambda config: client)
-    monkeypatch.setattr(Monitor, "in_terminal", lambda self, job: job())
-    monkeypatch.setattr("builtins.input", lambda prompt="": answer)
+    monkeypatch.setattr(cli, "resume", lambda config: client)  # as if a token were cached
     opened: list[str] = []
     monkeypatch.setattr("webbrowser.open", opened.append)
     return Monitor(config), client, opened
@@ -74,6 +78,7 @@ def test_tui_downloads_once_then_shows_the_pdf(tmp_path, monkeypatch):
     async def scenario():
         async with app.run_test() as pilot:
             await pilot.press("p")
+            await settle(app, pilot)
             assert isinstance(app.screen, Attachment)
             path = str(app.screen.path)
             assert path.endswith("/papers/7/pdf_v1.pdf")
@@ -106,9 +111,9 @@ def test_tui_shows_the_tree_of_a_zip(tmp_path, monkeypatch):
     asyncio.run(scenario())
 
 
-def test_tui_email_form_sends_only_after_send(tmp_path, monkeypatch):
+def test_tui_email_sends_only_after_typing_send(tmp_path, monkeypatch):
     for answer, sent in [("no", 0), ("SEND", 1)]:
-        app, client, _ = cached_monitor(tmp_path / answer, monkeypatch, answer)
+        app, client, _ = cached_monitor(tmp_path / answer, monkeypatch)
 
         async def scenario():
             async with app.run_test() as pilot:
@@ -118,9 +123,39 @@ def test_tui_email_form_sends_only_after_send(tmp_path, monkeypatch):
                 app.screen.query_one("#subject").value = "Hi"
                 app.screen.query_one("#body").load_text("Dear {{fullname}}")
                 await pilot.click("#send")
-                await pilot.pause()
+                assert isinstance(app.screen, Confirm)
+                assert "late-reviewers of papers #7" in str(app.screen.summary)
+                app.screen.query_one("#confirm").value = answer
+                await pilot.click("#confirm-send")
+                await settle(app, pilot)
 
         asyncio.run(scenario())
         assert len(client.messages) == sent
         if sent:
             assert client.messages[0][0] == ("Hi", ["~Rev_B1", "~Rev_C1"], "Dear {{fullname}}")
+
+
+def test_tui_signs_in_and_syncs_in_background(tmp_path, monkeypatch):
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "resume", lambda config: None)  # no valid token
+    monkeypatch.delenv("OPENREVIEW_USERNAME", raising=False)
+    signed: list[tuple] = []
+    monkeypatch.setattr(cli, "login", lambda config, *creds: signed.append(creds) or client)
+    for old in (tmp_path / "snapshots").iterdir():
+        old.unlink()
+
+    async def scenario():
+        async with app.run_test() as pilot:
+            assert app.query_one("#issues").row_count == 0
+            await pilot.press("s")
+            await settle(app, pilot)
+            assert isinstance(app.screen, Login)
+            app.screen.query_one("#username").value = "sac@example.org"
+            app.screen.query_one("#password").value = "secret"
+            await pilot.click("#signin")
+            await settle(app, pilot)
+            assert signed == [("sac@example.org", "secret")]
+            assert not isinstance(app.screen, (Login, Busy))
+            assert app.query_one("#issues").row_count > 0  # reloaded from the new snapshot
+
+    asyncio.run(scenario())
