@@ -28,15 +28,20 @@ last sync; `download` fetches only what is missing or outdated, into the same fo
 body and sends nothing unless you type `SEND`. `{{fullname}}` in the body becomes each
 recipient's name. Authors cannot be emailed: OpenReview only lets Program Chairs do that.
 
-In the TUI every paper is listed: one row per issue, one GREEN row per paper without issues. `f`
-filters (SPC, paper number, issue), `g` hides or shows GREEN rows, clicking a header sorts, `s`
-syncs, `r` reloads, `q` quits. On the selected paper: Enter or `d` shows its metadata, failed and
-passed checks, and anonymous reviews, `o` opens it on OpenReview, `e` opens an email form, and
-`p`/`u` open its PDF/supplementary material in a dialog, downloading it first if needed. The
-dialog shows the local path and the contents (PDF text, or the file tree of a zip); there `c`
-shows the file in Finder/Explorer, `v` opens it with the default app, `y` copies the path.
-`P`, `U` and `E` download or email for every paper shown. Downloads, logins and the email `SEND`
-confirmation run in the plain terminal, then the TUI comes back.
+In the TUI every paper is listed with an icon (🔴 serious, 🟡 needs attention, 🟢 fine): one row
+per issue, one 🟢 row per paper without issues. `f` filters (SPC, paper number, issue, or a
+color name), `g` hides or shows 🟢 rows, clicking a header sorts, `s` syncs, `r` reloads, `q`
+quits. On the selected paper: Enter or `d` shows its metadata, failed and passed checks, and
+anonymous reviews, `o` opens it on OpenReview, `e` opens an email form, and `p`/`u` open its
+PDF/supplementary material in a dialog, downloading it first if needed. The dialog shows the
+local path and the contents (PDF text, or the file tree of a zip); there `c` shows the file in
+Finder/Explorer, `v` opens it with the default app, `y` copies the path. `P`, `U` and `E`
+download or email for every paper shown.
+
+Syncing, downloading and sending run in the background behind a progress dialog that blocks the
+rest of the UI. If the session token has expired, a sign-in dialog asks for your credentials
+(unless `OPENREVIEW_USERNAME`/`OPENREVIEW_PASSWORD` are set). Emails need `SEND` typed in a
+confirmation dialog that lists every recipient group and the message.
 
 PDF text comes from xpdf's `pdftotext` (`brew install xpdf`), in reading order so the two AAMAS
 columns come out one after the other; it is cached next to the PDF as `<pdf>.txt`.

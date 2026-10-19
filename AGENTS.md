@@ -12,7 +12,7 @@ aamas_review_monitor/     the package, at the repo root (renamed by rename-templ
   collector.py    read-only OpenReview v2 -> per-paper records -> snapshot (process metadata only)
   checks.py       deterministic per-paper checks, SPC-grouped report, CSV
   papers.py       record cache, metadata/reviews text, attachment downloads, emails
-  tui.py          Textual app over `checks` (sync runs suspended, so prompts work)
+  tui.py          Textual app; network jobs run in worker threads behind a blocking Busy dialog
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
 tests/            pytest unit tests
 scripts/          githooks.py: installs/removes local Git hooks (poe install-hooks)
