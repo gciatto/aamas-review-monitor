@@ -7,7 +7,9 @@ authors = [
     { name = "Giovanni Ciatto", email = "giovanni.ciatto@unibo.it" }
 ]
 requires-python = ">=3.10" # Update workflows/check.yml if you change this
-dependencies = []
+dependencies = [
+    "openreview-py>=2.9.0",
+]
 
 [project.scripts]
 aamas_review_monitor = "aamas_review_monitor.__main__:main"
