@@ -324,6 +324,8 @@ def test_spc_tab_lists_issues_per_spc_and_sends_a_digest(tmp_path, monkeypatch):
             app.screen.query_one("#confirm").value = "SEND"
             await pilot.click("#confirm-send")
             await settle(app, pilot)
+            panel = str(app.query_one("#spc-issues").render())
+            assert "Sent to them from this app" in panel and "email to ~Spc_One1 via #7" in panel
 
     asyncio.run(scenario())
     ((args, kwargs),) = client.messages
@@ -350,3 +352,41 @@ def test_papers_tab_templated_reminder_to_late_reviewers_can_be_cancelled(tmp_pa
     asyncio.run(scenario())
     assert client.messages == []
     assert notes == ["Nothing to send with Meta-review deadline", "Nothing sent"]
+
+
+def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkeypatch):
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.press("c")
+            form = app.screen
+            assert isinstance(form, tui.CommentForm)
+            text = form.query_one("#comment-text")
+            assert "ratings [3, 6]" in text.text
+            text.load_text("Please check the reviews.")
+            form.query_one("#spcs-read").value = False
+            await pilot.click("#comment-post")
+            assert isinstance(app.screen, Confirm)
+            assert app.screen.summary.startswith("1 comments, readable by PCs, SACs\n")
+            app.screen.query_one("#confirm").value = "SEND"
+            await pilot.click("#confirm-send")
+            await settle(app, pilot)
+
+            ((_, _, note),) = client.comments
+            assert note.content["comment"]["value"] == "Please check the reviews."
+            assert not any(r.endswith("/Area_Chairs") for r in note.readers)  # no SPCs
+            await pilot.press("t", "t")  # Papers -> SPCs -> History
+            history = app.query_one("#history")
+            assert history.row_count == 1 and history.get_row_at(0)[2:5] == [
+                "comment",
+                7,
+                "PCs, SACs",
+            ]
+            assert "Please check the reviews." in str(app.query_one("#history-entry").render())
+            await pilot.press("t")  # back to Papers
+            await pilot.press("enter")
+            assert "comment to PCs, SACs via #7" in app.screen.text.plain
+
+    asyncio.run(scenario())
+    assert cli.FILE_HISTORY.is_file()  # the temporary one (see conftest)

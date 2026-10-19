@@ -21,6 +21,7 @@ from textual.widget import Widget
 from textual.widgets.option_list import Option
 from textual.widgets import (
     Button,
+    Checkbox,
     DataTable,
     Footer,
     Header,
@@ -58,8 +59,22 @@ DIALOG_CSS = "align: center middle; & > Vertical { border: thick $accent; backgr
 Job = Callable[[Any, Callable[[int, int], None]], Any]  # (client, progress) -> result
 
 
+def sent_lines(text: Text, entries: list[dict]) -> None:
+    """Appends one line per history entry: when, what, to whom, outcome."""
+    for e in entries:
+        failed = e["status"] != "sent"
+        text.append(f"{e['at'][:16].replace('T', ' ')}  ", "dim")
+        text.append(f"{e['kind']} to {e['to']} via #{e['via']}: {e['subject']}")
+        text.append(f"  {e['status']}\n" if failed else "\n", "bold red" if failed else "")
+
+
 def details(
-    number: int, record: dict | None, config: dict, issues: list[Issue], inspected: bool = False
+    number: int,
+    record: dict | None,
+    config: dict,
+    issues: list[Issue],
+    inspected: bool = False,
+    sent: list[dict] | None = None,
 ) -> Text:
     """Colored metadata, checks (failed and passed) and anonymous reviews of one paper;
     passed document checks only if they were run (`inspected`)."""
@@ -89,6 +104,8 @@ def details(
             text.append(f"{ICONS[GREEN]} {label}\n")
     else:
         text.append("Document checks not run: press i\n", "italic")
+    section("Sent from this app" if sent else "Nothing sent from this app yet")
+    sent_lines(text, sent or [])
     if record is not None:
         blocks = papers.review_blocks(record)
         section("Reviews and meta-reviews" if blocks else "No reviews yet")
@@ -326,6 +343,40 @@ class Email(Screen[dict | None]):
         self.dismiss({"role": self.query_one(Select).value, "subject": subject, "body": body})
 
 
+class CommentForm(ModalScreen["tuple[bool, str | None] | None"]):
+    """Who may read the comment and, for one paper, its editable text; a preview follows."""
+
+    DEFAULT_CSS = (
+        "CommentForm {" + DIALOG_CSS + " width: 90%; height: 85%; padding: 1 2; } }"
+        " CommentForm TextArea { height: 1fr; }"
+    )
+    BINDINGS = [("escape", "dismiss", "Cancel")]
+
+    def __init__(self, scope: str, text: str | None) -> None:
+        super().__init__()
+        self.scope, self.text = scope, text
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static(
+                f"Comment on {self.scope}, signed as the paper's SACs. PCs and SACs read it."
+            )
+            yield Checkbox("The paper's SPCs can read it too", value=True, id="spcs-read")
+            if self.text is not None:
+                yield TextArea(self.text, id="comment-text")
+            else:
+                yield Static("Each paper gets its own open issues, from the comment template.")
+            yield Button("Review and post", id="comment-post", variant="primary")
+
+    @on(Button.Pressed, "#comment-post")
+    def submit(self) -> None:
+        text = self.query_one(TextArea).text.strip() if self.text is not None else None
+        if text == "":
+            self.notify("The comment is empty", severity="error")
+            return
+        self.dismiss((self.query_one(Checkbox).value, text))
+
+
 class Templates(ModalScreen["outreach.Template | None"]):
     """Picks an email template; drafts are previewed before anything is sent."""
 
@@ -374,7 +425,9 @@ COMMANDS = [
     ("Email all shown papers", "Reviewers, late reviewers or SPCs, one message per paper  [E]", "email(True)"),
     ("Templated email", "From a template, to the selected SPC (SPCs tab) or paper's people  [m]", "mail"),
     ("Templated email to everyone shown", "From a template: all SPCs, or all shown papers' people  [M]", "mail(True)"),
-    ("Switch tab", "Between Papers and SPCs  [t]", "switch_tab"),
+    ("Comment", "Post the selected paper's issues on its forum, editable  [c]", "comment"),
+    ("Comment on all shown papers", "Each paper's issues on its forum  [C]", "comment(True)"),
+    ("Switch tab", "Papers, SPCs, History  [t]", "switch_tab"),
     ("Legend", "What each check verifies, with the current thresholds  [l]", "legend"),
 ]  # fmt: skip
 
@@ -397,6 +450,7 @@ class Monitor(App):
         ("u", "download('field_supplementary')", "Supp. (U: all)"),
         ("i", "inspect", "Inspect (I: all)"),
         ("m", "mail", "Template (M: all)"),
+        ("c", "comment", "Comment (C: all)"),
         ("e", "email", "Email (E: all)"),
         ("l", "legend", "Legend"),
         ("g", "toggle_green", "🟢 on/off"),
@@ -407,6 +461,7 @@ class Monitor(App):
         Binding("E", "email(True)", "Email all", show=False),
         Binding("I", "inspect(True)", "Inspect all", show=False),
         Binding("M", "mail(True)", "Templated email to all", show=False),
+        Binding("C", "comment(True)", "Comment on all", show=False),
         ("q", "quit", "Quit"),
     ]
 
@@ -418,6 +473,7 @@ class Monitor(App):
         # papers whose current PDF went through the document checks
         self.inspected: set[int] = set()
         self.papers: list[dict] = []  # the latest snapshot's
+        self.sent: list[dict] = []  # the history, newest first
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -433,12 +489,20 @@ class Monitor(App):
                 with Horizontal():
                     yield DataTable(id="spcs", cursor_type="row", zebra_stripes=True)
                     yield VerticalScroll(Static(id="spc-issues"), id="spc-panel")
+            with TabPane("History", id="history-tab"):
+                with Horizontal():
+                    yield DataTable(id="history", cursor_type="row", zebra_stripes=True)
+                    yield VerticalScroll(Static(id="history-entry"), id="history-panel")
         yield Footer(compact=True)
 
-    DEFAULT_CSS = "#spcs { width: 1fr; } #spc-panel { width: 2fr; padding: 0 1; }"
+    DEFAULT_CSS = (
+        "#spcs { width: 1fr; } #spc-panel { width: 2fr; padding: 0 1; }"
+        " #history { width: 3fr; } #history-panel { width: 2fr; padding: 0 1; }"
+    )
 
     def on_mount(self) -> None:
         self.query_one("#issues", DataTable).add_columns("Status", "Paper", "SPC", "Issue")
+        self.query_one("#history", DataTable).add_columns("", "When", "Kind", "Via", "To")
         self.query_one("#spcs", DataTable).add_columns(
             "SPC", "Papers", "Open", ICONS[RED], ICONS[YELLOW]
         )
@@ -462,6 +526,7 @@ class Monitor(App):
         self.query_one("#summary", Static).update(text)
         self.fill()
         self.fill_spcs()
+        self.fill_history()
 
     def fill(self) -> None:
         table = self.query_one("#issues", DataTable)
@@ -482,6 +547,34 @@ class Monitor(App):
                 for spc in i.spcs or ("(no SPC)",):
                     found.setdefault(spc, []).append(i)
         return found
+
+    def fill_history(self) -> None:
+        self.sent = papers.history(cli.FILE_HISTORY)
+        table = self.query_one("#history", DataTable)
+        table.clear()
+        for n, e in enumerate(self.sent):
+            ok = ICONS[GREEN] if e["status"] == "sent" else ICONS[RED]
+            when = e["at"][:16].replace("T", " ")
+            table.add_row(ok, when, e["kind"], e["via"], e["to"], key=str(n))
+        self.show_history()
+
+    @on(DataTable.RowHighlighted, "#history")
+    def show_history(self) -> None:
+        table, text = self.query_one("#history", DataTable), Text()
+        if table.row_count:
+            e = self.sent[
+                int(table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value or 0)
+            ]
+            text.append(f"{e['kind'].title()} {e['status']}, {e['at']}\n", "bold")
+            text.append(f"To: {e['to']} ({', '.join(e['recipients'])})\n")
+            text.append(f"Via #{e['via']}, about {', '.join(f'#{n}' for n in e['papers'])}\n")
+            if e["template"]:
+                text.append(f"Template: {e['template']}\n")
+            text.append(f"\n{e['subject']}\n\n", "bold cyan")
+            text.append(e["body"])
+        else:
+            text.append("Nothing sent from this app yet", "italic")
+        self.query_one("#history-entry", Static).update(text)
 
     def fill_spcs(self) -> None:
         table = self.query_one("#spcs", DataTable)
@@ -520,12 +613,64 @@ class Monitor(App):
                 text.append(f"  {ICONS[i.severity]} {i.message}\n")
         if spc and not mine:
             text.append(f"{ICONS[GREEN]} nothing to do\n")
+        theirs = [e for e in self.sent if e["to"] == spc]
+        if spc and theirs:
+            text.append("\nSent to them from this app\n", "bold underline")
+            sent_lines(text, theirs)
         self.query_one("#spc-issues", Static).update(text)
 
     def action_switch_tab(self) -> None:
         tabs = self.query_one(TabbedContent)
-        tabs.active = "spcs-tab" if tabs.active == "papers" else "papers"
-        self.query_one("#spcs" if tabs.active == "spcs-tab" else "#issues", DataTable).focus()
+        order = {"papers": ("spcs-tab", "#spcs"), "spcs-tab": ("history-tab", "#history")}
+        tabs.active, table = order.get(tabs.active, ("papers", "#issues"))
+        self.query_one(table, DataTable).focus()
+
+    def sent_notice(self, failures: list[str], total: int, verb: str = "Sent") -> None:
+        """After sending: the outcome, and the history tab updated."""
+        self.fill_history()
+        self.fill_spcs()
+        summary = f"{verb} {total - len(failures)} of {total}"
+        self.notify(
+            "\n".join([*failures, summary]), severity="error" if failures else "information"
+        )
+
+    def action_comment(self, every: bool = False) -> None:
+        if not (numbers := self.scope(every)):
+            return
+        records = papers.load(cli.DIR_PAPERS) if cli.DIR_PAPERS.is_dir() else []
+        draft, _ = outreach.comments(self.issues, records, set(numbers[:1]), True)
+        text = draft[0].text if draft and not every else None
+        if not every and not draft:
+            self.notify(f"#{numbers[0]}: no open issues to comment on, or not cached")
+            return
+
+        def compose(form: tuple[bool, str | None] | None) -> None:
+            if form is None:
+                return
+            spcs_read, edited = form
+            found, skipped = outreach.comments(self.issues, records, set(numbers), spcs_read)
+            if edited is not None:
+                found = [c._replace(text=edited) for c in found]
+            if not found:
+                self.notify("\n".join([*skipped, "Nothing to comment on"]))
+                return
+
+            def post(confirmed: bool | None) -> None:
+                if not confirmed:
+                    self.notify("Nothing posted")
+                    return
+                self.online(
+                    f"Posting {len(found)} comments…",
+                    lambda client, progress: papers.post_comments(
+                        client, found, progress, cli.FILE_HISTORY
+                    ),
+                    lambda failures: self.sent_notice(failures, len(found), "Posted"),
+                )
+
+            self.push_screen(Confirm(outreach.preview_comments(found, skipped)), post)
+
+        scope = f"paper #{numbers[0]}" if len(numbers) == 1 else f"{len(numbers)} papers"
+        self.push_screen(CommentForm(scope, text), compose)
 
     def action_mail(self, every: bool = False) -> None:
         on_spcs = self.query_one(TabbedContent).active == "spcs-tab"
@@ -562,13 +707,10 @@ class Monitor(App):
                     return
                 self.online(
                     f"Sending {len(drafts)} messages ({template.name})…",
-                    lambda client, progress: papers.deliver(client, drafts, progress),
-                    lambda failures: self.notify(
-                        "\n".join(
-                            [*failures, f"Sent {len(drafts) - len(failures)} of {len(drafts)}"]
-                        ),
-                        severity="error" if failures else "information",
+                    lambda client, progress: papers.deliver(
+                        client, drafts, progress, cli.FILE_HISTORY
                     ),
+                    lambda failures: self.sent_notice(failures, len(drafts)),
                 )
 
             self.push_screen(Confirm(outreach.preview(drafts, unreachable)), send)
@@ -622,7 +764,8 @@ class Monitor(App):
         except FileNotFoundError:
             record = None
         inspected = number in self.inspected
-        self.push_screen(Paper(details(number, record, self.config, mine, inspected)))
+        sent = [e for e in self.sent if papers.about(e, number)]
+        self.push_screen(Paper(details(number, record, self.config, mine, inspected, sent)))
 
     def scope(self, every: bool) -> list[int]:
         """The selected paper or, with `every`, all the papers shown."""
@@ -826,12 +969,9 @@ class Monitor(App):
                 self.online(
                     f"Sending {len(messages)} messages…",
                     lambda client, progress: papers.send(
-                        client, messages, form["subject"], form["body"], progress
+                        client, messages, form["subject"], form["body"], progress, cli.FILE_HISTORY
                     ),
-                    lambda failures: self.notify(
-                        "\n".join([*failures, f"Sent {len(messages) - len(failures)}"]),
-                        severity="error" if failures else "information",
-                    ),
+                    lambda failures: self.sent_notice(failures, len(messages)),
                 )
 
             self.push_screen(Confirm(papers.describe(messages, **form)), send)
