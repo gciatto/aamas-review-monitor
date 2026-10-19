@@ -10,7 +10,11 @@ with each paper GREEN/YELLOW/RED. Colors describe process health, never scientif
 uv sync
 uv run aamas_review_monitor sync                 # fetch a snapshot (asks for credentials)
 uv run aamas_review_monitor report [--csv FILE]  # action queue, diff vs previous snapshot
+uv run aamas_review_monitor tui                  # the same, as an interactive table
 ```
+
+In the TUI: `/` filters (SPC, paper number, issue), clicking a header sorts, `o` or Enter opens
+the paper on OpenReview, `s` syncs, `r` reloads, `q` quits.
 
 Run `sync` daily: each run adds a snapshot, and `report` shows what is new or resolved per SPC
 since the previous one. Credentials come from `OPENREVIEW_USERNAME`/`OPENREVIEW_PASSWORD` or a
@@ -49,6 +53,7 @@ Development uses synthetic fixtures only (`tests/`).
 │   ├── __main__.py                   # CLI: sync, report (also `python -m aamas_review_monitor`)
 │   ├── collector.py                  # read-only OpenReview v2 collector
 │   ├── checks.py                     # deterministic checks and report
+│   ├── tui.py                        # Textual interface over the same checks
 │   └── resources/                    # non-code files shipped with the package
 │       ├── __init__.py               # paths to the resource files (DIR_RESOURCES, FILE_*)
 │       └── config.json               # venue, deadlines, thresholds
@@ -56,6 +61,7 @@ Development uses synthetic fixtures only (`tests/`).
 │   ├── test_githooks.py              # tests for scripts/githooks.py
 │   ├── test_checks.py                # checks
 │   ├── test_collector.py             # collector against a fake OpenReview client
+│   ├── test_tui.py                   # TUI driven headlessly
 │   └── test_main_package.py          # CLI report end to end
 ├── scripts/
 │   └── githooks.py                   # installs/removes local Git hooks
