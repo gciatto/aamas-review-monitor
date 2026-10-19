@@ -127,9 +127,9 @@ def few_reviewers(paper: dict, ctx: Context) -> list[Finding]:
 def reviews_behind(paper: dict, ctx: Context) -> list[Finding]:
     """Reviews on track with the milestones
 
-    YELLOW when, past a milestone of reviews_milestones (date: share of reviews due, now
-    {reviews_milestones}), fewer reviews are in than that share, until the last
-    {reviews_warning_days} days before the review deadline (then "Reviews on schedule" applies).
+    YELLOW when, past a review milestone ({reviews_milestones}), fewer of the paper's reviews are
+    in than that share, until the last {reviews_warning_days} days before the review deadline
+    (then "Reviews on schedule" applies).
     """
     if _days(ctx, "deadline_reviews") <= ctx.config["reviews_warning_days"]:
         return []
@@ -206,7 +206,7 @@ def similarity(a: list[int], b: list[int]) -> float:
 def recycled_review(paper: dict, ctx: Context) -> list[Finding]:
     """Reviews written for this paper
 
-    YELLOW when a review shares {reviews_similarity_max} or more of its 5-word phrases
+    YELLOW when a review shares {reviews_similarity_max:.0%} or more of its 5-word phrases
     (estimated from fingerprints, not text) with a review by the same reviewer on another of
     your papers.
     """
@@ -421,8 +421,10 @@ def _doc(function: Callable) -> tuple[str, str]:
 
 def legend(config: dict, checks: list | None = None) -> list[tuple[str, str, str]]:
     """(code, label, description) of every check, thresholds filled in from `config`."""
+    milestones = config.get("reviews_milestones", {}).items()
+    shown = config | {"reviews_milestones": ", ".join(f"{s:.0%} by {d}" for d, s in milestones)}
     return [
-        (f.__name__, _doc(f)[0], _doc(f)[1].format_map(config))
+        (f.__name__, _doc(f)[0], _doc(f)[1].format_map(shown))
         for f in (CHECKS if checks is None else checks)
     ]
 
