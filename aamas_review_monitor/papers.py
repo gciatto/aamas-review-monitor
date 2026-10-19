@@ -133,29 +133,27 @@ def recipients(record: dict, role: str) -> tuple[str, str, list[str]]:
     return invitation, prefix + group, members
 
 
-def email(
-    client: Any,
-    records: list[dict],
-    role: str,
-    subject: str,
-    body: str,
-    confirm: Callable[[str], str] | None = None,
-) -> int:
-    """Sends one message per paper to `role`, only after the user types SEND. Returns how many."""
-    plan = [(record, *recipients(record, role)) for record in records]
-    plan = [p for p in plan if p[3]]
-    if not plan:
-        print(f"No {role} to email")
-        return 0
-    total = sum(len(p[3]) for p in plan)
-    numbers = ", ".join(f"#{p[0]['number']}" for p in plan)
-    print(f"To: {role} of papers {numbers}")
-    print(f"({len(plan)} messages, {total} recipients)\nSubject: {subject}\n\n{body}\n")
-    if (confirm or input)(f"Type SEND to send {len(plan)} messages: ").strip() != "SEND":
-        print("Nothing sent")
-        return 0
-    sent = 0
-    for record, invitation, parent, members in plan:
+Plan = list[tuple[dict, str, str, list[str]]]  # (record, invitation, parent group, recipients)
+
+
+def plan(records: list[dict], role: str) -> Plan:
+    """One message per paper with someone to email in `role`."""
+    return [(r, *recipients(r, role)) for r in records if recipients(r, role)[2]]
+
+
+def describe(messages: Plan, role: str, subject: str, body: str) -> str:
+    numbers = ", ".join(f"#{m[0]['number']}" for m in messages)
+    total = sum(len(m[3]) for m in messages)
+    return (
+        f"To: {role} of papers {numbers}\n({len(messages)} messages, {total} recipients)\n"
+        f"Subject: {subject}\n\n{body}"
+    )
+
+
+def send(client: Any, messages: Plan, subject: str, body: str) -> list[str]:
+    """Posts the messages, signed as each paper's SACs; returns the failures."""
+    failures = []
+    for record, invitation, parent, members in messages:
         try:
             client.post_message(
                 subject,
@@ -165,8 +163,28 @@ def email(
                 signature=record["prefix"] + record["names"]["senior_area_chairs"],
                 parentGroup=parent,
             )
-            sent += 1
         except Exception as e:  # keep going: the other papers' messages are independent
-            print(f"#{record['number']}: not sent ({e})")
-    print(f"Sent {sent} of {len(plan)} messages")
-    return sent
+            failures.append(f"#{record['number']}: not sent ({e})")
+    return failures
+
+
+def email(
+    client: Any,
+    records: list[dict],
+    role: str,
+    subject: str,
+    body: str,
+    confirm: Callable[[str], str] | None = None,
+) -> int:
+    """Sends one message per paper to `role`, only after the user types SEND. Returns how many."""
+    messages = plan(records, role)
+    if not messages:
+        print(f"No {role} to email")
+        return 0
+    print(describe(messages, role, subject, body) + "\n")
+    if (confirm or input)(f"Type SEND to send {len(messages)} messages: ").strip() != "SEND":
+        print("Nothing sent")
+        return 0
+    failures = send(client, messages, subject, body)
+    print("\n".join([*failures, f"Sent {len(messages) - len(failures)} of {len(messages)}"]))
+    return len(messages) - len(failures)

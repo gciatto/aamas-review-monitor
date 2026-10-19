@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -25,39 +26,51 @@ def load_config() -> dict:
     return config | (json.loads(local.read_text(encoding="utf-8")) if local.is_file() else {})
 
 
-def login(config: dict) -> Any:
+def resume(config: dict) -> Any | None:
+    """A client from the cached session token; None if there is none or it expired."""
     import openreview  # type: ignore[import-untyped]
 
-    DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if FILE_TOKEN.is_file():  # an expired token leaves the client without a profile
-        client = openreview.api.OpenReviewClient(
-            baseurl=config["url_api"], token=FILE_TOKEN.read_text(encoding="utf-8").strip()
-        )
-        if client.profile is not None:
-            return client
+    if not FILE_TOKEN.is_file():
+        return None
+    client = openreview.api.OpenReviewClient(
+        baseurl=config["url_api"], token=FILE_TOKEN.read_text(encoding="utf-8").strip()
+    )
+    return client if client.profile is not None else None  # expired: no profile
+
+
+def login(config: dict, username: str | None = None, password: str | None = None) -> Any:
+    """A signed-in client: cached token, else the given, environment or prompted credentials."""
+    import openreview
+
+    if client := resume(config):
+        return client
     client = openreview.api.OpenReviewClient(
         baseurl=config["url_api"],
-        username=os.environ.get("OPENREVIEW_USERNAME") or input("OpenReview username: "),
-        password=os.environ.get("OPENREVIEW_PASSWORD") or getpass.getpass("Password: "),
+        username=username
+        or os.environ.get("OPENREVIEW_USERNAME")
+        or input("OpenReview username: "),
+        password=password or os.environ.get("OPENREVIEW_PASSWORD") or getpass.getpass("Password: "),
         tokenExpiresIn=7 * 24 * 3600,  # the longest OpenReview allows
     )
+    DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
     FILE_TOKEN.touch(mode=0o600)
     FILE_TOKEN.write_text(client.token, encoding="utf-8")
     return client
 
 
-def sync(config: dict) -> Path:
-    records = fetch(login(config), config)
-    for change in papers.save(
-        records, DIR_PAPERS, [config["field_pdf"], config["field_supplementary"]]
-    ):
-        print(change)
+def sync(
+    config: dict, client: Any = None, progress: Callable[[int, int], None] | None = None
+) -> tuple[Path, list[str]]:
+    """Fetches and caches the papers, saves a snapshot; returns it and the updated attachments."""
+    records = fetch(client or login(config), config, progress)
+    fields = [config["field_pdf"], config["field_supplementary"]]
+    changes = papers.save(records, DIR_PAPERS, fields)
     snap = snapshot(records, config)
     DIR_SNAPSHOTS.mkdir(parents=True, exist_ok=True, mode=0o700)
     file = DIR_SNAPSHOTS / (snap["taken_at"][:19].replace(":", "") + ".json")
     file.write_text(json.dumps(snap, indent=1), encoding="utf-8")
     file.chmod(0o600)
-    return file
+    return file, changes
 
 
 def load_snapshots() -> tuple[dict | None, dict | None]:
@@ -94,7 +107,8 @@ def main(argv: list[str] | None = None) -> None:
 
     config = load_config()
     if args.command == "sync":
-        print(f"Saved {sync(config)}")
+        file, changes = sync(config)
+        print("\n".join([*changes, f"Saved {file}"]))
     elif args.command == "tui":
         from aamas_review_monitor.tui import Monitor
 

@@ -6,6 +6,7 @@ is cached locally, never put in snapshots. `summarize` turns a record into snaps
 """
 
 import re
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -34,7 +35,10 @@ def replies(record: dict, kind: str) -> list[dict]:
     return [r for r in record["replies"] if any(i.endswith(f"/-/{name}") for i in r["invitations"])]
 
 
-def fetch(client: Any, config: dict) -> list[dict]:
+def fetch(
+    client: Any, config: dict, progress: Callable[[int, int], None] | None = None
+) -> list[dict]:
+    """Records of the signed-in SAC's papers; `progress(done, total)` follows the slow part."""
     venue_id = config["venue_id"]
     venue = client.get_group(venue_id).content or {}
     names = {
@@ -57,8 +61,11 @@ def fetch(client: Any, config: dict) -> list[dict]:
     notes = client.get_all_notes(
         invitation=f"{venue_id}/-/{names['submission']}", details="replies"
     )
-    records = []
-    for note in sorted((n for n in notes if n.number in numbers), key=lambda n: n.number):
+    records: list[dict] = []
+    mine_notes = sorted((n for n in notes if n.number in numbers), key=lambda n: n.number)
+    for note in mine_notes:
+        if progress:
+            progress(len(records), len(mine_notes))
         paper = f"{prefix}{note.number}/"
         groups = client.get_all_groups(prefix=paper)
         records.append(
