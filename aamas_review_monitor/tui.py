@@ -6,6 +6,7 @@ import subprocess
 import webbrowser
 import zipfile
 from collections.abc import Callable, Iterable
+from datetime import date
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -14,26 +15,30 @@ from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
 from textual.widget import Widget
+from textual.widgets.option_list import Option
 from textual.widgets import (
     Button,
     DataTable,
     Footer,
     Header,
     Input,
+    OptionList,
     ProgressBar,
     RichLog,
     Select,
     Static,
+    TabbedContent,
+    TabPane,
     TextArea,
     Tree,
 )
 
 from aamas_review_monitor import __main__ as cli
 from aamas_review_monitor import logger
-from aamas_review_monitor import documents, papers
+from aamas_review_monitor import documents, outreach, papers
 from aamas_review_monitor.checks import (
     GREEN,
     RED,
@@ -321,6 +326,36 @@ class Email(Screen[dict | None]):
         self.dismiss({"role": self.query_one(Select).value, "subject": subject, "body": body})
 
 
+class Templates(ModalScreen["outreach.Template | None"]):
+    """Picks an email template; drafts are previewed before anything is sent."""
+
+    DEFAULT_CSS = "Templates {" + DIALOG_CSS + " width: 90%; height: auto; padding: 1 2; } }"
+    BINDINGS = [("escape", "dismiss", "Cancel")]
+
+    def __init__(self, scope: str) -> None:
+        super().__init__()
+        self.scope = scope
+        self.choices = outreach.templates()
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static(f"Email {self.scope} with a template. Every message is previewed first.")
+            yield OptionList(
+                *(
+                    Option(
+                        Text.assemble((t.name, "bold"), f"  to {t.audience}\n", t.description),
+                        t.key,
+                    )
+                    for t in self.choices
+                ),
+                id="templates",
+            )
+
+    @on(OptionList.OptionSelected, "#templates")
+    def chosen(self, event: OptionList.OptionSelected) -> None:
+        self.dismiss(next(t for t in self.choices if t.key == event.option.id))
+
+
 # The command palette (ctrl+p): (title, help, action), the same actions as the key bindings
 COMMANDS = [
     ("Sync with OpenReview", "Fetch papers, reviews and a new snapshot  [s]", "sync"),
@@ -337,6 +372,9 @@ COMMANDS = [
     ("Inspect all shown papers", "Document checks, downloading what is missing  [I]", "inspect(True)"),
     ("Email", "Reviewers, late reviewers or SPCs of the selected paper  [e]", "email"),
     ("Email all shown papers", "Reviewers, late reviewers or SPCs, one message per paper  [E]", "email(True)"),
+    ("Templated email", "From a template, to the selected SPC (SPCs tab) or paper's people  [m]", "mail"),
+    ("Templated email to everyone shown", "From a template: all SPCs, or all shown papers' people  [M]", "mail(True)"),
+    ("Switch tab", "Between Papers and SPCs  [t]", "switch_tab"),
     ("Legend", "What each check verifies, with the current thresholds  [l]", "legend"),
 ]  # fmt: skip
 
@@ -352,12 +390,14 @@ class Monitor(App):
     BINDINGS = [
         # in footer order: what is used most comes first, as narrow terminals cut the tail
         ("f", "focus('filter')", "Filter"),
+        ("t", "switch_tab", "Tab"),
         ("d", "details", "Details"),
+        ("s", "sync", "Sync"),
         ("p", "download('field_pdf')", "PDF (P: all)"),
         ("u", "download('field_supplementary')", "Supp. (U: all)"),
         ("i", "inspect", "Inspect (I: all)"),
+        ("m", "mail", "Template (M: all)"),
         ("e", "email", "Email (E: all)"),
-        ("s", "sync", "Sync"),
         ("l", "legend", "Legend"),
         ("g", "toggle_green", "🟢 on/off"),
         ("o", "open", "Browser"),
@@ -366,6 +406,7 @@ class Monitor(App):
         Binding("U", "download('field_supplementary', True)", "All supplementary", show=False),
         Binding("E", "email(True)", "Email all", show=False),
         Binding("I", "inspect(True)", "Inspect all", show=False),
+        Binding("M", "mail(True)", "Templated email to all", show=False),
         ("q", "quit", "Quit"),
     ]
 
@@ -374,26 +415,39 @@ class Monitor(App):
         self.config = config
         self.issues: list[Issue] = []  # plus one GREEN row per paper without issues
         self.hide_green = False
-        self.inspected: set[int] = (
-            set()
-        )  # papers whose current PDF went through the document checks
+        # papers whose current PDF went through the document checks
+        self.inspected: set[int] = set()
+        self.papers: list[dict] = []  # the latest snapshot's
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(id="summary")
-        yield Input(
-            placeholder="Filter by SPC, paper # or issue (f to focus, Enter to apply)", id="filter"
-        )
-        yield DataTable(id="issues", cursor_type="row", zebra_stripes=True)
+        with TabbedContent(id="tabs"):
+            with TabPane("Papers", id="papers"):
+                yield Input(
+                    placeholder="Filter by SPC, paper # or issue (f to focus, Enter to apply)",
+                    id="filter",
+                )
+                yield DataTable(id="issues", cursor_type="row", zebra_stripes=True)
+            with TabPane("SPCs", id="spcs-tab"):
+                with Horizontal():
+                    yield DataTable(id="spcs", cursor_type="row", zebra_stripes=True)
+                    yield VerticalScroll(Static(id="spc-issues"), id="spc-panel")
         yield Footer(compact=True)
 
+    DEFAULT_CSS = "#spcs { width: 1fr; } #spc-panel { width: 2fr; padding: 0 1; }"
+
     def on_mount(self) -> None:
-        self.query_one(DataTable).add_columns("Status", "Paper", "SPC", "Issue")
+        self.query_one("#issues", DataTable).add_columns("Status", "Paper", "SPC", "Issue")
+        self.query_one("#spcs", DataTable).add_columns(
+            "SPC", "Papers", "Open", ICONS[RED], ICONS[YELLOW]
+        )
         self.action_reload()
-        self.query_one(DataTable).focus()
+        self.query_one("#issues", DataTable).focus()
 
     def action_reload(self) -> None:
         latest, previous = cli.load_snapshots()
+        self.papers = latest["papers"] if latest else []
         if latest is None:
             self.issues = []
             text = f"No snapshots in {cli.DIR_SNAPSHOTS}: press s to sync"
@@ -407,15 +461,119 @@ class Monitor(App):
                 text = text.replace(f" {severity}", f" {icon}")
         self.query_one("#summary", Static).update(text)
         self.fill()
+        self.fill_spcs()
 
     def fill(self) -> None:
-        table = self.query_one(DataTable)
+        table = self.query_one("#issues", DataTable)
         table.clear()
-        needle = self.query_one(Input).value.lower()
+        needle = self.query_one("#filter", Input).value.lower()
         for n, i in enumerate(self.issues):
             if matches(i, needle) and not (self.hide_green and i.severity == GREEN):
                 spcs = ", ".join(i.spcs) or "(no SPC)"
                 table.add_row(ICONS[i.severity], i.number, spcs, i.message, key=str(n))
+
+    def by_spc(self) -> dict[str, list[Issue]]:
+        """Open issues per SPC, every SPC of the snapshot included."""
+        found: dict[str, list[Issue]] = {
+            spc: [] for p in self.papers for spc in p["spcs"] or ["(no SPC)"]
+        }
+        for i in self.issues:
+            if i.severity != GREEN:
+                for spc in i.spcs or ("(no SPC)",):
+                    found.setdefault(spc, []).append(i)
+        return found
+
+    def fill_spcs(self) -> None:
+        table = self.query_one("#spcs", DataTable)
+        table.clear()
+        count = {
+            spc: sum(spc in (p["spcs"] or ["(no SPC)"]) for p in self.papers)
+            for spc in self.by_spc()
+        }
+        for spc, mine in sorted(
+            self.by_spc().items(),
+            key=lambda kv: (-sum(i.severity == RED for i in kv[1]), -len(kv[1]), kv[0]),
+        ):
+            reds = sum(i.severity == RED for i in mine)
+            table.add_row(
+                spc, count[spc], len({i.number for i in mine}), reds, len(mine) - reds, key=spc
+            )
+        self.show_spc()
+
+    def selected_spc(self) -> str | None:
+        table = self.query_one("#spcs", DataTable)
+        if not table.row_count:
+            return None
+        return str(table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value)
+
+    @on(DataTable.RowHighlighted, "#spcs")
+    def show_spc(self) -> None:
+        spc, text = self.selected_spc(), Text()
+        mine = self.by_spc().get(spc or "", [])
+        if spc:
+            text.append(f"{spc}\n", "bold")
+            numbers = [p["number"] for p in self.papers if spc in (p["spcs"] or ["(no SPC)"])]
+            text.append(f"{len(numbers)} papers: {', '.join(f'#{n}' for n in sorted(numbers))}\n\n")
+        for number in sorted({i.number for i in mine}):
+            text.append(f"#{number}\n", "bold cyan")
+            for i in (i for i in mine if i.number == number):
+                text.append(f"  {ICONS[i.severity]} {i.message}\n")
+        if spc and not mine:
+            text.append(f"{ICONS[GREEN]} nothing to do\n")
+        self.query_one("#spc-issues", Static).update(text)
+
+    def action_switch_tab(self) -> None:
+        tabs = self.query_one(TabbedContent)
+        tabs.active = "spcs-tab" if tabs.active == "papers" else "papers"
+        self.query_one("#spcs" if tabs.active == "spcs-tab" else "#issues", DataTable).focus()
+
+    def action_mail(self, every: bool = False) -> None:
+        on_spcs = self.query_one(TabbedContent).active == "spcs-tab"
+        spcs: set[str] | None = None
+        numbers: set[int] | None = None
+        if on_spcs:
+            spc = self.selected_spc()
+            if not every and spc is None:
+                return
+            spcs = None if every else {spc or ""}
+            scope = "every SPC" if every else spc
+        else:
+            if not (shown := self.scope(every)):
+                return
+            numbers = set(shown)
+            scope = f"paper #{shown[0]}" if len(shown) == 1 else f"{len(shown)} papers"
+
+        def chosen(template: outreach.Template | None) -> None:
+            if template is None:
+                return
+            latest, _ = cli.load_snapshots()
+            today = date.fromisoformat(latest["taken_at"][:10]) if latest else date.today()
+            records = papers.load(cli.DIR_PAPERS) if cli.DIR_PAPERS.is_dir() else []
+            drafts, unreachable = outreach.compose(
+                template, self.issues, records, self.config, today, spcs, numbers
+            )
+            if not drafts:
+                self.notify("\n".join([*unreachable, f"Nothing to send with {template.name}"]))
+                return
+
+            def send(confirmed: bool | None) -> None:
+                if not confirmed:
+                    self.notify("Nothing sent")
+                    return
+                self.online(
+                    f"Sending {len(drafts)} messages ({template.name})…",
+                    lambda client, progress: papers.deliver(client, drafts, progress),
+                    lambda failures: self.notify(
+                        "\n".join(
+                            [*failures, f"Sent {len(drafts) - len(failures)} of {len(drafts)}"]
+                        ),
+                        severity="error" if failures else "information",
+                    ),
+                )
+
+            self.push_screen(Confirm(outreach.preview(drafts, unreachable)), send)
+
+        self.push_screen(Templates(scope or ""), chosen)
 
     def action_legend(self) -> None:
         self.push_screen(Legend(self.config))
@@ -430,7 +588,7 @@ class Monitor(App):
 
     @on(Input.Submitted, "#filter")
     def filter_submitted(self) -> None:
-        self.query_one(DataTable).focus()
+        self.query_one("#issues", DataTable).focus()
 
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         event.data_table.sort(
@@ -438,11 +596,12 @@ class Monitor(App):
             key=lambda v: v if isinstance(v, int) else RANKS.get(str(v), str(v)),
         )
 
-    def on_data_table_row_selected(self) -> None:
+    @on(DataTable.RowSelected, "#issues")
+    def issue_selected(self) -> None:
         self.action_details()
 
     def selected(self) -> Issue | None:
-        table = self.query_one(DataTable)
+        table = self.query_one("#issues", DataTable)
         if not table.row_count:
             return None
         row = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
@@ -470,7 +629,7 @@ class Monitor(App):
         if not every:
             issue = self.selected()
             return [issue.number] if issue else []
-        rows = self.query_one(DataTable).rows
+        rows = self.query_one("#issues", DataTable).rows
         return sorted({self.issues[int(k.value or 0)].number for k in rows})
 
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:

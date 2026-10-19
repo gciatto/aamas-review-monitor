@@ -296,3 +296,57 @@ def test_bulk_job_logs_its_steps_and_can_be_interrupted(tmp_path, monkeypatch):
     assert any("Interrupting" in line for line in lines)
     assert any("#7: pdf_v1.pdf" in line for line in lines)
     assert any("interrupted: completed steps are kept" in n for n in notes)
+
+
+async def choose_template(app, pilot, key):
+    screen = app.screen
+    assert isinstance(screen, tui.Templates)
+    screen.query_one("#templates").highlighted = [t.key for t in screen.choices].index(key)
+    await pilot.press("enter")
+    await pilot.pause()
+
+
+def test_spc_tab_lists_issues_per_spc_and_sends_a_digest(tmp_path, monkeypatch):
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.press("t")
+            spcs = app.query_one("#spcs")
+            assert spcs.row_count == 1 and spcs.get_row_at(0)[:3] == ["~Spc_One1", 1, 1]
+            panel = str(app.query_one("#spc-issues").render())
+            assert "#7" in panel and "ratings [3, 6]" in panel
+            await pilot.press("m")
+            await choose_template(app, pilot, "spc-digest")
+            assert isinstance(app.screen, Confirm)
+            assert "=== To ~Spc_One1, via #7 ===" in app.screen.summary
+            assert "ratings [3, 6]" in app.screen.summary
+            app.screen.query_one("#confirm").value = "SEND"
+            await pilot.click("#confirm-send")
+            await settle(app, pilot)
+
+    asyncio.run(scenario())
+    ((args, kwargs),) = client.messages
+    assert args[1] == ["ifaamas.org/AAMAS/2027/Conference/Submission7/Area_Chair_9jqi"]
+    assert args[0] == "AAMAS 2027: status of your papers (#7)"
+
+
+def test_papers_tab_templated_reminder_to_late_reviewers_can_be_cancelled(tmp_path, monkeypatch):
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    notes: list[str] = []
+    monkeypatch.setattr(app, "notify", lambda message, **kw: notes.append(message))
+
+    async def scenario():
+        async with app.run_test() as pilot:
+            await pilot.press("M")
+            await choose_template(app, pilot, "spc-deadline")  # no meta-review issue yet
+            assert not isinstance(app.screen, Confirm)
+            await pilot.press("M")
+            await choose_template(app, pilot, "spc-digest")
+            assert isinstance(app.screen, Confirm)
+            await pilot.press("escape")
+            await pilot.pause()
+
+    asyncio.run(scenario())
+    assert client.messages == []
+    assert notes == ["Nothing to send with Meta-review deadline", "Nothing sent"]
