@@ -130,3 +130,22 @@ def test_inspection_is_cached_per_attachment_version(tmp_path, monkeypatch):
     assert documents.inspection(record, CONFIG, tmp_path) == found
     record["content"]["pdf"]["value"] = "/pdf/v2.pdf"  # a new upload makes the results stale
     assert documents.inspection(record, CONFIG, tmp_path) is None
+
+
+def test_pdffonts_output_of_xpdf_and_poppler():
+    xpdf = """name                                 type              emb sub uni prob object ID
+------------------------------------ ----------------- --- --- --- ---- ---------
+NPWNPS+LinLibertineT                 Type 1            yes yes yes          51  0
+Helvetica                            Type 1            no  no  no            7  0
+"""
+    poppler = """name                                 type              encoding         emb sub uni object ID
+------------------------------------ ----------------- ---------------- --- --- --- ---------
+NPWNPS+LinLibertineT                 Type 1            Custom           yes yes yes     51  0
+Helvetica                            Type 1            WinAnsi          no  no  no       7  0
+"""
+    for output in (xpdf, poppler):
+        fonts = documents.parse_pdffonts(output)
+        assert [(f["name"], f["emb"]) for f in fonts] == [
+            ("NPWNPS+LinLibertineT", "yes"),
+            ("Helvetica", "no"),
+        ]

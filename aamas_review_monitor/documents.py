@@ -73,12 +73,17 @@ def pdfinfo(pdf: Path) -> dict[str, str]:
 
 
 def pdffonts(pdf: Path) -> list[dict[str, str]]:
-    """pdffonts' table, split along the dashes under its header."""
-    lines = _tool("pdffonts", str(pdf)).splitlines()
+    return parse_pdffonts(_tool("pdffonts", str(pdf)))
+
+
+def parse_pdffonts(output: str) -> list[dict[str, str]]:
+    """pdffonts' table as dicts keyed by its header (name, type, emb, ...), split along the
+    dashes under the header: works for xpdf and for poppler, which adds an encoding column."""
+    lines = output.splitlines()
     if len(lines) < 2:
         return []
     spans = [m.span() for m in re.finditer(r"-+", lines[1])]
-    keys = ["name", "type", "emb"]
+    keys = [lines[0][a:b].strip() for a, b in spans]
     return [{k: line[a:b].strip() for k, (a, b) in zip(keys, spans)} for line in lines[2:]]
 
 
