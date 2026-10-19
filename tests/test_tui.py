@@ -4,15 +4,15 @@ import zipfile
 
 from textual.widgets import Static, Tree
 
-from aamas_review_monitor import __main__ as cli
+from aamas_review_monitor import core
 from aamas_review_monitor import tui
 from aamas_review_monitor.tui import Attachment, Busy, Confirm, Login, Monitor, Paper
 from tests.test_checks import CONFIG, paper
 
 
 def test_tui_lists_and_filters_issues(tmp_path, monkeypatch):
-    monkeypatch.setattr(cli, "DIR_SNAPSHOTS", tmp_path)
-    monkeypatch.setattr(cli, "DIR_PAPERS", tmp_path / "papers")
+    monkeypatch.setattr(core, "DIR_SNAPSHOTS", tmp_path)
+    monkeypatch.setattr(core, "DIR_PAPERS", tmp_path / "papers")
     papers = [paper(1, spcs=[]), paper(2, words=9), paper(3)]
     snapshot = {"taken_at": "2026-11-11T08:00:00", "papers": papers}
     (tmp_path / "2026-11-11T080000.json").write_text(json.dumps(snapshot))
@@ -76,15 +76,15 @@ def cached_monitor(tmp_path, monkeypatch):
     from tests.test_papers import CONFIG as PAPERS
 
     config = CONFIG | PAPERS
-    monkeypatch.setattr(cli, "DIR_SNAPSHOTS", tmp_path / "snapshots")
-    monkeypatch.setattr(cli, "DIR_PAPERS", tmp_path / "papers")
+    monkeypatch.setattr(core, "DIR_SNAPSHOTS", tmp_path / "snapshots")
+    monkeypatch.setattr(core, "DIR_PAPERS", tmp_path / "papers")
     records = fetch(FakeClient(), config)
-    papers.save(records, cli.DIR_PAPERS, [])
+    papers.save(records, core.DIR_PAPERS, [])
     (tmp_path / "snapshots").mkdir()
     snap = snapshot(records, config) | {"taken_at": "2026-10-19T08:00:00"}
     (tmp_path / "snapshots" / "a.json").write_text(json.dumps(snap))
     client = FakeClient()
-    monkeypatch.setattr(cli, "resume", lambda config: client)  # as if a token were cached
+    monkeypatch.setattr(core, "resume", lambda config: client)  # as if a token were cached
     opened: list[str] = []
     monkeypatch.setattr("webbrowser.open", opened.append)
     return Monitor(config), client, opened
@@ -162,10 +162,10 @@ def test_tui_email_sends_only_after_typing_send(tmp_path, monkeypatch):
 
 def test_tui_signs_in_and_syncs_in_background(tmp_path, monkeypatch):
     app, client, _ = cached_monitor(tmp_path, monkeypatch)
-    monkeypatch.setattr(cli, "resume", lambda config: None)  # no valid token
+    monkeypatch.setattr(core, "resume", lambda config: None)  # no valid token
     monkeypatch.delenv("OPENREVIEW_USERNAME", raising=False)
     signed: list[tuple] = []
-    monkeypatch.setattr(cli, "login", lambda config, *creds: signed.append(creds) or client)
+    monkeypatch.setattr(core, "login", lambda config, *creds: signed.append(creds) or client)
     for old in (tmp_path / "snapshots").iterdir():
         old.unlink()
 
@@ -262,7 +262,7 @@ def test_tui_bulk_inspect_downloads_what_is_missing(tmp_path, monkeypatch):
             await settle(app, pilot)
             assert client.downloads == [("pdf", "abc")]
             assert 7 in app.inspected and any(i.code == "template" for i in app.issues)
-            monkeypatch.setattr(cli, "resume", lambda config: None)  # cached: no login needed
+            monkeypatch.setattr(core, "resume", lambda config: None)  # cached: no login needed
             await pilot.press("I")
             await settle(app, pilot)
             assert client.downloads == [("pdf", "abc")] and not isinstance(app.screen, Login)
@@ -277,9 +277,9 @@ def test_bulk_job_logs_its_steps_and_can_be_interrupted(tmp_path, monkeypatch):
     from aamas_review_monitor import papers
 
     app, client, _ = cached_monitor(tmp_path, monkeypatch)
-    (record,) = papers.load(cli.DIR_PAPERS, [7])
+    (record,) = papers.load(core.DIR_PAPERS, [7])
     second = copy.deepcopy(record) | {"number": 8}
-    papers.save([second], cli.DIR_PAPERS, [])
+    papers.save([second], core.DIR_PAPERS, [])
     release, started = threading.Event(), threading.Event()
 
     def slow(field_name, id):
@@ -405,4 +405,4 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             assert "comment to PCs, SACs via #7" in app.screen.text.plain
 
     asyncio.run(scenario())
-    assert cli.FILE_HISTORY.is_file()  # the temporary one (see conftest)
+    assert core.FILE_HISTORY.is_file()  # the temporary one (see conftest)

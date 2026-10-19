@@ -37,7 +37,7 @@ from textual.widgets import (
     Tree,
 )
 
-from aamas_review_monitor import __main__ as cli
+from aamas_review_monitor import core
 from aamas_review_monitor import logger
 from aamas_review_monitor import documents, outreach, papers
 from aamas_review_monitor.checks import (
@@ -249,7 +249,7 @@ class Busy(ModalScreen):
 
     @on(Button.Pressed, "#interrupt")
     def action_interrupt(self) -> None:
-        cli.INTERRUPT.set()
+        core.INTERRUPT.set()
         button = self.query_one(Button)
         button.label, button.disabled = "Interrupting after the current step…", True
         self.write(logging.WARNING, "Interrupting: work already done is kept")
@@ -510,13 +510,13 @@ class Monitor(App):
         self.query_one("#issues", DataTable).focus()
 
     def action_reload(self) -> None:
-        latest, previous = cli.load_snapshots()
+        latest, previous = core.load_snapshots()
         self.papers = latest["papers"] if latest else []
         if latest is None:
             self.issues = []
-            text = f"No snapshots in {cli.DIR_SNAPSHOTS}: press s to sync"
+            text = f"No snapshots in {core.DIR_SNAPSHOTS}: press s to sync"
         else:
-            extra, self.inspected = documents.snapshot_issues(latest, self.config, cli.DIR_PAPERS)
+            extra, self.inspected = documents.snapshot_issues(latest, self.config, core.DIR_PAPERS)
             self.issues = check(latest, self.config) + extra
             self.issues += green_rows(latest, self.issues)
             summary = report(latest, self.config, previous, extra)
@@ -549,7 +549,7 @@ class Monitor(App):
         return found
 
     def fill_history(self) -> None:
-        self.sent = papers.history(cli.FILE_HISTORY)
+        self.sent = papers.history(core.FILE_HISTORY)
         table = self.query_one("#history", DataTable)
         table.clear()
         for n, e in enumerate(self.sent):
@@ -637,7 +637,7 @@ class Monitor(App):
     def action_comment(self, every: bool = False) -> None:
         if not (numbers := self.scope(every)):
             return
-        records = papers.load(cli.DIR_PAPERS) if cli.DIR_PAPERS.is_dir() else []
+        records = papers.load(core.DIR_PAPERS) if core.DIR_PAPERS.is_dir() else []
         draft, _ = outreach.comments(self.issues, records, set(numbers[:1]), True)
         text = draft[0].text if draft and not every else None
         if not every and not draft:
@@ -662,7 +662,7 @@ class Monitor(App):
                 self.online(
                     f"Posting {len(found)} comments…",
                     lambda client, progress: papers.post_comments(
-                        client, found, progress, cli.FILE_HISTORY
+                        client, found, progress, core.FILE_HISTORY
                     ),
                     lambda failures: self.sent_notice(failures, len(found), "Posted"),
                 )
@@ -691,9 +691,9 @@ class Monitor(App):
         def chosen(template: outreach.Template | None) -> None:
             if template is None:
                 return
-            latest, _ = cli.load_snapshots()
+            latest, _ = core.load_snapshots()
             today = date.fromisoformat(latest["taken_at"][:10]) if latest else date.today()
-            records = papers.load(cli.DIR_PAPERS) if cli.DIR_PAPERS.is_dir() else []
+            records = papers.load(core.DIR_PAPERS) if core.DIR_PAPERS.is_dir() else []
             drafts, unreachable = outreach.compose(
                 template, self.issues, records, self.config, today, spcs, numbers
             )
@@ -708,7 +708,7 @@ class Monitor(App):
                 self.online(
                     f"Sending {len(drafts)} messages ({template.name})…",
                     lambda client, progress: papers.deliver(
-                        client, drafts, progress, cli.FILE_HISTORY
+                        client, drafts, progress, core.FILE_HISTORY
                     ),
                     lambda failures: self.sent_notice(failures, len(drafts)),
                 )
@@ -760,7 +760,7 @@ class Monitor(App):
     def show_details(self, number: int) -> None:
         mine = [i for i in self.issues if i.number == number and i.severity != GREEN]
         try:
-            (record,) = papers.load(cli.DIR_PAPERS, [number])
+            (record,) = papers.load(core.DIR_PAPERS, [number])
         except FileNotFoundError:
             record = None
         inspected = number in self.inspected
@@ -812,16 +812,16 @@ class Monitor(App):
         offline: bool,
     ) -> None:
         def progress(count: int, total: int) -> None:
-            if cli.INTERRUPT.is_set():
-                raise cli.Interrupted
+            if core.INTERRUPT.is_set():
+                raise core.Interrupted
             self.call_from_thread(busy.progress, count, total)
 
-        cli.INTERRUPT.clear()
+        core.INTERRUPT.clear()
         handler, level = DialogLog(self, busy), logger.level
         logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)  # per-paper steps go to the dialog, not the terminal
         try:
-            client = None if offline else cli.resume(self.config)
+            client = None if offline else core.resume(self.config)
             if client is None and not offline:
                 env = (os.environ.get("OPENREVIEW_USERNAME"), os.environ.get("OPENREVIEW_PASSWORD"))
                 credentials = credentials or (env if all(env) else None)
@@ -829,9 +829,9 @@ class Monitor(App):
                     self.call_from_thread(busy.dismiss)
                     self.call_from_thread(self.ask_login, label, job, done)
                     return
-                client = cli.login(self.config, *credentials)
+                client = core.login(self.config, *credentials)
             result = job(client, progress)
-        except cli.Interrupted:
+        except core.Interrupted:
             self.call_from_thread(busy.dismiss)
             self.call_from_thread(self.action_reload)  # show what was done before stopping
             message = f"{label.rstrip('…')} interrupted: completed steps are kept"
@@ -861,7 +861,7 @@ class Monitor(App):
 
         self.online(
             "Syncing with OpenReview…",
-            lambda client, progress: cli.sync(self.config, client, progress),
+            lambda client, progress: core.sync(self.config, client, progress),
             done,
         )
 
@@ -871,11 +871,11 @@ class Monitor(App):
         field = self.config[key]
         if not every:  # one paper: show it, downloading first only if needed
             try:
-                (record,) = papers.load(cli.DIR_PAPERS, numbers)
+                (record,) = papers.load(core.DIR_PAPERS, numbers)
             except FileNotFoundError:
                 self.notify(f"#{numbers[0]} is not cached: press s to sync", severity="error")
                 return
-            path = papers.attachment(record, field, cli.DIR_PAPERS)
+            path = papers.attachment(record, field, core.DIR_PAPERS)
             if path is None:
                 self.notify(f"#{numbers[0]} has no {field}")
             elif path.is_file():
@@ -883,17 +883,17 @@ class Monitor(App):
             else:
                 self.online(
                     f"Downloading {field} of #{numbers[0]}…",
-                    lambda client, _: papers.download(client, record, field, cli.DIR_PAPERS),
+                    lambda client, _: papers.download(client, record, field, core.DIR_PAPERS),
                     lambda path: self.push_screen(Attachment(path)),
                 )
             return
 
         def job(client: Any, progress: Callable[[int, int], None]) -> tuple[int, list[str]]:
-            records, found, failures = papers.load(cli.DIR_PAPERS, numbers), 0, []
+            records, found, failures = papers.load(core.DIR_PAPERS, numbers), 0, []
             for count, record in enumerate(records):
                 progress(count, len(records))
                 try:  # after the retries, one failure must not stop the other downloads
-                    path = papers.download(client, record, field, cli.DIR_PAPERS)
+                    path = papers.download(client, record, field, core.DIR_PAPERS)
                     found += path is not None
                     logger.debug("#%s: %s", record["number"], path.name if path else f"no {field}")
                 except Exception as e:
@@ -915,7 +915,7 @@ class Monitor(App):
         if not (numbers := self.scope(every)):
             return
         try:
-            records = papers.load(cli.DIR_PAPERS, numbers)
+            records = papers.load(core.DIR_PAPERS, numbers)
         except FileNotFoundError as e:
             self.notify(f"Not cached: {e.filename}. Press s to sync", severity="error")
             return
@@ -926,7 +926,7 @@ class Monitor(App):
                 progress(count, len(records))
                 try:
                     found = documents.inspect_paper(
-                        record, self.config, cli.DIR_PAPERS, lambda: client
+                        record, self.config, core.DIR_PAPERS, lambda: client
                     )
                     logger.debug("#%s: %d document issues", record["number"], len(found))
                 except (OSError, subprocess.CalledProcessError) as e:
@@ -942,7 +942,7 @@ class Monitor(App):
             if not every and not failures:
                 self.show_details(numbers[0])
 
-        offline = all(documents.downloaded(r, self.config, cli.DIR_PAPERS) for r in records)
+        offline = all(documents.downloaded(r, self.config, core.DIR_PAPERS) for r in records)
         label = f"Inspecting {len(records)} papers…" if every else f"Inspecting #{numbers[0]}…"
         self.online(label, job, done, offline=offline)
 
@@ -954,7 +954,7 @@ class Monitor(App):
             if not form:
                 return
             try:
-                messages = papers.plan(papers.load(cli.DIR_PAPERS, numbers), form["role"])
+                messages = papers.plan(papers.load(core.DIR_PAPERS, numbers), form["role"])
             except FileNotFoundError as e:
                 self.notify(f"Not cached: {e.filename}. Press s to sync", severity="error")
                 return
@@ -969,7 +969,7 @@ class Monitor(App):
                 self.online(
                     f"Sending {len(messages)} messages…",
                     lambda client, progress: papers.send(
-                        client, messages, form["subject"], form["body"], progress, cli.FILE_HISTORY
+                        client, messages, form["subject"], form["body"], progress, core.FILE_HISTORY
                     ),
                     lambda failures: self.sent_notice(failures, len(messages)),
                 )

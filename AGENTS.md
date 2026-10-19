@@ -9,7 +9,8 @@ check, command or key changes, update the README's tables too.
 ```
 aamas_review_monitor/     the package, at the repo root (renamed by rename-template.sh)
   __init__.py     `__version__` and the package logger (logging is configured only in `__main__.py`)
-  __main__.py     CLI, login (cached token), data dir and snapshot storage
+  __main__.py     CLI: argument parsing and printing only
+  core.py         shared by CLI and TUI: data dir, config, login (cached token), sync, snapshots
   collector.py    read-only OpenReview v2 -> per-paper records -> snapshot (process metadata only)
   checks.py       deterministic per-paper checks, SPC-grouped report, CSV
   papers.py       record cache, metadata/reviews text, attachment downloads, emails

@@ -15,11 +15,11 @@ def no_openreview(monkeypatch):
 @pytest.fixture(autouse=True)
 def private_data(tmp_path_factory, monkeypatch):
     """Tests never touch the real data folder (snapshots, papers, token, history)."""
-    from aamas_review_monitor import __main__ as cli
+    from aamas_review_monitor import core
 
     data = tmp_path_factory.mktemp("data")
-    monkeypatch.setattr(cli, "DIR_DATA", data)
-    monkeypatch.setattr(cli, "DIR_SNAPSHOTS", data / "snapshots")
-    monkeypatch.setattr(cli, "DIR_PAPERS", data / "papers")
-    monkeypatch.setattr(cli, "FILE_TOKEN", data / "token")
-    monkeypatch.setattr(cli, "FILE_HISTORY", data / "history.jsonl")
+    monkeypatch.setattr(core, "DIR_DATA", data)
+    monkeypatch.setattr(core, "DIR_SNAPSHOTS", data / "snapshots")
+    monkeypatch.setattr(core, "DIR_PAPERS", data / "papers")
+    monkeypatch.setattr(core, "FILE_TOKEN", data / "token")
+    monkeypatch.setattr(core, "FILE_HISTORY", data / "history.jsonl")

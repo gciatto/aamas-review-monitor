@@ -4,6 +4,7 @@ import subprocess
 import sys
 
 from aamas_review_monitor import __main__ as cli
+from aamas_review_monitor import core
 from aamas_review_monitor import __version__
 from tests.test_checks import CONFIG, paper
 
@@ -13,8 +14,8 @@ def test_version_comes_from_package_metadata():
 
 
 def test_report_compares_latest_two_snapshots(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(cli, "DIR_DATA", tmp_path)
-    monkeypatch.setattr(cli, "DIR_SNAPSHOTS", tmp_path / "s")
+    monkeypatch.setattr(core, "DIR_DATA", tmp_path)
+    monkeypatch.setattr(core, "DIR_SNAPSHOTS", tmp_path / "s")
     (tmp_path / "s").mkdir()
     (tmp_path / "config.json").write_text(json.dumps(CONFIG))
     old = {"taken_at": "2026-11-10T08:00:00", "papers": [paper(1, spcs=[]), paper(2, reviews=0)]}
@@ -49,14 +50,14 @@ def test_inspect_prints_document_issues_and_show_includes_them(tmp_path, monkeyp
     from aamas_review_monitor.collector import fetch, snapshot
     from tests.test_collector import FakeClient
 
-    config = cli.load_config()
-    monkeypatch.setattr(cli, "DIR_PAPERS", tmp_path / "papers")
-    monkeypatch.setattr(cli, "DIR_SNAPSHOTS", tmp_path / "snapshots")
-    monkeypatch.setattr(cli, "login", lambda config: FakeClient())
+    config = core.load_config()
+    monkeypatch.setattr(core, "DIR_PAPERS", tmp_path / "papers")
+    monkeypatch.setattr(core, "DIR_SNAPSHOTS", tmp_path / "snapshots")
+    monkeypatch.setattr(core, "login", lambda config: FakeClient())
     records = fetch(FakeClient(), config)
-    papers.save(records, cli.DIR_PAPERS, [])
-    cli.DIR_SNAPSHOTS.mkdir()
-    (cli.DIR_SNAPSHOTS / "a.json").write_text(json.dumps(snapshot(records, config)))
+    papers.save(records, core.DIR_PAPERS, [])
+    core.DIR_SNAPSHOTS.mkdir()
+    (core.DIR_SNAPSHOTS / "a.json").write_text(json.dumps(snapshot(records, config)))
     monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "A Paper\nAnonymous Author(s)\f")
     monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {"Page size": "595 x 842 pts"})
     monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
@@ -81,7 +82,7 @@ def test_retry_policy_comes_from_config_and_command_line(tmp_path, monkeypatch, 
     from aamas_review_monitor.collector import fetch
     from tests.test_collector import FakeClient
 
-    client = cli.tune(SimpleNamespace(session=requests.Session()), cli.load_config())
+    client = core.tune(SimpleNamespace(session=requests.Session()), core.load_config())
     retry = client.session.get_adapter("https://api2.openreview.net").max_retries
     assert (retry.total, retry.connect, retry.backoff_factor, retry.backoff_max) == (8, 8, 1, 120)
     assert 429 in retry.status_forcelist and "POST" not in retry.allowed_methods
@@ -91,9 +92,9 @@ def test_retry_policy_comes_from_config_and_command_line(tmp_path, monkeypatch, 
             raise ConnectionError("still down after the retries")
 
     seen: list[dict] = []
-    monkeypatch.setattr(cli, "login", lambda config: seen.append(config) or Flaky())
-    monkeypatch.setattr(cli, "DIR_PAPERS", tmp_path)
-    papers.save(fetch(FakeClient(), cli.load_config()), tmp_path, [])
+    monkeypatch.setattr(core, "login", lambda config: seen.append(config) or Flaky())
+    monkeypatch.setattr(core, "DIR_PAPERS", tmp_path)
+    papers.save(fetch(FakeClient(), core.load_config()), tmp_path, [])
     cli.main(["--retries", "2", "--backoff", "0.5", "download", "7"])
     assert (seen[0]["retries"], seen[0]["backoff_seconds"], seen[0]["backoff_max_seconds"]) == (
         2,
@@ -109,15 +110,15 @@ def cached_cli(tmp_path, monkeypatch):
     from aamas_review_monitor.collector import fetch, snapshot
     from tests.test_collector import FakeClient
 
-    config, client = cli.load_config(), FakeClient()
-    monkeypatch.setattr(cli, "DIR_PAPERS", tmp_path / "papers")
-    monkeypatch.setattr(cli, "DIR_SNAPSHOTS", tmp_path / "snapshots")
-    monkeypatch.setattr(cli, "login", lambda config: client)
+    config, client = core.load_config(), FakeClient()
+    monkeypatch.setattr(core, "DIR_PAPERS", tmp_path / "papers")
+    monkeypatch.setattr(core, "DIR_SNAPSHOTS", tmp_path / "snapshots")
+    monkeypatch.setattr(core, "login", lambda config: client)
     records = fetch(client, config)
-    papers.save(records, cli.DIR_PAPERS, [])
-    cli.DIR_SNAPSHOTS.mkdir()
+    papers.save(records, core.DIR_PAPERS, [])
+    core.DIR_SNAPSHOTS.mkdir()
     snap = snapshot(records, config) | {"taken_at": "2026-10-19T08:00:00"}
-    (cli.DIR_SNAPSHOTS / "a.json").write_text(json.dumps(snap))
+    (core.DIR_SNAPSHOTS / "a.json").write_text(json.dumps(snap))
     return client
 
 
@@ -153,7 +154,7 @@ def test_browse_and_attachment(tmp_path, monkeypatch, capsys):
     assert out[1:] == ["left column", "right column"]
     assert client.downloads == [("pdf", "abc")] and len(launched) == 2
 
-    record = cli.DIR_PAPERS / "7" / "record.json"
+    record = core.DIR_PAPERS / "7" / "record.json"
     data = json.loads(record.read_text())
     data["content"]["supplementary_material"] = {"value": "/attachment/s1.zip"}
     record.write_text(json.dumps(data))
@@ -170,7 +171,7 @@ def test_inspect_downloads_missing_pdf_and_supplementary(tmp_path, monkeypatch, 
     from aamas_review_monitor import documents
 
     client = cached_cli(tmp_path, monkeypatch)
-    record = cli.DIR_PAPERS / "7" / "record.json"
+    record = core.DIR_PAPERS / "7" / "record.json"
     data = json.loads(record.read_text())
     data["content"]["supplementary_material"] = {"value": "/attachment/s1.zip"}
     record.write_text(json.dumps(data))
@@ -198,19 +199,19 @@ def test_retries_are_logged_and_their_waits_interruptible(caplog):
 
     import pytest
 
-    retry = cli.LoggedRetry(total=3, backoff_factor=30, status_forcelist=[429])
+    retry = core.LoggedRetry(total=3, backoff_factor=30, status_forcelist=[429])
     retry = retry.increment("GET", "/notes", error=ConnectionError("reset"))
     retry = retry.increment("GET", "/notes", error=ConnectionError("reset"))
     assert "ConnectionError on GET /notes: retry 2 of 3" in caplog.text
-    cli.INTERRUPT.set()
+    core.INTERRUPT.set()
     try:
         start = time.monotonic()
-        with pytest.raises(cli.Interrupted):
+        with pytest.raises(core.Interrupted):
             retry.sleep()  # would wait 60 s (30 s, doubled once) without the interruption
         assert time.monotonic() - start < 5
         assert "waiting 60 s before retrying" in caplog.text
     finally:
-        cli.INTERRUPT.clear()
+        core.INTERRUPT.clear()
 
 
 def test_outreach_previews_then_sends_only_after_send(tmp_path, monkeypatch, capsys):
@@ -230,7 +231,7 @@ def test_comment_posts_issues_and_history_records_emails_and_comments(
     tmp_path, monkeypatch, capsys
 ):
     client = cached_cli(tmp_path, monkeypatch)
-    monkeypatch.setattr(cli, "FILE_HISTORY", tmp_path / "history.jsonl")
+    monkeypatch.setattr(core, "FILE_HISTORY", tmp_path / "history.jsonl")
     monkeypatch.setattr("builtins.input", lambda prompt="": "no")
     cli.main(["comment", "7"])
     out = capsys.readouterr().out
@@ -265,5 +266,5 @@ def test_retry_policy_covers_the_edit_endpoints_too():
 
     url = "https://api2.openreview.net/notes/edits"
     client = SimpleNamespace(session=requests.Session(), note_edits_url=url)
-    cli.tune(client, cli.load_config())
+    core.tune(client, core.load_config())
     assert "POST" not in client.session.get_adapter(url).max_retries.allowed_methods
