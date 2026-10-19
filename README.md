@@ -24,11 +24,15 @@ Papers where everything is on track stay out of your way.
 - **Reminders that write themselves.** Each SPC can get one digest of every open issue on their
   papers. Ready-made templates cover late SPCs, late reviewers and approaching deadlines. Every
   message is previewed before anything is sent, and all of it goes through OpenReview's own
-  messaging.
+  messaging. A paper's issues can also be posted as a comment on its forum.
+- **A record of every nudge.** Every email and comment the app sends is kept in a history, and
+  shown on the paper and the SPC it concerns, so nobody gets the same reminder twice by accident.
 
 ![Paper details: metadata, every check, reviews](docs/tui-details.svg)
 
 ![The SPCs tab: each SPC's papers and open issues, ready for a digest](docs/tui-spcs.svg)
+
+![The History tab: every email and comment sent from the app](docs/tui-history.svg)
 
 ## Automatic, deterministic, and on your machine
 
@@ -154,6 +158,8 @@ Paper lists (`N ...`) default to all your papers.
 | `email ROLE [N ...] --subject S --body FILE` | Email `reviewers`, `late-reviewers` or `spcs`, one message per paper, after you type `SEND` |
 | `templates` | List the email templates |
 | `outreach TEMPLATE [N ...] [--spc ID ...]` | Compose templated emails from the current issues, preview every draft, send after you type `SEND` |
+| `comment [N ...] [--spcs] [--text FILE]` | Post each paper's open issues (or the file's text) as a comment on its forum, readable by PCs and SACs (and SPCs with `--spcs`), after you type `SEND` |
+| `history [N ...] [--full]` | Emails and comments sent from the app, newest first, optionally only about some papers |
 
 Options that come before the command apply to every OpenReview read:
 `--retries`, `--backoff` and `--backoff-max`. They set exponential backoff with jitter on rate
@@ -163,11 +169,13 @@ goes out twice.
 
 ## Terminal UI
 
-`tui` has two tabs (`t` switches between them):
+`tui` has three tabs (`t` switches between them):
 
 - **Papers:** every paper, with one row per issue and a 🟢 row for each paper without issues.
 - **SPCs:** each SPC with their papers, open issues and 🔴/🟡 counts, worst first, and the selected
-  SPC's issues paper by paper.
+  SPC's issues paper by paper, plus what was sent to them.
+- **History:** every email and comment sent from the app, newest first, with the full text of
+  the selected one.
 
 Every action is also in the command palette (`ctrl+p`). In each pair below, the lowercase key
 acts on the selected paper (or SPC) and the uppercase one on all of those shown.
@@ -182,8 +190,9 @@ acts on the selected paper (or SPC) and the uppercase one on all of those shown.
 | `u` / `U` | Supplementary material: the same dialog, with the zip's file tree |
 | `i` / `I` | Run the document checks, downloading what is missing |
 | `m` / `M` | Templated email, for the selected SPC or paper / for everyone in the tab, previewed in full before you type `SEND` |
+| `c` / `C` | Comment on the paper's forum with its issues (editable for one paper; SPCs as readers optional), previewed before you type `SEND` |
 | `e` / `E` | Free-form email to reviewers, late reviewers or SPCs, with a `SEND` confirmation |
-| `t` | Switch between the Papers and SPCs tabs |
+| `t` | Switch between the Papers, SPCs and History tabs |
 | `s` | Sync with OpenReview |
 | `l` | Legend of all checks |
 | `r` / `q` | Reload / quit |
@@ -231,6 +240,20 @@ SPC's papers reaches them. Reviewers get one message per paper. Templates are pl
 
 Edit them, or add your own next to them.
 
+### Comments and history
+
+`comment` (or `c`/`C`) posts an Official_Comment on each paper's forum, signed as its Senior Area
+Chairs. Program Chairs and SACs can always read it, and you choose whether its SPCs can too
+(reviewers can't, at this stage). The text comes from
+[`resources/comment.txt`](aamas_review_monitor/resources/comment.txt) with the paper's open issues,
+and for a single paper you can edit it before posting.
+
+Every email and comment the app sends, or fails to send, is appended to
+`~/.aamas-review-monitor/history.jsonl`. It records when, through which paper, about which
+papers, to whom, the subject and body, and the template used. `history` and the History tab show
+it, and paper details and the SPCs tab show the part about each paper or SPC. Comments are
+never retried automatically, so a comment can't be posted twice.
+
 ## Configuration
 
 Defaults are in
@@ -245,7 +268,7 @@ keep the data folder elsewhere.
 - Snapshots keep only process metadata: assignments, ratings, word counts, comment dates, and
   MinHash fingerprints of reviews (comparable, but the text can't be recovered from them).
 - Paper content, reviews, PDFs, extracted text and document check results are cached in
-  `~/.aamas-review-monitor/papers/`.
+  `~/.aamas-review-monitor/papers/`, and what the app sent in `history.jsonl` next to it.
 - **Run it in your own terminal, not through an AI coding assistant.** Its output and its cache
   hold submissions, reviews and the identities of reviewers and SPCs.
 - The project is developed and tested only on synthetic data. The screenshots above are
