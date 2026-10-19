@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import subprocess
 import sys
 
@@ -148,7 +149,8 @@ def test_browse_and_attachment(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(papers, "pdf_text", lambda pdf: "left column\nright column")
     cli.main(["attachment", "7", "--contents", "--open", "--reveal"])
     out = capsys.readouterr().out.splitlines()
-    assert out[0].endswith("papers/7/pdf_v1.pdf") and out[1:] == ["left column", "right column"]
+    assert Path(out[0]).parts[-3:] == ("papers", "7", "pdf_v1.pdf")
+    assert out[1:] == ["left column", "right column"]
     assert client.downloads == [("pdf", "abc")] and len(launched) == 2
 
     record = cli.DIR_PAPERS / "7" / "record.json"

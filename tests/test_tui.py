@@ -48,8 +48,11 @@ def test_tui_lists_and_filters_issues(tmp_path, monkeypatch):
 
 
 async def settle(app, pilot):
-    """Waits for background jobs and the screens they open."""
-    await app.workers.wait_for_complete()
+    """Waits for background jobs and the screens they open. Repeated, because a job may start
+    only from a callback (e.g. a dismissed dialog's) after the first wait has returned."""
+    for _ in range(5):
+        await pilot.pause()
+        await app.workers.wait_for_complete()
     await pilot.pause()
 
 
