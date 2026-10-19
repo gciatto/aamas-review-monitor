@@ -175,8 +175,13 @@ the selected paper and the uppercase one on all papers shown.
 | `l` | Legend of all checks |
 | `r` / `q` | Reload / quit |
 
-Syncing, downloading, inspecting and sending run in the background behind a progress bar, and
-the rest of the interface waits meanwhile. An expired session brings up a sign-in dialog.
+Syncing, downloading, inspecting and sending run in the background behind a progress dialog,
+and the rest of the interface waits meanwhile. The dialog keeps a live log of each step, of
+every retry with the time it waits (and whether OpenReview asked for it), and of anything that
+failed. Esc, or its Interrupt button, stops the job at the next paper, or right away during a
+retry wait. Work already done stays: downloads and inspections are kept, while an interrupted
+sync saves no snapshot. An expired session brings up a sign-in dialog. In the command line,
+retries and waits are logged to the terminal, and `ctrl+c` interrupts.
 
 ## Email
 
