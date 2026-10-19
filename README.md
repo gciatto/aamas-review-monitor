@@ -21,10 +21,14 @@ Papers where everything is on track stay out of your way.
   OpenReview metadata that doesn't match the PDF.
 - **Everything at hand.** A paper's metadata, checks and reviews (reviewers kept anonymous), its
   PDF text and its supplementary file tree, without leaving the terminal.
-- **Reminders without the clicking.** Email a paper's reviewers, only its late reviewers, or its
-  SPCs, for one paper or many at once, through OpenReview's own messaging.
+- **Reminders that write themselves.** Each SPC can get one digest of every open issue on their
+  papers. Ready-made templates cover late SPCs, late reviewers and approaching deadlines. Every
+  message is previewed before anything is sent, and all of it goes through OpenReview's own
+  messaging.
 
 ![Paper details: metadata, every check, reviews](docs/tui-details.svg)
+
+![The SPCs tab: each SPC's papers and open issues, ready for a digest](docs/tui-spcs.svg)
 
 ## Automatic, deterministic, and on your machine
 
@@ -148,6 +152,8 @@ Paper lists (`N ...`) default to all your papers.
 | `attachment N [--supplementary] [--contents] [--open] [--reveal]` | A paper's PDF or zip, downloaded if needed: its path, its text or file list, open it, or show it in Finder/Explorer |
 | `inspect [N ...]` | Run the document checks, downloading what is missing |
 | `email ROLE [N ...] --subject S --body FILE` | Email `reviewers`, `late-reviewers` or `spcs`, one message per paper, after you type `SEND` |
+| `templates` | List the email templates |
+| `outreach TEMPLATE [N ...] [--spc ID ...]` | Compose templated emails from the current issues, preview every draft, send after you type `SEND` |
 
 Options that come before the command apply to every OpenReview read:
 `--retries`, `--backoff` and `--backoff-max`. They set exponential backoff with jitter on rate
@@ -157,9 +163,14 @@ goes out twice.
 
 ## Terminal UI
 
-`tui` shows every paper: one row per issue, and a 🟢 row for each paper without issues. Every
-action is also in the command palette (`ctrl+p`). In each pair below, the lowercase key acts on
-the selected paper and the uppercase one on all papers shown.
+`tui` has two tabs (`t` switches between them):
+
+- **Papers:** every paper, with one row per issue and a 🟢 row for each paper without issues.
+- **SPCs:** each SPC with their papers, open issues and 🔴/🟡 counts, worst first, and the selected
+  SPC's issues paper by paper.
+
+Every action is also in the command palette (`ctrl+p`). In each pair below, the lowercase key
+acts on the selected paper (or SPC) and the uppercase one on all of those shown.
 
 | Key | Action |
 |---|---|
@@ -170,7 +181,9 @@ the selected paper and the uppercase one on all papers shown.
 | `p` / `P` | PDF: a dialog with its path and text, or download all; in the dialog, `c` shows it in Finder/Explorer, `v` opens it, `y` copies the path |
 | `u` / `U` | Supplementary material: the same dialog, with the zip's file tree |
 | `i` / `I` | Run the document checks, downloading what is missing |
-| `e` / `E` | Email reviewers, late reviewers or SPCs, with a `SEND` confirmation |
+| `m` / `M` | Templated email, for the selected SPC or paper / for everyone in the tab, previewed in full before you type `SEND` |
+| `e` / `E` | Free-form email to reviewers, late reviewers or SPCs, with a `SEND` confirmation |
+| `t` | Switch between the Papers and SPCs tabs |
 | `s` | Sync with OpenReview |
 | `l` | Legend of all checks |
 | `r` / `q` | Reload / quit |
@@ -190,6 +203,33 @@ paper's Senior Area Chairs. Messages can go to its reviewers, to its late review
 no review yet), or to its SPCs. `{{fullname}}` in the body becomes each recipient's name. Before
 anything is sent, you see every recipient group and the full message, and you confirm by typing
 `SEND`. OpenReview doesn't let SACs email authors.
+
+### Templates
+
+`outreach` (or `m`/`M`) composes one message per recipient from the current issues. Shipped
+templates:
+
+| Template | To | About |
+|---|---|---|
+| `spc-digest` | each SPC | every open issue on the papers they supervise |
+| `spc-late` | each SPC with pending SPC work | meta-reviews, recommendations, stalled discussions, unacknowledged rebuttals, silence |
+| `spc-deadline` | each SPC still owing meta-reviews | the meta-review deadline |
+| `reviewers-late` | each paper's late reviewers | their missing or behind-schedule review |
+| `reviewers-deadline` | each paper's late reviewers | the review deadline |
+
+SPCs get one message each, listing all their papers, sent through the message invitation of one
+of those papers: OpenReview lets SACs write only through a paper's invitation, and any of an
+SPC's papers reaches them. Reviewers get one message per paper. Templates are plain files in
+[`aamas_review_monitor/resources/templates/`](aamas_review_monitor/resources/templates/):
+
+- **Header:** `Name:`, `Description:`, `Audience:` (`spcs` or `late-reviewers`), `Codes:` (the
+  issue codes it covers, or `*` for all) and `Subject:`.
+- **Body:** after a `---` line. Placeholders are `$issues`, `$papers`, `$count`, and per paper
+  `$paper`/`$url`, plus `$deadline_reviews`, `$deadline_meta_reviews`,
+  `$deadline_acknowledgements` and the `$days_...` left for each. OpenReview fills in
+  `{{fullname}}`.
+
+Edit them, or add your own next to them.
 
 ## Configuration
 
