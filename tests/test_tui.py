@@ -47,25 +47,21 @@ def test_tui_lists_and_filters_issues(tmp_path, monkeypatch):
     asyncio.run(scenario())
 
 
-async def settle(app, pilot, timeout=15):
-    """Waits until the app has been idle (no job running, no progress dialog) for a while: a job
-    may start only from a callback, e.g. a dismissed dialog's, some ticks after the action."""
-    idle, waited = 0, 0.0
-    while idle < 10 and waited < timeout:
-        await pilot.pause(0.05)
-        await app.workers.wait_for_complete()
-        busy = isinstance(app.screen, Busy) or any(w.is_running for w in app.workers)
-        idle, waited = (0 if busy else idle + 1), waited + 0.05
-    await pilot.pause()
-
-
 async def until(pilot, condition, timeout=15):
     """Waits for `condition()` to hold, e.g. for a background job's effect."""
     waited = 0.0
     while not condition() and waited < timeout:
-        await pilot.pause(0.05)
-        waited += 0.05
+        await pilot.pause(0.02)
+        waited += 0.02
     assert condition(), "timed out"
+
+
+async def done(app, pilot, effect):
+    """Waits for the job started by the last key or click to end with its visible `effect`.
+    Waiting for an effect, not for a quiet spell, is what makes this deterministic: a job may
+    start some ticks after the key, from a dismissed dialog's callback."""
+    jobs = lambda: isinstance(app.screen, Busy) or any(w.is_running for w in app.workers)  # noqa: E731
+    await until(pilot, lambda: effect() and not jobs())
 
 
 def cached_monitor(tmp_path, monkeypatch):
@@ -111,8 +107,7 @@ def test_tui_downloads_once_then_shows_the_pdf(tmp_path, monkeypatch):
     async def scenario():
         async with app.run_test() as pilot:
             await pilot.press("p")
-            await settle(app, pilot)
-            assert isinstance(app.screen, Attachment)
+            await done(app, pilot, lambda: isinstance(app.screen, Attachment))
             path = str(app.screen.path)
             assert app.screen.path == tmp_path / "papers" / "7" / "pdf_v1.pdf"
             assert "right column" in str(app.screen.query_one("#text", Static).render())
@@ -145,13 +140,15 @@ def test_tui_shows_the_tree_of_a_zip(tmp_path, monkeypatch):
 
 
 def test_tui_email_sends_only_after_typing_send(tmp_path, monkeypatch):
-    for answer, sent in [("no", 0), ("SEND", 1)]:
-        app, client, _ = cached_monitor(tmp_path / answer, monkeypatch)
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    notes: list[str] = []
+    monkeypatch.setattr(app, "notify", lambda message, **kw: notes.append(message))
 
-        async def scenario():
-            async with app.run_test() as pilot:
-                await pilot.press("e")
-                await pilot.press("escape")  # cancelling the form sends nothing
+    async def scenario():
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            await pilot.press("escape")  # cancelling the form sends nothing
+            for answer in ("no", "SEND"):
                 await pilot.press("e")
                 app.screen.query_one("#subject").value = "Hi"
                 app.screen.query_one("#body").load_text("Dear {{fullname}}")
@@ -160,14 +157,12 @@ def test_tui_email_sends_only_after_typing_send(tmp_path, monkeypatch):
                 assert "=== To late-reviewers of #7 (2), via #7 ===" in app.screen.summary
                 app.screen.query_one("#confirm").value = answer
                 await pilot.click("#confirm-send")
-                if sent:
-                    await until(pilot, lambda: len(client.messages) == sent)
-                await settle(app, pilot)
+                await done(app, pilot, lambda: bool(notes) and not isinstance(app.screen, Confirm))
+                assert len(client.messages) == (answer == "SEND"), notes
 
-        asyncio.run(scenario())
-        assert len(client.messages) == sent
-        if sent:
-            assert client.messages[0][0] == ("Hi", ["~Rev_B1", "~Rev_C1"], "Dear {{fullname}}")
+    asyncio.run(scenario())
+    assert notes == ["Nothing sent", "Sent 1 of 1"]
+    assert client.messages[0][0] == ("Hi", ["~Rev_B1", "~Rev_C1"], "Dear {{fullname}}")
 
 
 def test_tui_signs_in_and_syncs_in_background(tmp_path, monkeypatch):
@@ -183,12 +178,11 @@ def test_tui_signs_in_and_syncs_in_background(tmp_path, monkeypatch):
         async with app.run_test() as pilot:
             assert app.query_one("#issues").row_count == 0
             await pilot.press("s")
-            await settle(app, pilot)
-            assert isinstance(app.screen, Login)
+            await done(app, pilot, lambda: isinstance(app.screen, Login))
             app.screen.query_one("#username").value = "sac@example.org"
             app.screen.query_one("#password").value = "secret"
             await pilot.click("#signin")
-            await settle(app, pilot)
+            await done(app, pilot, lambda: app.query_one("#issues").row_count > 0)
             assert signed == [("sac@example.org", "secret")]
             assert not isinstance(app.screen, (Login, Busy))
             assert app.query_one("#issues").row_count > 0  # reloaded from the new snapshot
@@ -207,7 +201,7 @@ def test_tui_inspects_the_pdf_and_shows_the_results(tmp_path, monkeypatch):
     async def scenario():
         async with app.run_test() as pilot:
             await pilot.press("i")
-            await settle(app, pilot)
+            await done(app, pilot, lambda: isinstance(app.screen, Paper))
             assert client.downloads == [("pdf", "abc")]  # fetched first, then inspected
             assert isinstance(app.screen, Paper)
             text = app.screen.text.plain
@@ -235,8 +229,7 @@ def test_tui_bulk_download_survives_a_failure(tmp_path, monkeypatch):
         async with app.run_test() as pilot:
             app.marked = {7, 8}  # #8 is cached but not in the snapshot, so not shown
             await pilot.press("p")
-            await settle(app, pilot)
-            assert not isinstance(app.screen, Busy)
+            await done(app, pilot, lambda: bool(notes))
 
     asyncio.run(scenario())
     assert notes[-1] == "#7: rate limited\n#8: rate limited\n0 of 2 papers have pdf: cached"
@@ -268,17 +261,20 @@ def test_tui_bulk_inspect_downloads_what_is_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "A Paper\nAnonymous Author(s)\f")
     monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {})
     monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
+    notes: list[str] = []
+    monkeypatch.setattr(app, "notify", lambda message, **kw: notes.append(message))
 
     async def scenario():
         async with app.run_test() as pilot:
             app.marked = {7, 8}
             await pilot.press("i")
-            await settle(app, pilot)
+            await done(app, pilot, lambda: len(notes) == 1)
+            assert notes == ["Inspected 2 of 2 papers"]
             assert client.downloads == [("pdf", "abc")] * 2
             assert 7 in app.inspected and any(i.code == "template" for i in app.issues)
             monkeypatch.setattr(core, "resume", lambda config: None)  # cached: no login needed
             await pilot.press("i")
-            await settle(app, pilot)
+            await done(app, pilot, lambda: len(notes) == 2)
             assert client.downloads == [("pdf", "abc")] * 2 and not isinstance(app.screen, Login)
 
     asyncio.run(scenario())
@@ -312,8 +308,7 @@ def test_bulk_job_logs_its_steps_and_can_be_interrupted(tmp_path, monkeypatch):
             await asyncio.to_thread(started.wait, 5)
             await pilot.press("escape")  # interrupt while #7 is downloading
             release.set()
-            await settle(app, pilot)
-            assert not isinstance(app.screen, Busy)
+            await done(app, pilot, lambda: any("interrupted" in n for n in notes))
 
     asyncio.run(scenario())
     assert client.downloads == ["abc"]  # stopped before the second paper
@@ -347,8 +342,7 @@ def test_spc_tab_lists_issues_per_spc_and_sends_a_digest(tmp_path, monkeypatch):
             assert "ratings [3, 6]" in app.screen.summary
             app.screen.query_one("#confirm").value = "SEND"
             await pilot.click("#confirm-send")
-            await until(pilot, lambda: len(client.messages) == 1)
-            await settle(app, pilot)
+            await done(app, pilot, lambda: bool(app.sent))
             panel = str(app.query_one("#spc-issues").render())
             assert "Sent to them from this app" in panel and "email to ~Spc_One1 via #7" in panel
 
@@ -397,8 +391,7 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             assert app.screen.summary.startswith("1 comments, readable by PCs, SACs\n")
             app.screen.query_one("#confirm").value = "SEND"
             await pilot.click("#confirm-send")
-            await until(pilot, lambda: len(client.comments) == 1)
-            await settle(app, pilot)
+            await done(app, pilot, lambda: bool(app.sent))
 
             ((_, _, note),) = client.comments
             assert note.content["comment"]["value"] == "Please check the reviews."

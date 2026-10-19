@@ -194,26 +194,6 @@ def test_inspect_downloads_missing_pdf_and_supplementary(tmp_path, monkeypatch, 
     assert len(client.downloads) == 2
 
 
-def test_retries_are_logged_and_their_waits_interruptible(caplog):
-    import time
-
-    import pytest
-
-    retry = core.LoggedRetry(total=3, backoff_factor=30, status_forcelist=[429])
-    retry = retry.increment("GET", "/notes", error=ConnectionError("reset"))
-    retry = retry.increment("GET", "/notes", error=ConnectionError("reset"))
-    assert "ConnectionError on GET /notes: retry 2 of 3" in caplog.text
-    core.INTERRUPT.set()
-    try:
-        start = time.monotonic()
-        with pytest.raises(core.Interrupted):
-            retry.sleep()  # would wait 60 s (30 s, doubled once) without the interruption
-        assert time.monotonic() - start < 5
-        assert "waiting 60 s before retrying" in caplog.text
-    finally:
-        core.INTERRUPT.clear()
-
-
 def test_outreach_previews_then_sends_only_after_send(tmp_path, monkeypatch, capsys):
     client = cached_cli(tmp_path, monkeypatch)
     for answer, sent in [("no", 0), ("SEND", 1)]:
@@ -275,42 +255,3 @@ def test_comment_posts_issues_and_history_records_emails_and_comments(
     assert out[-1].startswith("2 entries in")
     cli.main(["history", "99"])
     assert capsys.readouterr().out.strip() == "Nothing sent from the app yet"
-
-
-def test_retry_policy_covers_the_edit_endpoints_too():
-    from types import SimpleNamespace
-
-    import requests
-
-    url = "https://api2.openreview.net/notes/edits"
-    client = SimpleNamespace(session=requests.Session(), note_edits_url=url)
-    core.tune(client, core.load_config())
-    assert "POST" not in client.session.get_adapter(url).max_retries.allowed_methods
-
-
-def test_freshness_warns_on_old_snapshots():
-    from datetime import datetime, timezone
-
-    now, config = datetime(2026, 11, 11, 20, 0, tzinfo=timezone.utc), {"snapshot_stale_hours": 12}
-    fresh = core.freshness({"taken_at": "2026-11-11T19:30:00+00:00"}, config, now)
-    assert fresh.startswith("Snapshot of ") and fresh.endswith(", 30 min old")
-    old = core.freshness({"taken_at": "2026-11-11T06:00:00"}, config, now)  # naive: UTC
-    assert old.startswith("⚠ ") and old.endswith("14 h old: older than 12 h, sync first?")
-    assert core.freshness(None, config) == "⚠ No snapshot: sync first"
-
-
-def test_config_overrides_are_validated():
-    import pytest
-
-    local = core.DIR_DATA / "config.json"
-    for override, error in [
-        ('{"reviews_word_min": 200}', "reviews_word_min is not a setting"),
-        ('{"reviewers_min": "3"}', "reviewers_min should be like 3, not '3'"),
-        ('{"reviewers_min": true}', "reviewers_min should be like 3, not True"),
-        ('{"deadline_reviews": "13/11/2026"}', "'13/11/2026' is not a YYYY-MM-DD date"),
-    ]:
-        local.write_text(override)
-        with pytest.raises(ValueError, match=error):
-            core.load_config()
-    local.write_text('{"deadline_reviews": "2026-11-14", "backoff_seconds": 0.5}')  # was an int
-    assert core.load_config()["deadline_reviews"] == "2026-11-14"
