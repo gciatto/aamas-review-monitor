@@ -1,293 +1,225 @@
 # AAMAS Review Monitor
 
-Monitor for an AAMAS 2027 Senior Area Chair: it pulls the review-process state of the papers
-assigned to you from OpenReview and prints an action queue grouped by SPC (Area Chair), with
-each paper GREEN/YELLOW/RED. Colors describe process health, never scientific quality. It also
-shows each paper's metadata and reviews, downloads PDFs, and emails reviewers or SPCs.
+**The review process of a hundred papers, on one screen.**
 
-## Usage
+AAMAS Review Monitor is a command-line and terminal tool for Senior Area Chairs of
+[AAMAS 2027](https://warwick.ac.uk/fac/sci/dcs/aamas2027/). It reads, from OpenReview, the papers
+you supervise, then runs a few dozen checks on how their reviewing is going. Out comes a short,
+prioritised list of what needs you today, grouped by the SPC (Area Chair) who can act on it.
+Papers where everything is on track stay out of your way.
 
-```bash
-uv sync
-uv run aamas_review_monitor sync                 # fetch papers and a snapshot (asks for credentials)
-uv run aamas_review_monitor report [--csv FILE]  # action queue, diff vs previous snapshot
-uv run aamas_review_monitor tui                  # the same, as an interactive table
-uv run aamas_review_monitor legend               # what each check verifies, current thresholds
-uv run aamas_review_monitor show N               # metadata and issues of paper N
-uv run aamas_review_monitor issues N             # issues of paper N
-uv run aamas_review_monitor reviews N [--reveal] # reviews and meta-reviews, reviewers anonymous
-uv run aamas_review_monitor download [N ...] [--supplementary]  # PDFs, or supplementary material
-uv run aamas_review_monitor email ROLE [N ...] --subject S --body FILE
-uv run aamas_review_monitor inspect [N ...]      # document checks of PDFs and supplementary zips
-```
+![The action queue: every paper, one row per issue, worst first](docs/tui-queue.svg)
 
-Reads from OpenReview (sync, downloads) retry rate limits (429), server errors (5xx) and
-connection failures with exponential backoff and jitter, honouring `Retry-After`: waits of
-`backoff_seconds` doubling up to `backoff_max_seconds`, at most `retries` times (config
-defaults 1 s, 120 s, 8). Override them per run, before the command:
-`uv run aamas_review_monitor --retries 12 --backoff 2 --backoff-max 300 download`. Emails are
-never retried, so none goes out twice. A bulk download that still fails on a paper moves on and
-reports it at the end.
+- **Every paper, every day, in seconds.** Assignments, missing and late reviews, short or
+  recycled reviews, disagreements nobody is discussing, unacknowledged rebuttals, quiet SPCs,
+  missing or inconsistent meta-reviews. The checks follow the AAMAS 2027 calendar.
+- **Know whom to nudge.** Issues are grouped by SPC, and a reviewer late on several of your papers
+  shows up once, so one reminder covers them all. Each sync also tells you what got resolved
+  since the last one.
+- **Submission policy at scale.** On request, it inspects PDFs and supplementary zips for the
+  page limit (appendices included), the AAMAS 2027 template, anonymity leaks, missing code, and
+  OpenReview metadata that doesn't match the PDF.
+- **Everything at hand.** A paper's metadata, checks and reviews (reviewers kept anonymous), its
+  PDF text and its supplementary file tree, without leaving the terminal.
+- **Reminders without the clicking.** Email a paper's reviewers, only its late reviewers, or its
+  SPCs, for one paper or many at once, through OpenReview's own messaging.
 
-Paper lists default to all your papers. `sync` caches each paper (content, reviews, groups) in
-`~/.aamas-review-monitor/papers/N/` and reports PDFs or supplementary material updated since the
-last sync; `download` fetches only what is missing or outdated, into the same folder.
+![Paper details: metadata, every check, reviews](docs/tui-details.svg)
 
-`email` sends one message per paper, signed as that paper's SACs, to `reviewers`,
-`late-reviewers` (assigned but no review yet) or `spcs`. It prints the recipients, subject and
-body and sends nothing unless you type `SEND`. `{{fullname}}` in the body becomes each
-recipient's name. Authors cannot be emailed: OpenReview only lets Program Chairs do that.
+## Automatic, deterministic, and on your machine
 
-In the TUI every paper is listed with an icon (🔴 serious, 🟡 needs attention, 🟢 fine): one row
-per issue, one 🟢 row per paper without issues. `f` filters (SPC, paper number, issue, or a
-color name), `g` hides or shows 🟢 rows, clicking a header sorts, `l` shows the legend, `s` syncs, `r`
-reloads, `q` quits. On the selected paper: Enter or `d` shows its metadata, failed and passed checks, and
-anonymous reviews, `o` opens it on OpenReview, `e` opens an email form, and `p`/`u` open its
-PDF/supplementary material in a dialog, downloading it first if needed. The dialog shows the
-local path and the contents (PDF text, or the file tree of a zip); there `c` shows the file in
-Finder/Explorer, `v` opens it with the default app, `y` copies the path. `i` runs the document checks
-on the paper (downloading what is missing) and opens its details. `P`, `U`, `E` and `I`
-download, email or inspect every paper shown.
+AAMAS 2027 forbids sharing submissions with AI systems and using AI to evaluate them. This
+tool is built around that rule:
 
-Syncing, downloading and sending run in the background behind a progress dialog that blocks the
-rest of the UI. If the session token has expired, a sign-in dialog asks for your credentials
-(unless `OPENREVIEW_USERNAME`/`OPENREVIEW_PASSWORD` are set). Emails need `SEND` typed in a
-confirmation dialog that lists every recipient group and the message.
+- **Every check is plain Python.** No language model, no randomness: the same data always gives
+  the same flags, and each flag comes with the rule that raised it (`legend`).
+- **Nothing is sent anywhere.** Data goes from OpenReview to `~/.aamas-review-monitor/` on your
+  disk (mode 0700) and nowhere else. No telemetry.
+- **It reads with your own OpenReview permissions** and never changes anything there. The one
+  exception is email, and nothing is sent until you type `SEND`.
+- **Flags are for people to verify.** The colors describe the health of the reviewing process,
+  never the quality of a paper.
+  - 🔴 needs you
+  - 🟡 needs the SPC's attention
+  - 🟢 nothing to do
 
-PDF text comes from xpdf's `pdftotext` (`brew install xpdf`), in reading order so the two AAMAS
-columns come out one after the other; it is cached next to the PDF as `<pdf>.txt`.
+## Checks
 
-Run `sync` daily: each run adds a snapshot, and `report` shows what is new or resolved per SPC
-since the previous one. Credentials come from `OPENREVIEW_USERNAME`/`OPENREVIEW_PASSWORD` or a
-prompt and are never stored; the resulting 1-week session token is kept in
-`~/.aamas-review-monitor/token` (mode 0600), so you log in about once a week. Delete that file
-to log out.
+`legend` (or `l` in the terminal UI) prints this list with the thresholds currently in use.
+Defaults follow the AAMAS 2027 timeline: 50% of reviews by 26 Oct, all by 13 Nov, rebuttal
+20–24 Nov, discussion from 25 Nov, acknowledgement by 3 Dec, meta-reviews by 9 Dec.
 
-Two families of checks, both deterministic and documented by `legend` (or `l` in the TUI) with
-the current thresholds:
+### Paper checks: automatic, on every sync
 
-- **paper checks**, on every snapshot: assignments, reviews against the 50% milestone and the
-  deadline, reviewers late on several papers, short, recycled (same reviewer, near-identical
-  text on two papers) or low-confidence reviews, rating disagreement without reviewer comments,
-  overlong discussions (more comments than one per reviewer plus one per SPC), rebuttals not
-  acknowledged (no review update or comment since), silent SPCs, missing, short or incomplete
-  meta-reviews, Strong Accept/Reject at odds with how the ratings rank among your papers, Findings recommendations against the authors' opt-out, withdrawn papers;
-- **document checks**, on request (`inspect`, `i`): page limit (appendices count), too short,
-  page size, fonts, AAMAS 2027 template, anonymous mode and identifying text, OpenReview title
-  and abstract vs. the PDF, supplementary format, anonymity and code availability. Their
-  results are cached per PDF version and show in `show`, `issues`, and the TUI.
+| Check | Flags |
+|---|---|
+| Submission active | 🟡 withdrawn or desk-rejected papers (and skips all other checks for them) |
+| SPC assigned | 🔴 no SPC |
+| Enough reviewers assigned | 🔴 fewer than 3 reviewers |
+| Reviews on track with the milestones | 🟡 fewer than 50% of the reviews in after 26 Oct |
+| Reviews on schedule | 🟡 reviews missing in the last 5 days before the deadline; 🔴 in the last 2 days and once overdue |
+| No reviewer behind on several papers | 🟡 a reviewer who owes reviews on 2 or more of your papers |
+| Reviews long enough | 🟡 a review under 150 words |
+| Reviews written for this paper | 🟡 a review that shares 60% or more of its phrases with the same reviewer's review of another paper |
+| Confident reviewers | 🟡 every reviewer's confidence is 2 or lower |
+| Ratings within the allowed spread | 🟡 ratings 3 or more points apart |
+| No undiscussed disagreement | 🔴 ratings 3 or more apart and no reviewer has commented, from 25 Nov |
+| Discussion within the expected length | 🟡 more comments than one per reviewer plus one per SPC |
+| Rebuttal acknowledged | 🟡 reviewers who neither updated their review nor commented since the rebuttal, from 2 days before 3 Dec; 🔴 after |
+| SPC active in the discussion | 🟡 an SPC silent on all of your papers for 7 days during the discussion |
+| Meta-review on schedule | 🔴 no meta-review in the last 2 days before 9 Dec, and after |
+| Meta-review long enough | 🟡 a meta-review under 80 words |
+| Proceedings and Findings recommendations given | 🟡 either recommendation missing |
+| Meta-review in line with the ratings | 🟡 "Strong Accept" for a paper in your bottom quarter by mean rating, "Reject" for one in your top quarter |
+| Findings recommendation respects the authors' choice | 🟡 Findings acceptance recommended although the authors opted out |
 
-Thresholds, deadlines and field names are in
-[`resources/config.json`](aamas_review_monitor/resources/config.json); override any of them in
-`~/.aamas-review-monitor/config.json`. Field names and dates come from the AAMAS 2027 pages and
-OpenReview forms, including the meta-review deadline (3–9 December).
+### Document checks: on request (`inspect`, or `i` / `I`)
 
-## Confidentiality
+These use the PDF's text and properties and the supplementary zip's contents. Missing files
+are downloaded first. Results are cached per uploaded version, and a new upload makes them
+stale.
 
-AAMAS 2027 forbids sharing submission content with AI systems. Hence:
+| Check | Flags |
+|---|---|
+| Main text within the page limit | 🔴 text before the references beyond 8 pages; 🟡 more than 8 pages and no References heading found |
+| No appendix beyond the page limit | 🔴 an appendix after the references that takes main text plus appendix beyond 8 pages |
+| Main text long enough | 🟡 main text under 6 pages |
+| US Letter pages | 🔴 any other page size |
+| Template fonts, all embedded | 🟡 fonts not embedded, or no Libertine (the template's typeface) |
+| AAMAS 2027 template | 🔴 no AAMAS 2027 copyright block on page 1 |
+| Anonymous submission mode | 🔴 no "Anonymous Author(s)" on page 1, or a name in the PDF's Author metadata |
+| No identifying text | 🟡 emails on page 1, an Acknowledgements section, personal repository links, phrases like "our previous work" |
+| OpenReview metadata matches the PDF | 🟡 the OpenReview title or abstract largely missing from the PDF's first pages |
+| Supplementary material is one small zip | 🟡 not a zip, or over 25 MB |
+| Anonymous supplementary material | 🔴 a `.git` folder; 🟡 home folder paths or emails in its files |
+| Code available for the experiments | 🟡 experiments, but no code in the supplementary material and no code link |
 
-- everything is deterministic Python; no LLM, no telemetry; only `email` writes to OpenReview,
-  after you type `SEND`;
-- snapshots keep only process metadata (assignments, scores, word counts, comment dates, and
-  MinHash fingerprints of reviews, not their text); paper content, reviews, PDFs and document
-  check results are cached separately under `papers/`;
-- data lives in `~/.aamas-review-monitor/` (override with `AAMAS_MONITOR_DATA`), mode 0700,
-  outside the repository;
-- **run every command in your own terminal, not through a coding agent**: their output and the
-  cache carry submissions, reviews and the identities of reviewers and SPCs.
+Every threshold and date can be changed (see [Configuration](#configuration)). Adding a check
+takes one documented function; see [`AGENTS.md`](AGENTS.md).
 
-Development uses synthetic fixtures only (`tests/`).
+## Installation
 
-## Project Structure
-
-```bash
-<root directory>
-├── aamas_review_monitor/                     # main package (renamed into your project name)
-│   ├── __init__.py                   # package version and logger
-│   ├── __main__.py                   # CLI (also `python -m aamas_review_monitor`)
-│   ├── collector.py                  # read-only OpenReview v2 collector
-│   ├── checks.py                     # deterministic checks and report
-│   ├── papers.py                     # paper cache: metadata, reviews, downloads, emails
-│   ├── documents.py                  # on-request PDF and supplementary checks
-│   ├── tui.py                        # Textual interface over the same checks
-│   └── resources/                    # non-code files shipped with the package
-│       ├── __init__.py               # paths to the resource files (DIR_RESOURCES, FILE_*)
-│       └── config.json               # venue, deadlines, thresholds
-├── tests/                            # pytest suite, synthetic data only
-│   ├── test_githooks.py              # tests for scripts/githooks.py
-│   ├── test_checks.py                # checks
-│   ├── conftest.py                   # blocks real OpenReview clients in every test
-│   ├── test_collector.py             # collector against a fake OpenReview client
-│   ├── test_papers.py                # cache, downloads, emails (fake client)
-│   ├── test_documents.py             # document checks on synthetic pages and zips
-│   ├── test_tui.py                   # TUI driven headlessly
-│   └── test_main_package.py          # CLI report end to end
-├── scripts/
-│   └── githooks.py                   # installs/removes local Git hooks
-├── .github/                          # configuration of GitHub Actions
-│   └── workflows/
-│       ├── check.yml                 # runs checks and tests on multiple OSs and Python versions
-│       ├── deploy.yml                # releases to PyPI/TestPyPI with semantic-release
-│       └── init.yml                  # initializes repositories created from this template
-├── AGENTS.md                         # notes for coding agents and contributors
-├── CHANGELOG.md                      # generated release changelog
-├── LICENSE                           # license file
-├── package.json                      # Node.js dependencies for semantic-release
-├── pyproject.toml                    # Python project configuration, dependencies, and tasks
-├── renovate.json                     # configuration of Renovate bot for dependency updates
-├── release.config.mjs                # semantic-release configuration
-├── rename-template.sh                # CI helper script used by init.yml to rename the project
-└── uv.lock                           # locked Python dependency versions
-```
-
-## Requirements
-
-- Only [uv](https://docs.astral.sh/uv/getting-started/installation/) and
-    - Node.js and npm, for semantic-release and package publishing.
-
-You can install uv following the instructions in the [documentation](https://docs.astral.sh/uv/getting-started/installation/).
-
-## Python Installation
-
-You can install and handle Python versions with uv:
+You need Python 3.10 or newer. The document checks also need xpdf's or poppler's command-line
+tools (`pdftotext`, `pdfinfo`, `pdffonts`): `brew install xpdf` on macOS, or
+`apt install poppler-utils` on Debian and Ubuntu.
 
 ```bash
-uv python install 3.12
-uv python pin 3.12
-uv python list
+pip install "git+https://github.com/gciatto/amas-review-monitor.git"
 ```
 
-## Creating a Project from this Template
+To install a fixed release, use its tag, or the wheel attached to the release on
+[GitHub](https://github.com/gciatto/amas-review-monitor/releases) (replace `X.Y.Z`):
 
-1. Create a new repository from this template on GitHub.
+```bash
+pip install "git+https://github.com/gciatto/amas-review-monitor.git@vX.Y.Z"
+pip install https://github.com/gciatto/amas-review-monitor/releases/download/vX.Y.Z/aamas_review_monitor-X.Y.Z-py3-none-any.whl
+```
 
-2. Let the initialization workflow run.
+`pipx install …` or `uv tool install …` with the same URLs keeps it in an environment of its
+own. The command is `aamas_review_monitor` (also `python -m aamas_review_monitor`).
 
-   The `.github/workflows/init.yml` workflow runs automatically on `main` or
-   `master` when the repository is neither marked as a template nor a fork. It calls
-   `rename-template.sh` to replace the template placeholders with the repository
-   name, removes the initialization workflow, and commits the result.
+## Getting started
 
-3. Install dependencies:
+```bash
+aamas_review_monitor sync     # sign in, fetch your papers, take a snapshot
+aamas_review_monitor tui      # browse the action queue
+aamas_review_monitor report   # or print it
+```
 
-    ```bash
-    uv sync
-    ```
+The first `sync` asks for your OpenReview credentials, or reads `OPENREVIEW_USERNAME` and
+`OPENREVIEW_PASSWORD`. Only the resulting session token is kept, for one week
+(`~/.aamas-review-monitor/token`; delete it to sign out). Run `sync` daily. Each run adds a
+snapshot, and the report tells you what is new and what got resolved since the previous one.
 
-4. Run the checks:
+## Command line
 
-    ```bash
-    uv run poe static-checks
-    uv run poe test
-    ```
+Paper lists (`N ...`) default to all your papers.
 
-5. Start building your project in `aamas_review_monitor/` and add tests under `tests/`.
+| Command | What it does |
+|---|---|
+| `sync` | Fetch your papers, their reviews and attachments' versions; save a snapshot; report updated PDFs and supplementary material |
+| `report [--filter TEXT] [--green] [--csv FILE]` | The action queue by SPC, with changes since the last sync; filter by SPC, `#N`, issue or color; `--green` lists papers without issues too |
+| `tui` | The interactive terminal UI |
+| `legend` | What each check verifies, with the current thresholds |
+| `show N` / `issues N` | A paper's metadata and issues / only its issues (passed checks included) |
+| `reviews N [--reveal]` | Reviews and meta-reviews; reviewers stay anonymous unless `--reveal` |
+| `browse N` | Open the paper on OpenReview |
+| `download [N ...] [--supplementary]` | Download PDFs or supplementary material, skipping current copies |
+| `attachment N [--supplementary] [--contents] [--open] [--reveal]` | A paper's PDF or zip, downloaded if needed: its path, its text or file list, open it, or show it in Finder/Explorer |
+| `inspect [N ...]` | Run the document checks, downloading what is missing |
+| `email ROLE [N ...] --subject S --body FILE` | Email `reviewers`, `late-reviewers` or `spcs`, one message per paper, after you type `SEND` |
 
-## Main Commands
+Options that come before the command apply to every OpenReview read:
+`--retries`, `--backoff` and `--backoff-max`. They set exponential backoff with jitter on rate
+limits, server errors and connection failures, and honour `Retry-After`. The defaults are 8
+retries, a first wait of 1 s and a longest wait of 120 s. Email is never retried, so no message
+goes out twice.
 
-### Running the Application
-`uv run aamas_review_monitor` (or `uv run python -m aamas_review_monitor`) to run the application entry point defined in `pyproject.toml`.
+## Terminal UI
 
+`tui` shows every paper: one row per issue, and a 🟢 row for each paper without issues. Every
+action is also in the command palette (`ctrl+p`). In each pair below, the lowercase key acts on
+the selected paper and the uppercase one on all papers shown.
 
-### Dependency Management
+| Key | Action |
+|---|---|
+| `f` | Filter by SPC, `#N`, issue text or color |
+| `g` | Show or hide 🟢 papers |
+| Enter, `d` | Paper details: metadata, every check with its outcome, anonymous reviews |
+| `o` | Open the paper on OpenReview |
+| `p` / `P` | PDF: a dialog with its path and text, or download all; in the dialog, `c` shows it in Finder/Explorer, `v` opens it, `y` copies the path |
+| `u` / `U` | Supplementary material: the same dialog, with the zip's file tree |
+| `i` / `I` | Run the document checks, downloading what is missing |
+| `e` / `E` | Email reviewers, late reviewers or SPCs, with a `SEND` confirmation |
+| `s` | Sync with OpenReview |
+| `l` | Legend of all checks |
+| `r` / `q` | Reload / quit |
 
-| Command | Description |
-| --- | --- |
-| `uv sync` | Create or update the local environment from `pyproject.toml` and `uv.lock`. |
-| `uv run aamas_review_monitor` | Run the application entry point. |
-| `uv add <package>` | Add a runtime dependency. |
-| `uv add --dev <package>` | Add a development dependency. |
-| `uv remove <package>` | Remove a dependency. | 
-| `uv lock` | Update the lock file after dependency changes. |
-| `uv sync --locked` | Sync the environment strictly to the locked versions. |
+Syncing, downloading, inspecting and sending run in the background behind a progress bar, and
+the rest of the interface waits meanwhile. An expired session brings up a sign-in dialog.
 
-### Configured Tasks
+## Email
 
-Project task aliases are defined in [pyproject.toml](pyproject.toml) under `[tool.poe.tasks]` and
-can be run through uv.
+`email` (or `e`/`E`) writes through each paper's OpenReview message invitation, signed as that
+paper's Senior Area Chairs. Messages can go to its reviewers, to its late reviewers (assigned,
+no review yet), or to its SPCs. `{{fullname}}` in the body becomes each recipient's name. Before
+anything is sent, you see every recipient group and the full message, and you confirm by typing
+`SEND`. OpenReview doesn't let SACs email authors.
 
-| Command | Description |
-| --- | --- |
-| `uv run poe test` | Run the pytest test suite. |
-| `uv run poe coverage` | Run tests through coverage. |
-| `uv run poe coverage-report` | Print a terminal coverage report with missing lines. |
-| `uv run poe coverage-html` | Generate an HTML coverage report in `htmlcov/`. |
-| `uv run poe ruff-check` | Lint: report code problems (unused imports, undefined names, risky patterns, ...). |
-| `uv run poe ruff-fix` | Lint and apply the automatic fixes Ruff knows for those problems. |
-| `uv run poe format-check` | Report files whose layout (quotes, wrapping, spacing) differs from Ruff's style. |
-| `uv run poe format` | Rewrite files into Ruff's style. |
-| `uv run poe mypy` | Type-check `aamas_review_monitor/`, `tests/` and `scripts/` with Mypy. |
-| `uv run poe compile` | Compile `aamas_review_monitor/`, `tests/` and `scripts/` to catch syntax errors. |
-| `uv run poe static-checks` | Run `compile`, `format-check`, `ruff-check` and `mypy` (what CI runs); changes nothing. |
-| `uv run poe static-fixes` | Run `ruff-fix`, then `format`; fixes most `static-checks` failures except type errors. |
-| `uv run poe install-hooks [HOOK...]` | Install local Git hooks (see [Git Hooks](#git-hooks); default: all). |
-| `uv run poe uninstall-hooks [HOOK...]` | Remove the hooks installed by `install-hooks`. |
+## Configuration
 
-Linting (`ruff-*`) and formatting (`format*`) are separate Ruff tools: the linter finds code
-problems but ignores layout, the formatter fixes layout but never changes what the code does.
-A file can pass one and fail the other, so both run in `static-checks`.
+Defaults are in
+[`aamas_review_monitor/resources/config.json`](aamas_review_monitor/resources/config.json): the
+venue, OpenReview field names, the AAMAS 2027 dates, every threshold, and the retry policy.
+Override any of them in `~/.aamas-review-monitor/config.json`, for example
+`{"reviews_words_min": 200, "deadline_meta_reviews": "2026-12-10"}`. Use `AAMAS_MONITOR_DATA` to
+keep the data folder elsewhere.
 
-Contributor/agent notes (layout, conventions) are in [`AGENTS.md`](AGENTS.md).
+## Data and confidentiality
 
-### Git Hooks
+- Snapshots keep only process metadata: assignments, ratings, word counts, comment dates, and
+  MinHash fingerprints of reviews (comparable, but the text can't be recovered from them).
+- Paper content, reviews, PDFs, extracted text and document check results are cached in
+  `~/.aamas-review-monitor/papers/`.
+- **Run it in your own terminal, not through an AI coding assistant.** Its output and its cache
+  hold submissions, reviews and the identities of reviewers and SPCs.
+- The project is developed and tested only on synthetic data. The screenshots above are
+  synthetic too.
 
-Optional and local: they live in `.git/hooks/`, so each clone opts in with
-`uv run poe install-hooks [HOOK...]`. They catch locally what CI would otherwise reject later.
-`git commit/push --no-verify` skips them once. Existing hooks not installed by this script are
-never overwritten.
+## Development
 
-| Hook | Runs on | Blocks when | Cost | Install it if |
-| --- | --- | --- | --- | --- |
-| `pre-commit` | every `git commit` | `static-checks` fails | a few seconds per commit | you want every commit to be clean |
-| `conventional-commits` | every commit message | the subject is not `<type>[(scope)][!]: <description>` | none | you push to `main`/`master` (releases depend on it) |
-| `no-ai-signature` | every commit message | it has an AI-assistant trailer or "Generated with" footer | none | you use coding assistants |
-| `pre-push` | every `git push` | `static-checks` or tests fail | the whole test suite per push | you'd rather wait locally than for CI to fail |
+```bash
+uv sync                    # environment and development tools
+uv run poe test            # tests (synthetic data, no network)
+uv run poe static-checks   # compile, ruff format/lint, mypy
+uv run poe install-hooks   # optional local Git hooks
+```
 
-`pre-commit` and `pre-push` overlap. For small, frequent commits, `pre-push` alone is usually
-enough.
-
-
-## Release a new version on PyPi
-
-New versions are automatically released on PyPi via GitHub Actions, when a push is made on the `main` or `master` branch.
-
-The version number is updated automatically by the `semantic-release` tool, which uses the commit messages to infer the type of the release (major, minor, patch).
-
-It is paramount that the commit messages follow the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification,
-in order for `semantic-release` to compute version numbers correctly.
-
-
-For successfully publishing, configure these repository secrets as needed:
-
-- `PYPI_TOKEN`: token for publishing to PyPI.
-- `TEST_PYPI_TOKEN`: token for publishing to TestPyPI.
-- `RELEASE_TOKEN`: GitHub token used by semantic-release.
-
-The workflow dry-runs releases outside `main` or `master`, and also dry-runs the
-initial commit.
-
-## Automatic updates of dependencies (via Renovate)
-
-The project is configured to use [Renovate](https://docs.renovatebot.com/) to automatically open pull-requests
-to update dependencies declared in `pyproject.toml`.
-
-By default, Renovate will assign such pull-requests to the user who created the repository from this template.
-
-If the project has tests (which is the case for this template), Renovate will only merge such pull-requests
-if all tests pass.
-
-When some test fails, Renovate will leave a comment on the pull-request, so that you can fix the issue manually.
-
-To make Renovate work, you need to enable it for your repository.
-To do so, please follow the instruction at <https://docs.renovatebot.com/getting-started/installing-onboarding/#hosted-githubcom-app>
-
-Finally, please remember to enable PR auto-merging in your repository settings, otherwise Renovate will not be able to merge
-the pull-requests it opens, even if all tests pass.
-To do so, please follow the instructions available [here](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-auto-merge-for-pull-requests-in-your-repository#managing-auto-merge).
-
-> Notice that the combination between Renovate, and Semantic Release may lead to a number of releases being created automatically.
-
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/), from which
+semantic-release derives versions. Releases are GitHub releases only: the wheel and sdist are
+attached to each release and kept as workflow artifacts, and nothing is published to PyPI.
+Contributor and agent notes, including how to add a check, are in [`AGENTS.md`](AGENTS.md).
 
 ## License
 
-This template is distributed under the license included in [LICENSE](LICENSE).
+See [LICENSE](LICENSE).

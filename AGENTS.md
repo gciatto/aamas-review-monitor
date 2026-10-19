@@ -1,7 +1,8 @@
 # AGENTS.md
 
-Notes for coding agents and contributors. User-facing usage (setup, commands, release
-secrets, Renovate) lives in `README.md`; do not duplicate it here.
+Notes for coding agents and contributors. User-facing documentation (features, checks,
+installation, commands, configuration) lives in `README.md`; do not duplicate it here. When a
+check, command or key changes, update the README's tables too.
 
 ## Layout
 
@@ -16,6 +17,7 @@ aamas_review_monitor/     the package, at the repo root (renamed by rename-templ
   tui.py          Textual app; network jobs run in worker threads behind a blocking Busy dialog
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
 tests/            pytest unit tests
+docs/             README screenshots (Textual SVGs of synthetic data only: never real papers)
 scripts/          githooks.py: installs/removes local Git hooks (poe install-hooks)
 .github/workflows/
   check.yml       static-checks + coverage, then tests on ubuntu/windows/macos x Python 3.10-3.13,
