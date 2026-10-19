@@ -224,3 +224,46 @@ def test_outreach_previews_then_sends_only_after_send(tmp_path, monkeypatch, cap
         assert len(client.messages) == sent
     cli.main(["outreach", "spc-digest", "--spc", "~Someone_Else1"])
     assert capsys.readouterr().out.startswith("0 messages")
+
+
+def test_comment_posts_issues_and_history_records_emails_and_comments(
+    tmp_path, monkeypatch, capsys
+):
+    client = cached_cli(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "FILE_HISTORY", tmp_path / "history.jsonl")
+    monkeypatch.setattr("builtins.input", lambda prompt="": "no")
+    cli.main(["comment", "7"])
+    out = capsys.readouterr().out
+    assert out.startswith("1 comments, readable by PCs, SACs\n") and "- 🟡 ratings [3, 6]" in out
+    assert client.comments == [] and out.rstrip().endswith("Nothing posted")
+
+    monkeypatch.setattr("builtins.input", lambda prompt="": "SEND")
+    cli.main(["comment", "7", "--spcs"])
+    ((invitation, signatures, note),) = client.comments
+    assert invitation == "ifaamas.org/AAMAS/2027/Conference/Submission7/-/Official_Comment"
+    assert signatures == ["ifaamas.org/AAMAS/2027/Conference/Submission7/Senior_Area_Chairs"]
+    assert note.forum == note.replyto == "abc"
+    assert note.readers[-1].endswith("Submission7/Area_Chairs")  # --spcs
+    assert "ratings [3, 6]" in note.content["comment"]["value"]
+    cli.main(["outreach", "spc-digest"])
+    capsys.readouterr()
+
+    cli.main(["history", "7"])
+    out = capsys.readouterr().out.splitlines()
+    assert "email    via #7  sent    to ~Spc_One1" in out[0]  # newest first
+    assert "(spc-digest)" in out[1]
+    assert "comment  via #7  sent    to PCs, SACs and SPCs" in out[2]
+    assert out[-1].startswith("2 entries in")
+    cli.main(["history", "99"])
+    assert capsys.readouterr().out.strip() == "Nothing sent from the app yet"
+
+
+def test_retry_policy_covers_the_edit_endpoints_too():
+    from types import SimpleNamespace
+
+    import requests
+
+    url = "https://api2.openreview.net/notes/edits"
+    client = SimpleNamespace(session=requests.Session(), note_edits_url=url)
+    cli.tune(client, cli.load_config())
+    assert "POST" not in client.session.get_adapter(url).max_retries.allowed_methods

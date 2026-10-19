@@ -12,10 +12,10 @@ from datetime import date
 from pathlib import Path
 from typing import NamedTuple
 
-from aamas_review_monitor.checks import GREEN, Issue
+from aamas_review_monitor.checks import GREEN, RED, YELLOW, Issue
 from aamas_review_monitor.collector import person
-from aamas_review_monitor.papers import Draft, recipients
-from aamas_review_monitor.resources import DIR_TEMPLATES
+from aamas_review_monitor.papers import Comment, Draft, recipients
+from aamas_review_monitor.resources import DIR_TEMPLATES, FILE_COMMENT
 
 AUDIENCES = ("spcs", "late-reviewers")
 
@@ -120,7 +120,19 @@ def compose(
             invitation, parent, _ = recipients(record, "spcs")
             subject = string.Template(template.subject).safe_substitute(fill)
             body = string.Template(template.body).safe_substitute(fill)
-            drafts.append(Draft(record, invitation, parent, [member], subject, body, spc))
+            drafts.append(
+                Draft(
+                    record,
+                    invitation,
+                    parent,
+                    [member],
+                    subject,
+                    body,
+                    spc,
+                    tuple(papers),
+                    template.key,
+                )
+            )
     else:
         for number in sorted({i.number for i in chosen}):
             theirs = [i for i in chosen if i.number == number]
@@ -144,7 +156,11 @@ def compose(
             subject = string.Template(template.subject).safe_substitute(fill)
             body = string.Template(template.body).safe_substitute(fill)
             to = f"late reviewers of #{number} ({len(members)})"
-            drafts.append(Draft(paper, invitation, parent, members, subject, body, to))
+            drafts.append(
+                Draft(
+                    paper, invitation, parent, members, subject, body, to, (number,), template.key
+                )
+            )
     return drafts, unreachable
 
 
@@ -156,3 +172,37 @@ def preview(drafts: list[Draft], unreachable: list[str]) -> str:
     ]
     skipped = [f"Not reachable: {line}" for line in unreachable]
     return "\n".join([f"{len(drafts)} messages", *skipped, "", *blocks])
+
+
+ICONS = {RED: "🔴", YELLOW: "🟡"}
+
+
+def comments(
+    issues: list[Issue], records: list[dict], numbers: set[int], spcs_read: bool
+) -> tuple[list[Comment], list[str]]:
+    """One forum comment per paper listing its open issues, from the comment template; also the
+    papers that cannot get one, and why."""
+    header, _, body = FILE_COMMENT.read_text(encoding="utf-8").partition("\n---\n")
+    title = header.split(":", 1)[1].strip()
+    by_number = {r["number"]: r for r in records}
+    found, skipped = [], []
+    for number in sorted(numbers):
+        theirs = [i for i in issues if i.number == number and i.severity != GREEN]
+        if number not in by_number:
+            skipped.append(f"#{number}: not cached")
+        elif not theirs:
+            skipped.append(f"#{number}: no open issues")
+        else:
+            lines = "\n".join(f"- {ICONS.get(i.severity, '')} {i.message}" for i in theirs)
+            text = string.Template(body).safe_substitute(issues=lines).strip() + "\n"
+            found.append(Comment(by_number[number], title, text, spcs_read))
+    return found, skipped
+
+
+def preview_comments(found: list[Comment], skipped: list[str]) -> str:
+    readers = "PCs, SACs" + (" and SPCs" if found and found[0].spcs_read else "")
+    blocks = [
+        f"=== Comment on #{c.record['number']} ===\nTitle: {c.title}\n\n{c.text}" for c in found
+    ]
+    lines = [f"{len(found)} comments, readable by {readers}", *(f"Skipped: {s}" for s in skipped)]
+    return "\n".join([*lines, "", *blocks])

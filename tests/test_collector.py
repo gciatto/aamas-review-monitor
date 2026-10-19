@@ -29,6 +29,7 @@ class FakeClient:
     def __init__(self):
         self.messages = []
         self.downloads = []
+        self.comments = []
 
     def get_group(self, id):
         return NS(content={"area_chairs_name": {"value": "Area_Chairs"}})
@@ -76,6 +77,9 @@ class FakeClient:
 
     def post_message(self, *args, **kwargs):
         self.messages.append((args, kwargs))
+
+    def post_note_edit(self, invitation, signatures, note):
+        self.comments.append((invitation, signatures, note))
 
 
 def test_fetch_and_summarize_keep_only_process_metadata():

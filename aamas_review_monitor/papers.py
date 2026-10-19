@@ -4,6 +4,7 @@ Layout: `<dir>/<number>/record.json` plus downloaded attachments next to it.
 """
 
 import json
+from datetime import datetime, timezone
 import shutil
 import subprocess
 import sys
@@ -193,17 +194,65 @@ class Draft(NamedTuple):
     subject: str
     body: str
     to: str  # who it is for, for previews and logs ("reviewers of #7", "~Ada_Lovelace1")
+    papers: tuple[int, ...] = ()  # the papers it is about (default: the one it goes through)
+    template: str = ""  # the template it came from, if any
+
+
+class Comment(NamedTuple):
+    """An Official_Comment on a paper's forum, signed as its SACs."""
+
+    record: dict
+    title: str
+    text: str
+    spcs_read: bool  # the paper's SPCs can read it (PCs and SACs always can)
+
+
+def record_history(file: Path | None, entry: dict) -> None:
+    """Appends what the app sent (or failed to send) to the history, one JSON object per line."""
+    if file is None:
+        return
+    file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    file.touch(mode=0o600)
+    entry = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), **entry}
+    with file.open("a", encoding="utf-8") as out:
+        out.write(json.dumps(entry) + "\n")
+
+
+def history(file: Path) -> list[dict]:
+    """Everything the app sent, newest first."""
+    if not file.is_file():
+        return []
+    lines = file.read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in reversed(lines) if line.strip()]
+
+
+def about(entry: dict, number: int) -> bool:
+    return entry["via"] == number or number in entry.get("papers", [])
 
 
 def deliver(
-    client: Any, drafts: list[Draft], progress: Callable[[int, int], None] | None = None
+    client: Any,
+    drafts: list[Draft],
+    progress: Callable[[int, int], None] | None = None,
+    history_file: Path | None = None,
 ) -> list[str]:
-    """Posts the drafts, each signed as its paper's SACs; returns the failures.
-    `progress(sent, total)` runs before each message (it may stop the batch there, by raising)."""
+    """Posts the drafts, each signed as its paper's SACs, and records them in the history;
+    returns the failures. `progress(sent, total)` runs before each message (it may stop the
+    batch there, by raising)."""
     failures = []
     for count, d in enumerate(drafts):
         if progress:
             progress(count, len(drafts))
+        entry = {
+            "kind": "email",
+            "via": d.record["number"],
+            "papers": list(d.papers or (d.record["number"],)),
+            "to": d.to,
+            "recipients": d.members,
+            "subject": d.subject,
+            "body": d.body,
+            "template": d.template,
+        }
         try:
             client.post_message(
                 d.subject,
@@ -214,9 +263,63 @@ def deliver(
                 parentGroup=d.parent,
             )
             logger.debug("%s: sent to %d recipients", d.to, len(d.members))
+            record_history(history_file, entry | {"status": "sent"})
         except Exception as e:  # keep going: the other messages are independent
             failures.append(f"{d.to}: not sent ({e})")
             logger.error("%s: not sent: %s", d.to, e)
+            record_history(history_file, entry | {"status": f"failed: {e}"})
+    return failures
+
+
+def readers(comment: Comment) -> list[str]:
+    """PCs and the paper's SACs always (the invitation requires them), its SPCs optionally."""
+    prefix, names = comment.record["prefix"], comment.record["names"]
+    venue = prefix.rsplit(f"/{names['submission']}", 1)[0]  # ".../Submission7/" -> venue id
+    found = [f"{venue}/Program_Chairs", prefix + names["senior_area_chairs"]]
+    return found + ([prefix + names["area_chairs"]] if comment.spcs_read else [])
+
+
+def post_comments(
+    client: Any,
+    comments: list[Comment],
+    progress: Callable[[int, int], None] | None = None,
+    history_file: Path | None = None,
+) -> list[str]:
+    """Posts the comments and records them in the history; returns the failures."""
+    from openreview.api import Note  # type: ignore[import-untyped]
+
+    failures = []
+    for count, c in enumerate(comments):
+        if progress:
+            progress(count, len(comments))
+        number, prefix = c.record["number"], c.record["prefix"]
+        entry = {
+            "kind": "comment",
+            "via": number,
+            "papers": [number],
+            "to": "PCs, SACs" + (" and SPCs" if c.spcs_read else ""),
+            "recipients": readers(c),
+            "subject": c.title,
+            "body": c.text,
+            "template": "",
+        }
+        try:
+            client.post_note_edit(
+                invitation=f"{prefix}-/Official_Comment",
+                signatures=[prefix + c.record["names"]["senior_area_chairs"]],
+                note=Note(
+                    forum=c.record["id"],
+                    replyto=c.record["id"],
+                    readers=readers(c),
+                    content={"title": {"value": c.title}, "comment": {"value": c.text}},
+                ),
+            )
+            logger.debug("#%s: comment posted", number)
+            record_history(history_file, entry | {"status": "sent"})
+        except Exception as e:  # keep going: the other papers' comments are independent
+            failures.append(f"#{number}: not posted ({e})")
+            logger.error("#%s: comment not posted: %s", number, e)
+            record_history(history_file, entry | {"status": f"failed: {e}"})
     return failures
 
 
@@ -226,13 +329,14 @@ def send(
     subject: str,
     body: str,
     progress: Callable[[int, int], None] | None = None,
+    history_file: Path | None = None,
 ) -> list[str]:
     """The same message to each paper's recipients; returns the failures."""
     drafts = [
         Draft(r, invitation, parent, members, subject, body, f"#{r['number']}")
         for r, invitation, parent, members in messages
     ]
-    return deliver(client, drafts, progress)
+    return deliver(client, drafts, progress, history_file)
 
 
 def email(
@@ -242,6 +346,7 @@ def email(
     subject: str,
     body: str,
     confirm: Callable[[str], str] | None = None,
+    history_file: Path | None = None,
 ) -> int:
     """Sends one message per paper to `role`, only after the user types SEND. Returns how many."""
     messages = plan(records, role)
@@ -252,6 +357,6 @@ def email(
     if (confirm or input)(f"Type SEND to send {len(messages)} messages: ").strip() != "SEND":
         print("Nothing sent")
         return 0
-    failures = send(client, messages, subject, body)
+    failures = send(client, messages, subject, body, history_file=history_file)
     print("\n".join([*failures, f"Sent {len(messages) - len(failures)} of {len(messages)}"]))
     return len(messages) - len(failures)

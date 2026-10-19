@@ -1,0 +1,8 @@
+Title: Process check: points needing attention
+---
+The Senior Area Chair's automatic process checks currently flag the following on this paper:
+
+$issues
+
+These flags concern the reviewing process (assignments, schedule, discussion, meta-review),
+never the paper's merit. Please look into them, and reply here once they are addressed.

@@ -41,6 +41,7 @@ DIR_DATA = Path(os.environ.get("AAMAS_MONITOR_DATA", Path.home() / ".aamas-revie
 DIR_SNAPSHOTS = DIR_DATA / "snapshots"
 DIR_PAPERS = DIR_DATA / "papers"
 FILE_TOKEN = DIR_DATA / "token"
+FILE_HISTORY = DIR_DATA / "history.jsonl"  # what the app sent: emails and comments
 LEGEND_STATUS = "RED: serious, needs you; YELLOW: needs SPC attention; GREEN: no process issue"
 
 
@@ -106,7 +107,10 @@ def tune(client: Any, config: dict) -> Any:
         respect_retry_after_header=True,
     )
     adapter = HTTPAdapter(max_retries=retry, pool_maxsize=128)
-    for prefix in ("https://", "http://"):
+    # openreview-py retries POSTs to its edit endpoints: a retried new comment could be posted
+    # twice, so those get this policy too (requests picks the longest matching prefix)
+    edits = [getattr(client, f"{kind}_edits_url", None) for kind in ("note", "invitation", "group")]
+    for prefix in ("https://", "http://", *filter(None, edits)):
         client.session.mount(prefix, adapter)
     return client
 
@@ -207,12 +211,19 @@ def main(argv: list[str] | None = None) -> None:
     email_cmd.add_argument("--subject", required=True)
     email_cmd.add_argument("--body", type=Path, required=True, help="text file; {{fullname}} works")
     commands.add_parser("templates", help="list the email templates")
+    comment_cmd = commands.add_parser(
+        "comment", help="post each paper's open issues as a forum comment: preview, then SEND"
+    )
+    comment_cmd.add_argument("--spcs", action="store_true", help="let the papers' SPCs read it")
+    comment_cmd.add_argument("--text", type=Path, help="post this file's text instead")
+    history_cmd = commands.add_parser("history", help="emails and comments sent from the app")
+    history_cmd.add_argument("--full", action="store_true", help="print the bodies too")
     outreach_cmd = commands.add_parser(
         "outreach", help="templated emails to SPCs or late reviewers: preview, then SEND"
     )
     outreach_cmd.add_argument("template", help="a template key, from `templates`")
     outreach_cmd.add_argument("--spc", action="append", help="only this SPC (repeatable)")
-    for cmd in (download_cmd, email_cmd, inspect_cmd, outreach_cmd):
+    for cmd in (download_cmd, email_cmd, inspect_cmd, outreach_cmd, comment_cmd, history_cmd):
         cmd.add_argument("numbers", type=int, nargs="*", help="papers (default: all)")
     args = parser.parse_args(argv)
     # Only the application configures logging; importing the package leaves it alone. The TUI
@@ -327,14 +338,56 @@ def main(argv: list[str] | None = None) -> None:
         )
         print(outreach.preview(drafts, unreachable))
         if drafts and input(f"Type SEND to send {len(drafts)} messages: ").strip() == "SEND":
-            failures = papers.deliver(login(config), drafts)
+            failures = papers.deliver(login(config), drafts, history_file=FILE_HISTORY)
             print("\n".join([*failures, f"Sent {len(drafts) - len(failures)} of {len(drafts)}"]))
         else:
             print("Nothing sent")
+    elif args.command == "comment":
+        latest, _ = load_snapshots()
+        if latest is None:
+            sys.exit("Run `sync` first")
+        extra, _ = documents.snapshot_issues(latest, config, DIR_PAPERS)
+        records = load_records(*args.numbers)
+        to_post, skipped = outreach.comments(
+            check(latest, config) + extra, records, {r["number"] for r in records}, args.spcs
+        )
+        if args.text:
+            text = args.text.read_text(encoding="utf-8")
+            to_post = [c._replace(text=text) for c in to_post]
+        print(outreach.preview_comments(to_post, skipped))
+        if to_post and input(f"Type SEND to post {len(to_post)} comments: ").strip() == "SEND":
+            failures = papers.post_comments(login(config), to_post, history_file=FILE_HISTORY)
+            print(
+                "\n".join([*failures, f"Posted {len(to_post) - len(failures)} of {len(to_post)}"])
+            )
+        else:
+            print("Nothing posted")
+    elif args.command == "history":
+        entries = papers.history(FILE_HISTORY)
+        if args.numbers:
+            entries = [x for x in entries if any(papers.about(x, n) for n in args.numbers)]
+        for entry in entries:
+            papers_ = ", ".join(f"#{n}" for n in entry.get("papers", []))
+            print(
+                f"{entry['at'][:16]}  {entry['kind']:7}  via #{entry['via']}  {entry['status']:6}  to {entry['to']}"
+            )
+            print(
+                f"    {entry['subject']}  [{papers_}]"
+                + (f"  ({entry['template']})" if entry["template"] else "")
+            )
+            if args.full:
+                print("    " + entry["body"].replace("\n", "\n    ").rstrip())
+        print(
+            f"{len(entries)} entries in {FILE_HISTORY}"
+            if entries
+            else "Nothing sent from the app yet"
+        )
     elif args.command == "email":
         records = load_records(*args.numbers)
         body = args.body.read_text(encoding="utf-8")
-        papers.email(login(config), records, args.role, args.subject, body)
+        papers.email(
+            login(config), records, args.role, args.subject, body, history_file=FILE_HISTORY
+        )
 
 
 def document_lines(number: int, config: dict) -> list[str]:
