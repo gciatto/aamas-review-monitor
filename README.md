@@ -21,6 +21,14 @@ uv run aamas_review_monitor email ROLE [N ...] --subject S --body FILE
 uv run aamas_review_monitor inspect [N ...]      # document checks of PDFs and supplementary zips
 ```
 
+Reads from OpenReview (sync, downloads) retry rate limits (429), server errors (5xx) and
+connection failures with exponential backoff and jitter, honouring `Retry-After`: waits of
+`backoff_seconds` doubling up to `backoff_max_seconds`, at most `retries` times (config
+defaults 1 s, 120 s, 8). Override them per run, before the command:
+`uv run aamas_review_monitor --retries 12 --backoff 2 --backoff-max 300 download`. Emails are
+never retried, so none goes out twice. A bulk download that still fails on a paper moves on and
+reports it at the end.
+
 Paper lists default to all your papers. `sync` caches each paper (content, reviews, groups) in
 `~/.aamas-review-monitor/papers/N/` and reports PDFs or supplementary material updated since the
 last sync; `download` fetches only what is missing or outdated, into the same folder.
