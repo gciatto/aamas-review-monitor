@@ -380,3 +380,29 @@ class Templates(ModalScreen["outreach.Template | None"]):
     @on(OptionList.OptionSelected, "#templates")
     def chosen(self, event: OptionList.OptionSelected) -> None:
         self.dismiss(next(t for t in self.choices if t.key == event.option.id))
+
+
+class Actions(ModalScreen["str | None"]):
+    """What can be done on the marked papers or SPCs (else the selected one): picks an action."""
+
+    DEFAULT_CSS = "Actions {" + DIALOG_CSS + " width: 70; height: auto; padding: 1 2; } }"
+    BINDINGS = [("escape,a", "dismiss", "Cancel")]
+
+    def __init__(self, scope: str, choices: list[tuple[str, str, str]]) -> None:
+        super().__init__()
+        self.scope, self.choices = scope, choices  # (label, key, action)
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static(Text(self.scope, "bold"))
+            yield OptionList(
+                *(
+                    Option(Text.assemble(label, (f"  {key}", "dim")), a)
+                    for label, key, a in self.choices
+                ),
+                id="actions",
+            )
+
+    @on(OptionList.OptionSelected, "#actions")
+    def chosen(self, event: OptionList.OptionSelected) -> None:
+        self.dismiss(event.option.id)

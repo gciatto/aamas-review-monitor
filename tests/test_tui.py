@@ -90,6 +90,16 @@ def cached_monitor(tmp_path, monkeypatch):
     return Monitor(config), client, opened
 
 
+def second_paper():
+    """Caches a copy of #7 as #8, for jobs on several papers."""
+    import copy
+
+    from aamas_review_monitor import papers
+
+    (record,) = papers.load(core.DIR_PAPERS, [7])
+    papers.save([copy.deepcopy(record) | {"number": 8}], core.DIR_PAPERS, [])
+
+
 def test_tui_downloads_once_then_shows_the_pdf(tmp_path, monkeypatch):
     app, client, _ = cached_monitor(tmp_path, monkeypatch)
     launched: list[list[str]] = []
@@ -219,15 +229,17 @@ def test_tui_bulk_download_survives_a_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(client, "get_attachment", broken)
     notes: list[str] = []
     monkeypatch.setattr(app, "notify", lambda message, **kw: notes.append(message))
+    second_paper()
 
     async def scenario():
         async with app.run_test() as pilot:
-            await pilot.press("P")
+            app.marked = {7, 8}  # #8 is cached but not in the snapshot, so not shown
+            await pilot.press("p")
             await settle(app, pilot)
             assert not isinstance(app.screen, Busy)
 
     asyncio.run(scenario())
-    assert notes == ["#7: rate limited\n0 of 1 papers have pdf: cached"]
+    assert notes[-1] == "#7: rate limited\n#8: rate limited\n0 of 2 papers have pdf: cached"
 
 
 def test_command_palette_offers_every_action(tmp_path, monkeypatch):
@@ -252,34 +264,31 @@ def test_tui_bulk_inspect_downloads_what_is_missing(tmp_path, monkeypatch):
     from aamas_review_monitor import documents
 
     app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    second_paper()
     monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "A Paper\nAnonymous Author(s)\f")
     monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {})
     monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
 
     async def scenario():
         async with app.run_test() as pilot:
-            await pilot.press("I")
+            app.marked = {7, 8}
+            await pilot.press("i")
             await settle(app, pilot)
-            assert client.downloads == [("pdf", "abc")]
+            assert client.downloads == [("pdf", "abc")] * 2
             assert 7 in app.inspected and any(i.code == "template" for i in app.issues)
             monkeypatch.setattr(core, "resume", lambda config: None)  # cached: no login needed
-            await pilot.press("I")
+            await pilot.press("i")
             await settle(app, pilot)
-            assert client.downloads == [("pdf", "abc")] and not isinstance(app.screen, Login)
+            assert client.downloads == [("pdf", "abc")] * 2 and not isinstance(app.screen, Login)
 
     asyncio.run(scenario())
 
 
 def test_bulk_job_logs_its_steps_and_can_be_interrupted(tmp_path, monkeypatch):
-    import copy
     import threading
 
-    from aamas_review_monitor import papers
-
     app, client, _ = cached_monitor(tmp_path, monkeypatch)
-    (record,) = papers.load(core.DIR_PAPERS, [7])
-    second = copy.deepcopy(record) | {"number": 8}
-    papers.save([second], core.DIR_PAPERS, [])
+    second_paper()
     release, started = threading.Event(), threading.Event()
 
     def slow(field_name, id):
@@ -296,7 +305,8 @@ def test_bulk_job_logs_its_steps_and_can_be_interrupted(tmp_path, monkeypatch):
 
     async def scenario():
         async with app.run_test() as pilot:
-            await pilot.press("P")  # papers 7 and 8
+            app.marked = {7, 8}
+            await pilot.press("p")
             await pilot.pause()
             assert isinstance(app.screen, Busy)
             await asyncio.to_thread(started.wait, 5)
@@ -327,7 +337,7 @@ def test_spc_tab_lists_issues_per_spc_and_sends_a_digest(tmp_path, monkeypatch):
         async with app.run_test(size=(140, 40)) as pilot:
             await pilot.press("t")
             spcs = app.query_one("#spcs")
-            assert spcs.row_count == 1 and spcs.get_row_at(0)[:3] == ["~Spc_One1", 1, 1]
+            assert spcs.row_count == 1 and spcs.get_row_at(0)[:4] == ["", "~Spc_One1", 1, 1]
             panel = str(app.query_one("#spc-issues").render())
             assert "#7" in panel and "ratings [3, 6]" in panel
             await pilot.press("m")
@@ -355,10 +365,11 @@ def test_papers_tab_templated_reminder_to_late_reviewers_can_be_cancelled(tmp_pa
 
     async def scenario():
         async with app.run_test() as pilot:
-            await pilot.press("M")
+            await pilot.press("asterisk")  # every paper shown
+            await pilot.press("m")
             await choose_template(app, pilot, "spc-deadline")  # no meta-review issue yet
             assert not isinstance(app.screen, Confirm)
-            await pilot.press("M")
+            await pilot.press("m")
             await choose_template(app, pilot, "spc-digest")
             assert isinstance(app.screen, Confirm)
             await pilot.press("escape")
@@ -366,7 +377,7 @@ def test_papers_tab_templated_reminder_to_late_reviewers_can_be_cancelled(tmp_pa
 
     asyncio.run(scenario())
     assert client.messages == []
-    assert notes == ["Nothing to send with Meta-review deadline", "Nothing sent"]
+    assert notes == ["1 paper marked", "Nothing to send with Meta-review deadline", "Nothing sent"]
 
 
 def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkeypatch):
@@ -406,3 +417,44 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
 
     asyncio.run(scenario())
     assert core.FILE_HISTORY.is_file()  # the temporary one (see conftest)
+
+
+def test_marks_scope_the_action_menu_and_wide_terminals_show_details(tmp_path, monkeypatch):
+    app, _, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(150, 40)) as pilot:
+            header = str(app.query_one("#summary").render())
+            assert "  ·  " in header and "Snapshot of " in header  # phase · freshness
+            assert "Paper #7" in str(app.query_one("#paper-detail").render())
+            await pilot.press("space")
+            table = app.query_one("#issues")
+            assert app.marked == {7}
+            assert all(table.get_row_at(r)[0] == "✔" for r in range(table.row_count))
+            await pilot.press("a")
+            menu = app.screen
+            assert isinstance(menu, tui.Actions) and menu.scope == "Act on paper #7"
+            actions = [a for *_, a in menu.choices]
+            menu.query_one("#actions").highlighted = actions.index("comment")
+            await pilot.press("enter")
+            await until(pilot, lambda: isinstance(app.screen, tui.CommentForm))
+            await pilot.press("escape", "space")
+            assert app.marked == set() and table.get_row_at(0)[0] == ""
+            await pilot.press("t", "space", "a")  # SPCs tab: templated email only
+            assert app.marked_spcs == {"~Spc_One1"}
+            assert [a for *_, a in app.screen.choices] == ["mail"]
+            await pilot.press("escape", "t", "a")  # History: nothing to act on
+            assert not isinstance(app.screen, tui.Actions)
+
+    asyncio.run(scenario())
+
+
+def test_narrow_terminals_hide_the_details_panel(tmp_path, monkeypatch):
+    app, _, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            assert not app.query_one("#paper-panel").display
+
+    asyncio.run(scenario())

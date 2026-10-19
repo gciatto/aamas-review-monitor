@@ -436,6 +436,25 @@ def passed(issues: list[Issue], checks: list | None = None) -> list[str]:
     return [_doc(f)[0] for f in (CHECKS if checks is None else checks) if f.__name__ not in failed]
 
 
+PHASES = (  # (the setting ending a phase, the phase, what happens then)
+    ("deadline_reviews", "Reviewing", "reviews due"),
+    ("discussion_start", "Rebuttal", "discussion starts"),
+    ("deadline_acknowledgements", "Discussion", "acknowledgements due"),
+    ("deadline_meta_reviews", "Meta-reviews", "meta-reviews due"),
+)
+
+
+def phase(config: dict, today: date) -> str:
+    """Where the reviewing process stands on `today`, and its next date."""
+    for key, name, then in PHASES:
+        day = date.fromisoformat(config[key])
+        if today <= day:
+            days = (day - today).days
+            when = {0: "today", 1: "tomorrow"}.get(days, f"in {days} days")
+            return f"{name}: {then} {day.day} {day:%b}, {when}"
+    return "Decisions: meta-reviews are past due"
+
+
 def check(snapshot: dict, config: dict) -> list[Issue]:
     ctx = Context(config, date.fromisoformat(snapshot["taken_at"][:10]), snapshot["papers"])
     issues = [i for p in snapshot["papers"] for i in check_paper(p, ctx)]

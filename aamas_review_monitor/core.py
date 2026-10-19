@@ -206,7 +206,7 @@ def freshness(latest: dict | None, config: dict, now: datetime | None = None) ->
         return "⚠ No snapshot: sync first"
     taken = datetime.fromisoformat(latest["taken_at"])
     taken = taken if taken.tzinfo else taken.replace(tzinfo=timezone.utc)
-    hours = ((now or datetime.now(timezone.utc)) - taken).total_seconds() / 3600
+    hours = max(0, ((now or datetime.now(timezone.utc)) - taken).total_seconds() / 3600)  # skew
     age = f"{hours:.0f} h" if hours >= 1 else f"{hours * 60:.0f} min"
     line = f"Snapshot of {taken.astimezone():%Y-%m-%d %H:%M}, {age} old"
     limit = config["snapshot_stale_hours"]

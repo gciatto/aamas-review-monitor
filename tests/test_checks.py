@@ -174,3 +174,12 @@ def test_legend_comes_from_the_check_docstrings():
     assert all(
         label and text and "{" not in text.replace("{'", "") for label, text in entries.values()
     )
+
+
+def test_phase_names_the_next_date():
+    from aamas_review_monitor.checks import phase
+
+    assert phase(CONFIG, date(2026, 10, 19)) == "Reviewing: reviews due 13 Nov, in 25 days"
+    assert phase(CONFIG, date(2026, 11, 24)) == "Rebuttal: discussion starts 25 Nov, tomorrow"
+    assert phase(CONFIG, date(2026, 12, 9)) == "Meta-reviews: meta-reviews due 9 Dec, today"
+    assert phase(CONFIG, date(2026, 12, 10)).startswith("Decisions")

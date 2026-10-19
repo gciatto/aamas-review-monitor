@@ -11,10 +11,10 @@ from pathlib import Path
 from typing import Any
 
 from rich.text import Text
-from textual import on, work
+from textual import events, on, work
 from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import (
     DataTable,
@@ -35,9 +35,11 @@ from aamas_review_monitor.checks import (
     Issue,
     green_rows,
     matches,
+    phase,
     summary,
 )
 from aamas_review_monitor.screens import (
+    Actions,
     Attachment,
     Busy,
     CommentForm,
@@ -53,29 +55,28 @@ from aamas_review_monitor.screens import (
 )
 
 RANKS = {ICONS[RED]: 0, ICONS[YELLOW]: 1, ICONS[GREEN]: 2}
+MARK = "✔"
 Job = Callable[[Any, Callable[[int, int], None]], Any]  # (client, progress) -> result
 
 
-# The command palette (ctrl+p): (title, help, action), the same actions as the key bindings
+# The command palette (ctrl+p): (title, help ending with the key, action), the same actions
+# as the key bindings. Actions on papers apply to the marked ones, else to the selected one.
 COMMANDS = [
     ("Sync with OpenReview", "Fetch papers, reviews and a new snapshot  [s]", "sync"),
     ("Reload", "Re-read the cached snapshots and results  [r]", "reload"),
     ("Filter", "By SPC, #paper, issue text or color  [f]", "focus('filter')"),
     ("Show or hide green papers", "Papers without issues  [g]", "toggle_green"),
+    ("Mark or unmark", "The selected paper (or SPC), to act on several at once  [space]", "mark"),
+    ("Mark all shown", "Every paper (or SPC) shown; if all are marked, clears the marks  [*]", "mark_all"),
+    ("Actions", "What can be done on the marked papers or SPCs, else on the selected one  [a]", "actions"),
     ("Paper details", "Metadata, checks, anonymous reviews of the selected paper  [d]", "details"),
     ("Open on OpenReview", "The selected paper's forum, in the browser  [o]", "open"),
-    ("PDF", "Of the selected paper: path, text, open  [p]", "download('field_pdf')"),
-    ("PDFs of all shown papers", "Download the missing ones  [P]", "download('field_pdf', True)"),
-    ("Supplementary material", "Of the selected paper: path, files, open  [u]", "download('field_supplementary')"),
-    ("Supplementary material of all shown papers", "Download the missing ones  [U]", "download('field_supplementary', True)"),
-    ("Inspect", "Document checks of the selected paper, downloading what is missing  [i]", "inspect"),
-    ("Inspect all shown papers", "Document checks, downloading what is missing  [I]", "inspect(True)"),
-    ("Email", "Reviewers, late reviewers or SPCs of the selected paper  [e]", "email"),
-    ("Email all shown papers", "Reviewers, late reviewers or SPCs, one message per paper  [E]", "email(True)"),
-    ("Templated email", "From a template, to the selected SPC (SPCs tab) or paper's people  [m]", "mail"),
-    ("Templated email to everyone shown", "From a template: all SPCs, or all shown papers' people  [M]", "mail(True)"),
-    ("Comment", "Post the selected paper's issues on its forum, editable  [c]", "comment"),
-    ("Comment on all shown papers", "Each paper's issues on its forum  [C]", "comment(True)"),
+    ("PDF", "One paper: path, text, open; marked papers: download the missing ones  [p]", "download('field_pdf')"),
+    ("Supplementary material", "One paper: path, files, open; marked papers: download  [u]", "download('field_supplementary')"),
+    ("Inspect", "Document checks, downloading what is missing  [i]", "inspect"),
+    ("Templated email", "From a template, to SPCs (SPCs tab) or to the papers' people  [m]", "mail"),
+    ("Comment", "Post each paper's issues on its forum (one paper: editable)  [c]", "comment"),
+    ("Email", "Free-form, to reviewers, late reviewers or SPCs, one message per paper  [e]", "email"),
     ("Switch tab", "Papers, SPCs, History  [t]", "switch_tab"),
     ("Legend", "What each check verifies, with the current thresholds  [l]", "legend"),
 ]  # fmt: skip
@@ -83,35 +84,45 @@ COMMANDS = [
 
 # Actions that work on the main table, so only while it is on screen
 TABLE_ACTIONS = {a.split("(")[0] for _, _, a in COMMANDS}
+# What the action menu offers, per tab
+MENU = {
+    "papers": [
+        "details", "open", "download('field_pdf')", "download('field_supplementary')",
+        "inspect", "mail", "comment", "email",
+    ],
+    "spcs-tab": ["mail"],
+}  # fmt: skip
+
+
+def numbered(numbers: list[int]) -> str:
+    shown = ", ".join(f"#{n}" for n in numbers[:8]) + (", …" if len(numbers) > 8 else "")
+    return f"paper #{numbers[0]}" if len(numbers) == 1 else f"{len(numbers)} papers ({shown})"
 
 
 class Monitor(App):
     TITLE = "AAMAS Review Monitor"
-    # Lowercase keys act on the selected paper; uppercase ones on all the papers shown, hidden
-    # from the footer but named in their lowercase twin's label
+    # Actions on papers apply to the marked ones (space, *), else to the selected one; the
+    # footer shows the few keys needed to get anywhere, the menu (a) the rest with their keys
     BINDINGS = [
         # in footer order: what is used most comes first, as narrow terminals cut the tail
         ("f", "focus('filter')", "Filter"),
+        ("space", "mark", "Mark"),
+        ("asterisk", "mark_all", "Mark all"),
+        ("a", "actions", "Actions"),
         ("t", "switch_tab", "Tab"),
-        ("d", "details", "Details"),
         ("s", "sync", "Sync"),
-        ("p", "download('field_pdf')", "PDF (P: all)"),
-        ("u", "download('field_supplementary')", "Supp. (U: all)"),
-        ("i", "inspect", "Inspect (I: all)"),
-        ("m", "mail", "Template (M: all)"),
-        ("c", "comment", "Comment (C: all)"),
-        ("e", "email", "Email (E: all)"),
         ("l", "legend", "Legend"),
         ("g", "toggle_green", "🟢 on/off"),
-        ("o", "open", "Browser"),
-        ("r", "reload", "Reload"),
-        Binding("P", "download('field_pdf', True)", "All PDFs", show=False),
-        Binding("U", "download('field_supplementary', True)", "All supplementary", show=False),
-        Binding("E", "email(True)", "Email all", show=False),
-        Binding("I", "inspect(True)", "Inspect all", show=False),
-        Binding("M", "mail(True)", "Templated email to all", show=False),
-        Binding("C", "comment(True)", "Comment on all", show=False),
         ("q", "quit", "Quit"),
+        Binding("d", "details", "Details", show=False),
+        Binding("o", "open", "Browser", show=False),
+        Binding("p", "download('field_pdf')", "PDF", show=False),
+        Binding("u", "download('field_supplementary')", "Supplementary", show=False),
+        Binding("i", "inspect", "Inspect", show=False),
+        Binding("m", "mail", "Templated email", show=False),
+        Binding("c", "comment", "Comment", show=False),
+        Binding("e", "email", "Email", show=False),
+        Binding("r", "reload", "Reload", show=False),
     ]
 
     def __init__(self, config: dict) -> None:
@@ -124,17 +135,22 @@ class Monitor(App):
         self.latest: dict | None = None  # the latest snapshot
         self.papers: list[dict] = []  # the latest snapshot's
         self.sent: list[dict] = []  # the history, newest first
+        self.marked: set[int] = set()  # papers
+        self.marked_spcs: set[str] = set()
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(id="summary")
         with TabbedContent(id="tabs"):
             with TabPane("Papers", id="papers"):
-                yield Input(
-                    placeholder="Filter by SPC, paper # or issue (f to focus, Enter to apply)",
-                    id="filter",
-                )
-                yield DataTable(id="issues", cursor_type="row", zebra_stripes=True)
+                with Horizontal():
+                    with Vertical(id="queue"):
+                        yield Input(
+                            placeholder="Filter by SPC, paper # or issue (f to focus, Enter to apply)",
+                            id="filter",
+                        )
+                        yield DataTable(id="issues", cursor_type="row", zebra_stripes=True)
+                    yield VerticalScroll(Static(id="paper-detail"), id="paper-panel")
             with TabPane("SPCs", id="spcs-tab"):
                 with Horizontal():
                     yield DataTable(id="spcs", cursor_type="row", zebra_stripes=True)
@@ -146,18 +162,26 @@ class Monitor(App):
         yield Footer(compact=True)
 
     DEFAULT_CSS = (
-        "#spcs { width: 1fr; } #spc-panel { width: 2fr; padding: 0 1; }"
+        "#queue { width: 3fr; } #paper-panel { width: 2fr; padding: 0 1; }"
+        " #spcs { width: 1fr; } #spc-panel { width: 2fr; padding: 0 1; }"
         " #history { width: 3fr; } #history-panel { width: 2fr; padding: 0 1; }"
     )
+    PANEL_WIDTH_MIN = 120  # narrower terminals keep the whole width for the queue
 
     def on_mount(self) -> None:
-        self.query_one("#issues", DataTable).add_columns("Status", "Paper", "SPC", "Issue")
+        issues = self.query_one("#issues", DataTable)
+        self.mark_column = issues.add_column("", width=1)  # empty until something is marked
+        issues.add_columns("Status", "Paper", "SPC", "Issue")
         self.query_one("#history", DataTable).add_columns("", "When", "Kind", "Via", "To")
-        self.query_one("#spcs", DataTable).add_columns(
-            "SPC", "Papers", "Open", ICONS[RED], ICONS[YELLOW]
-        )
+        spcs = self.query_one("#spcs", DataTable)
+        self.spc_mark_column = spcs.add_column("", width=1)
+        spcs.add_columns("SPC", "Papers", "Open", ICONS[RED], ICONS[YELLOW])
         self.action_reload()
-        self.query_one("#issues", DataTable).focus()
+        issues.focus()
+
+    def on_resize(self, event: events.Resize) -> None:
+        self.query_one("#paper-panel").display = event.size.width >= self.PANEL_WIDTH_MIN
+        self.show_paper()
 
     def action_reload(self) -> None:
         state = core.current(self.config)
@@ -172,7 +196,10 @@ class Monitor(App):
             text = "\n".join(lines)
             for severity, icon in ICONS.items():
                 text = text.replace(f" {severity}", f" {icon}")
-        self.query_one("#summary", Static).update(text)
+        fresh = core.freshness(self.latest, self.config)
+        header = Text(f"{phase(self.config, date.today())}  ·  ", "bold")
+        header.append(fresh, "bold yellow" if fresh.startswith("⚠") else "")
+        self.query_one("#summary", Static).update(Text.assemble(header, "\n", text))
         self.fill()
         self.fill_spcs()
         self.fill_history()
@@ -184,7 +211,9 @@ class Monitor(App):
         for n, i in enumerate(self.issues):
             if matches(i, needle) and not (self.hide_green and i.severity == GREEN):
                 spcs = ", ".join(i.spcs) or "(no SPC)"
-                table.add_row(ICONS[i.severity], i.number, spcs, i.message, key=str(n))
+                mark = MARK if i.number in self.marked else ""
+                table.add_row(mark, ICONS[i.severity], i.number, spcs, i.message, key=str(n))
+        self.show_paper()
 
     def by_spc(self) -> dict[str, list[Issue]]:
         """Open issues per SPC, every SPC of the snapshot included."""
@@ -237,9 +266,9 @@ class Monitor(App):
             key=lambda kv: (-sum(i.severity == RED for i in kv[1]), -len(kv[1]), kv[0]),
         ):
             reds = sum(i.severity == RED for i in mine)
-            table.add_row(
-                spc, count[spc], len({i.number for i in mine}), reds, len(mine) - reds, key=spc
-            )
+            mark = MARK if spc in self.marked_spcs else ""
+            numbers = len({i.number for i in mine})
+            table.add_row(mark, spc, count[spc], numbers, reds, len(mine) - reds, key=spc)
         self.show_spc()
 
     def selected_spc(self) -> str | None:
@@ -306,13 +335,13 @@ class Monitor(App):
             "Sent",
         )
 
-    def action_comment(self, every: bool = False) -> None:
-        if not (numbers := self.scope(every)):
+    def action_comment(self) -> None:
+        if not (numbers := self.scope()):
             return
-        records = core.records()
+        records, one = core.records(), len(numbers) == 1
         draft, _ = outreach.comments(self.issues, records, set(numbers[:1]), True)
-        text = draft[0].text if draft and not every else None
-        if not every and not draft:
+        text = draft[0].text if draft and one else None
+        if one and not draft:
             self.notify(f"#{numbers[0]}: no open issues to comment on, or not cached")
             return
 
@@ -337,24 +366,20 @@ class Monitor(App):
                 "Posted",
             )
 
-        scope = f"paper #{numbers[0]}" if len(numbers) == 1 else f"{len(numbers)} papers"
-        self.push_screen(CommentForm(scope, text), compose)
+        self.push_screen(CommentForm(numbered(numbers), text), compose)
 
-    def action_mail(self, every: bool = False) -> None:
-        on_spcs = self.query_one(TabbedContent).active == "spcs-tab"
+    def action_mail(self) -> None:
         spcs: set[str] | None = None
         numbers: set[int] | None = None
-        if on_spcs:
-            spc = self.selected_spc()
-            if not every and spc is None:
+        if self.on_spcs():
+            if not (chosen_spcs := self.spc_scope()):
                 return
-            spcs = None if every else {spc or ""}
-            scope = "every SPC" if every else spc
+            spcs = set(chosen_spcs)
+            scope = chosen_spcs[0] if len(spcs) == 1 else f"{len(spcs)} marked SPCs"
         else:
-            if not (shown := self.scope(every)):
+            if not (shown := self.scope()):
                 return
-            numbers = set(shown)
-            scope = f"paper #{shown[0]}" if len(shown) == 1 else f"{len(shown)} papers"
+            numbers, scope = set(shown), numbered(shown)
 
         def chosen(template: outreach.Template | None) -> None:
             if template is None:
@@ -371,7 +396,7 @@ class Monitor(App):
 
             self.send(drafts, unreachable, f" ({template.name})")
 
-        self.push_screen(Templates(scope or ""), chosen)
+        self.push_screen(Templates(scope), chosen)
 
     def action_legend(self) -> None:
         self.push_screen(Legend(self.config))
@@ -413,7 +438,7 @@ class Monitor(App):
         if issue := self.selected():
             self.show_details(issue.number)
 
-    def show_details(self, number: int) -> None:
+    def paper_text(self, number: int) -> Text:
         mine = [i for i in self.issues if i.number == number and i.severity != GREEN]
         try:
             (record,) = core.records(number)
@@ -421,15 +446,95 @@ class Monitor(App):
             record = None
         inspected = number in self.inspected
         sent = [e for e in self.sent if papers.about(e, number)]
-        self.push_screen(Paper(details(number, record, self.config, mine, inspected, sent)))
+        return details(number, record, self.config, mine, inspected, sent)
 
-    def scope(self, every: bool) -> list[int]:
-        """The selected paper or, with `every`, all the papers shown."""
-        if not every:
+    def show_details(self, number: int) -> None:
+        self.push_screen(Paper(self.paper_text(number)))
+
+    @on(DataTable.RowHighlighted, "#issues")
+    def show_paper(self) -> None:
+        """The selected paper's details, beside the queue when the terminal is wide enough."""
+        panel = self.query_one("#paper-panel")
+        if panel.display:
             issue = self.selected()
-            return [issue.number] if issue else []
+            text = self.paper_text(issue.number) if issue else Text("No paper", "italic")
+            self.query_one("#paper-detail", Static).update(text)
+
+    def shown(self) -> list[int]:
         rows = self.query_one("#issues", DataTable).rows
         return sorted({self.issues[int(k.value or 0)].number for k in rows})
+
+    def scope(self) -> list[int]:
+        """The marked papers, else the selected one."""
+        if self.marked:
+            return sorted(self.marked)
+        issue = self.selected()
+        return [issue.number] if issue else []
+
+    def spc_scope(self) -> list[str]:
+        """The marked SPCs, else the selected one."""
+        spc = self.selected_spc()
+        return sorted(self.marked_spcs) if self.marked_spcs else [spc] if spc else []
+
+    def on_spcs(self) -> bool:
+        return self.query_one(TabbedContent).active == "spcs-tab"
+
+    def show_marks(self) -> None:
+        """Updates the mark column in place, keeping the cursor where it is."""
+        table = self.query_one("#issues", DataTable)
+        for key in table.rows:
+            mark = MARK if self.issues[int(key.value or 0)].number in self.marked else ""
+            table.update_cell(key, self.mark_column, mark)
+        spcs = self.query_one("#spcs", DataTable)
+        for key in spcs.rows:
+            mark = MARK if key.value in self.marked_spcs else ""
+            spcs.update_cell(key, self.spc_mark_column, mark)
+
+    def action_mark(self) -> None:
+        if self.on_spcs():
+            if spc := self.selected_spc():
+                self.marked_spcs ^= {spc}
+        elif issue := self.selected():
+            self.marked ^= {issue.number}
+        self.show_marks()
+
+    def action_mark_all(self) -> None:
+        if self.on_spcs():
+            shown = {str(k.value) for k in self.query_one("#spcs", DataTable).rows}
+            self.marked_spcs = set() if shown <= self.marked_spcs else self.marked_spcs | shown
+            count, what = len(self.marked_spcs), "SPCs"
+        else:
+            papers_shown = set(self.shown())
+            self.marked = set() if papers_shown <= self.marked else self.marked | papers_shown
+            count, what = len(self.marked), "papers"
+        self.show_marks()
+        what = what[:-1] if count == 1 else what
+        self.notify(f"{count} {what} marked" if count else "Marks cleared")
+
+    def action_actions(self) -> None:
+        tab = self.query_one(TabbedContent).active
+        if tab not in MENU:
+            self.notify("Nothing to act on in the history")
+            return
+        if tab == "spcs-tab":
+            if not (spcs := self.spc_scope()):
+                return
+            scope = spcs[0] if len(spcs) == 1 else f"{len(spcs)} marked SPCs"
+        else:
+            if not (numbers := self.scope()):
+                return
+            scope = numbered(numbers)
+        choices = [
+            (title, help.rsplit("[", 1)[1].rstrip("]"), action)
+            for title, help, action in COMMANDS
+            if action in MENU[tab]
+        ]
+
+        def chosen(action: str | None) -> None:
+            if action:
+                self.call_later(self.run_action, action)
+
+        self.push_screen(Actions(f"Act on {scope}", choices), chosen)
 
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
         yield from super().get_system_commands(screen)
@@ -521,11 +626,11 @@ class Monitor(App):
             done,
         )
 
-    def action_download(self, key: str, every: bool = False) -> None:
-        if not (numbers := self.scope(every)):
+    def action_download(self, key: str) -> None:
+        if not (numbers := self.scope()):
             return
         field = self.config[key]
-        if not every:  # one paper: show it, downloading first only if needed
+        if len(numbers) == 1:  # one paper: show it, downloading first only if needed
             try:
                 (record,) = core.records(*numbers)
             except FileNotFoundError:
@@ -567,8 +672,8 @@ class Monitor(App):
 
         self.online(f"Downloading {field} of {len(numbers)} papers…", job, done)
 
-    def action_inspect(self, every: bool = False) -> None:
-        if not (numbers := self.scope(every)):
+    def action_inspect(self) -> None:
+        if not (numbers := self.scope()):
             return
         try:
             records = core.records(*numbers)
@@ -595,15 +700,15 @@ class Monitor(App):
             self.action_reload()
             ok = len(records) - len(failures)
             self.notify("\n".join([*failures, f"Inspected {ok} of {len(records)} papers"]))
-            if not every and not failures:
+            if len(numbers) == 1 and not failures:
                 self.show_details(numbers[0])
 
         offline = all(documents.downloaded(r, self.config, core.DIR_PAPERS) for r in records)
-        label = f"Inspecting {len(records)} papers…" if every else f"Inspecting #{numbers[0]}…"
+        label = f"Inspecting {numbered(numbers)}…"
         self.online(label, job, done, offline=offline)
 
-    def action_email(self, every: bool = False) -> None:
-        if not (numbers := self.scope(every)):
+    def action_email(self) -> None:
+        if not (numbers := self.scope()):
             return
 
         def review(form: dict | None) -> None:
@@ -619,5 +724,4 @@ class Monitor(App):
                 return
             self.send(drafts, unreachable)
 
-        scope = f"paper #{numbers[0]}" if len(numbers) == 1 else f"{len(numbers)} papers"
-        self.push_screen(Email(scope), review)
+        self.push_screen(Email(numbered(numbers)), review)

@@ -81,7 +81,7 @@ Defaults follow the AAMAS 2027 timeline: 50% of reviews by 26 Oct, all by 13 Nov
 | Meta-review in line with the ratings | 🟡 "Strong Accept" for a paper in your bottom quarter by mean rating, "Reject" for one in your top quarter |
 | Findings recommendation respects the authors' choice | 🟡 Findings acceptance recommended although the authors opted out |
 
-### Document checks: on request (`inspect`, or `i` / `I`)
+### Document checks: on request (`inspect`, or `i`)
 
 These use the PDF's text and properties and the supplementary zip's contents. Missing files
 are downloaded first. Results are cached per uploaded version, and a new upload makes them
@@ -172,26 +172,35 @@ goes out twice.
 `tui` has three tabs (`t` switches between them):
 
 - **Papers:** every paper, with one row per issue and a 🟢 row for each paper without issues.
+  On terminals at least 120 columns wide, the selected paper's details sit beside the list.
 - **SPCs:** each SPC with their papers, open issues and 🔴/🟡 counts, worst first, and the selected
   SPC's issues paper by paper, plus what was sent to them.
 - **History:** every email and comment sent from the app, newest first, with the full text of
   the selected one.
 
-Every action is also in the command palette (`ctrl+p`). In each pair below, the lowercase key
-acts on the selected paper (or SPC) and the uppercase one on all of those shown.
+The line above the tabs says where the process stands ("Reviewing: reviews due 13 Nov, in 25
+days") and how old the snapshot is, in yellow once it is past `snapshot_stale_hours`.
+
+Actions apply to the **marked** papers (or SPCs), and to the selected one when nothing is
+marked. `space` marks or unmarks, `*` marks everything the filter shows (or clears the marks if
+all are marked), and `a` opens a menu of what can be done, naming the papers it will act on.
+The footer shows only these few keys. Each action also has its own key, listed in the menu and
+in the command palette (`ctrl+p`):
 
 | Key | Action |
 |---|---|
 | `f` | Filter by SPC, `#N`, issue text or color |
 | `g` | Show or hide 🟢 papers |
+| `space` / `*` | Mark or unmark the selected paper (or SPC) / everything shown |
+| `a` | Action menu for the marked papers or SPCs, else the selected one |
 | Enter, `d` | Paper details: metadata, every check with its outcome, anonymous reviews |
 | `o` | Open the paper on OpenReview |
-| `p` / `P` | PDF: a dialog with its path and text, or download all; in the dialog, `c` shows it in Finder/Explorer, `v` opens it, `y` copies the path |
-| `u` / `U` | Supplementary material: the same dialog, with the zip's file tree |
-| `i` / `I` | Run the document checks, downloading what is missing |
-| `m` / `M` | Templated email, for the selected SPC or paper / for everyone in the tab, previewed in full before you type `SEND` |
-| `c` / `C` | Comment on the paper's forum with its issues (editable for one paper; SPCs as readers optional), previewed before you type `SEND` |
-| `e` / `E` | Free-form email to reviewers, late reviewers or SPCs, with a `SEND` confirmation |
+| `p` | PDF: for one paper, a dialog with its path and text (`c` shows it in Finder/Explorer, `v` opens it, `y` copies the path); for marked papers, download the missing ones |
+| `u` | Supplementary material: the same, with the zip's file tree |
+| `i` | Run the document checks, downloading what is missing |
+| `m` | Templated email to the SPCs (SPCs tab) or to the papers' people, previewed in full before you type `SEND` |
+| `c` | Comment on each paper's forum with its issues (editable for one paper; SPCs as readers optional), previewed before you type `SEND` |
+| `e` | Free-form email to reviewers, late reviewers or SPCs, previewed before you type `SEND` |
 | `t` | Switch between the Papers, SPCs and History tabs |
 | `s` | Sync with OpenReview |
 | `l` | Legend of all checks |
@@ -207,7 +216,7 @@ retries and waits are logged to the terminal, and `ctrl+c` interrupts.
 
 ## Email
 
-`email` (or `e`/`E`) writes through each paper's OpenReview message invitation, signed as that
+`email` (or `e`) writes through each paper's OpenReview message invitation, signed as that
 paper's Senior Area Chairs. Messages can go to its reviewers, to its late reviewers (assigned,
 no review yet), or to its SPCs. `{{fullname}}` in the body becomes each recipient's name. Before
 anything is sent, you see every recipient group and the full message, and you confirm by typing
@@ -215,7 +224,7 @@ anything is sent, you see every recipient group and the full message, and you co
 
 ### Templates
 
-`outreach` (or `m`/`M`) composes one message per recipient from the current issues. Shipped
+`outreach` (or `m`) composes one message per recipient from the current issues. Shipped
 templates:
 
 | Template | To | About |
@@ -242,7 +251,7 @@ Edit them, or add your own next to them.
 
 ### Comments and history
 
-`comment` (or `c`/`C`) posts an Official_Comment on each paper's forum, signed as its Senior Area
+`comment` (or `c`) posts an Official_Comment on each paper's forum, signed as its Senior Area
 Chairs. Program Chairs and SACs can always read it, and you choose whether its SPCs can too
 (reviewers can't, at this stage). The text comes from
 [`resources/comment.txt`](aamas_review_monitor/resources/comment.txt) with the paper's open issues,
