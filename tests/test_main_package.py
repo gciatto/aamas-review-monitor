@@ -227,6 +227,24 @@ def test_outreach_previews_then_sends_only_after_send(tmp_path, monkeypatch, cap
     assert capsys.readouterr().out.startswith("0 messages")
 
 
+def test_email_previews_then_sends_only_after_send(tmp_path, monkeypatch, capsys):
+    client = cached_cli(tmp_path, monkeypatch)
+    (tmp_path / "body.txt").write_text("Dear {{fullname}}")
+    for answer, sent in [("no", 0), ("SEND", 1)]:
+        monkeypatch.setattr("builtins.input", lambda prompt="", answer=answer: answer)
+        cli.main(
+            ["email", "late-reviewers", "--subject", "Hi", "--body", str(tmp_path / "body.txt")]
+        )
+        out = capsys.readouterr().out
+        assert "=== To late-reviewers of #7 (2), via #7 ===\nSubject: Hi" in out
+        assert len(client.messages) == sent
+    assert out.rstrip().endswith("Sent 1 of 1")
+    cli.main(["email", "spcs", "--subject", "Hi", "--body", str(tmp_path / "body.txt"), "7"])
+    assert client.messages[-1][0][1] == [
+        "ifaamas.org/AAMAS/2027/Conference/Submission7/Area_Chair_9jqi"
+    ]
+
+
 def test_comment_posts_issues_and_history_records_emails_and_comments(
     tmp_path, monkeypatch, capsys
 ):

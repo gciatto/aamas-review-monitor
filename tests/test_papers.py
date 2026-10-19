@@ -44,16 +44,12 @@ def test_metadata_and_reviews_keep_reviewers_anonymous():
     assert "== Official_Review by ~Rev_A1" in papers.reviews(rec, reveal=True)
 
 
-def test_email_needs_typed_confirmation():
-    client = FakeClient()
-    assert papers.email(client, [record()], "spcs", "Hi", "Body", confirm=lambda _: "y") == 0
-    assert client.messages == []
-
-
 def test_email_late_reviewers_through_paper_invitation():
+    from aamas_review_monitor.outreach import direct
+
     client = FakeClient()
-    sent = papers.email(client, [record()], "late-reviewers", "Hi", "Body", lambda _: "SEND")
-    assert sent == 1
+    drafts, unreachable = direct([record()], "late-reviewers", "Hi", "Body")
+    assert unreachable == [] and papers.deliver(client, drafts) == []
     assert client.messages == [
         (
             ("Hi", ["~Rev_B1", "~Rev_C1"], "Body"),

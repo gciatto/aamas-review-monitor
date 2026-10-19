@@ -164,6 +164,23 @@ def compose(
     return drafts, unreachable
 
 
+def direct(
+    records: list[dict], role: str, subject: str, body: str
+) -> tuple[list[Draft], list[str]]:
+    """The same message, written by the user, to `role` of each paper; also the papers with no
+    one to write to."""
+    drafts, unreachable = [], []
+    for record in records:
+        number = record["number"]
+        invitation, parent, members = recipients(record, role)
+        if not members:
+            unreachable.append(f"#{number}: no {role} to write to")
+            continue
+        to = f"{role} of #{number} ({len(members)})"
+        drafts.append(Draft(record, invitation, parent, members, subject, body, to))
+    return drafts, unreachable
+
+
 def preview(drafts: list[Draft], unreachable: list[str]) -> str:
     """Every draft in full, for a confirmation: who, through which paper, subject and body."""
     blocks = [

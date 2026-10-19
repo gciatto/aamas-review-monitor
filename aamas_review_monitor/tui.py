@@ -633,6 +633,26 @@ class Monitor(App):
             "\n".join([*failures, summary]), severity="error" if failures else "information"
         )
 
+    def confirm_then(self, preview: str, label: str, job: Job, total: int, verb: str) -> None:
+        """Shows everything about to go out; runs `job` only after a typed SEND."""
+
+        def go(confirmed: bool | None) -> None:
+            if not confirmed:
+                self.notify(f"Nothing {verb.lower()}")
+                return
+            self.online(label, job, lambda failures: self.sent_notice(failures, total, verb))
+
+        self.push_screen(Confirm(preview), go)
+
+    def send(self, drafts: list[papers.Draft], preview: str, what: str = "") -> None:
+        self.confirm_then(
+            preview,
+            f"Sending {len(drafts)} messages{what}…",
+            lambda client, progress: papers.deliver(client, drafts, progress, core.FILE_HISTORY),
+            len(drafts),
+            "Sent",
+        )
+
     def action_comment(self, every: bool = False) -> None:
         if not (numbers := self.scope(every)):
             return
@@ -654,19 +674,15 @@ class Monitor(App):
                 self.notify("\n".join([*skipped, "Nothing to comment on"]))
                 return
 
-            def post(confirmed: bool | None) -> None:
-                if not confirmed:
-                    self.notify("Nothing posted")
-                    return
-                self.online(
-                    f"Posting {len(found)} comments…",
-                    lambda client, progress: papers.post_comments(
-                        client, found, progress, core.FILE_HISTORY
-                    ),
-                    lambda failures: self.sent_notice(failures, len(found), "Posted"),
-                )
-
-            self.push_screen(Confirm(outreach.preview_comments(found, skipped)), post)
+            self.confirm_then(
+                outreach.preview_comments(found, skipped),
+                f"Posting {len(found)} comments…",
+                lambda client, progress: papers.post_comments(
+                    client, found, progress, core.FILE_HISTORY
+                ),
+                len(found),
+                "Posted",
+            )
 
         scope = f"paper #{numbers[0]}" if len(numbers) == 1 else f"{len(numbers)} papers"
         self.push_screen(CommentForm(scope, text), compose)
@@ -700,19 +716,7 @@ class Monitor(App):
                 self.notify("\n".join([*unreachable, f"Nothing to send with {template.name}"]))
                 return
 
-            def send(confirmed: bool | None) -> None:
-                if not confirmed:
-                    self.notify("Nothing sent")
-                    return
-                self.online(
-                    f"Sending {len(drafts)} messages ({template.name})…",
-                    lambda client, progress: papers.deliver(
-                        client, drafts, progress, core.FILE_HISTORY
-                    ),
-                    lambda failures: self.sent_notice(failures, len(drafts)),
-                )
-
-            self.push_screen(Confirm(outreach.preview(drafts, unreachable)), send)
+            self.send(drafts, outreach.preview(drafts, unreachable), f" ({template.name})")
 
         self.push_screen(Templates(scope or ""), chosen)
 
@@ -953,27 +957,14 @@ class Monitor(App):
             if not form:
                 return
             try:
-                messages = papers.plan(core.records(*numbers), form["role"])
+                drafts, unreachable = outreach.direct(core.records(*numbers), **form)
             except FileNotFoundError as e:
                 self.notify(f"Not cached: {e.filename}. Press s to sync", severity="error")
                 return
-            if not messages:
+            if not drafts:
                 self.notify(f"No {form['role']} to email")
                 return
-
-            def send(confirmed: bool | None) -> None:
-                if not confirmed:
-                    self.notify("Nothing sent")
-                    return
-                self.online(
-                    f"Sending {len(messages)} messages…",
-                    lambda client, progress: papers.send(
-                        client, messages, form["subject"], form["body"], progress, core.FILE_HISTORY
-                    ),
-                    lambda failures: self.sent_notice(failures, len(messages)),
-                )
-
-            self.push_screen(Confirm(papers.describe(messages, **form)), send)
+            self.send(drafts, outreach.preview(drafts, unreachable))
 
         scope = f"paper #{numbers[0]}" if len(numbers) == 1 else f"{len(numbers)} papers"
         self.push_screen(Email(scope), review)

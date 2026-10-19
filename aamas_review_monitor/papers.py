@@ -167,23 +167,6 @@ def recipients(record: dict, role: str) -> tuple[str, str, list[str]]:
     return invitation, prefix + group, members
 
 
-Plan = list[tuple[dict, str, str, list[str]]]  # (record, invitation, parent group, recipients)
-
-
-def plan(records: list[dict], role: str) -> Plan:
-    """One message per paper with someone to email in `role`."""
-    return [(r, *recipients(r, role)) for r in records if recipients(r, role)[2]]
-
-
-def describe(messages: Plan, role: str, subject: str, body: str) -> str:
-    numbers = ", ".join(f"#{m[0]['number']}" for m in messages)
-    total = sum(len(m[3]) for m in messages)
-    return (
-        f"To: {role} of papers {numbers}\n({len(messages)} messages, {total} recipients)\n"
-        f"Subject: {subject}\n\n{body}"
-    )
-
-
 class Draft(NamedTuple):
     """One message, fully composed: sent through `record`'s message `invitation`."""
 
@@ -321,42 +304,3 @@ def post_comments(
             logger.error("#%s: comment not posted: %s", number, e)
             record_history(history_file, entry | {"status": f"failed: {e}"})
     return failures
-
-
-def send(
-    client: Any,
-    messages: Plan,
-    subject: str,
-    body: str,
-    progress: Callable[[int, int], None] | None = None,
-    history_file: Path | None = None,
-) -> list[str]:
-    """The same message to each paper's recipients; returns the failures."""
-    drafts = [
-        Draft(r, invitation, parent, members, subject, body, f"#{r['number']}")
-        for r, invitation, parent, members in messages
-    ]
-    return deliver(client, drafts, progress, history_file)
-
-
-def email(
-    client: Any,
-    records: list[dict],
-    role: str,
-    subject: str,
-    body: str,
-    confirm: Callable[[str], str] | None = None,
-    history_file: Path | None = None,
-) -> int:
-    """Sends one message per paper to `role`, only after the user types SEND. Returns how many."""
-    messages = plan(records, role)
-    if not messages:
-        print(f"No {role} to email")
-        return 0
-    print(describe(messages, role, subject, body) + "\n")
-    if (confirm or input)(f"Type SEND to send {len(messages)} messages: ").strip() != "SEND":
-        print("Nothing sent")
-        return 0
-    failures = send(client, messages, subject, body, history_file=history_file)
-    print("\n".join([*failures, f"Sent {len(messages) - len(failures)} of {len(messages)}"]))
-    return len(messages) - len(failures)

@@ -189,12 +189,7 @@ def main(argv: list[str] | None = None) -> None:
             set(args.spc) if args.spc else None,
             set(args.numbers) if args.numbers else None,
         )
-        print(outreach.preview(drafts, unreachable))
-        if drafts and input(f"Type SEND to send {len(drafts)} messages: ").strip() == "SEND":
-            failures = papers.deliver(core.login(config), drafts, history_file=core.FILE_HISTORY)
-            print("\n".join([*failures, f"Sent {len(drafts) - len(failures)} of {len(drafts)}"]))
-        else:
-            print("Nothing sent")
+        send(config, drafts, outreach.preview(drafts, unreachable))
     elif args.command == "comment":
         state = core.current(config)
         if state.latest is None:
@@ -206,8 +201,8 @@ def main(argv: list[str] | None = None) -> None:
         if args.text:
             text = args.text.read_text(encoding="utf-8")
             to_post = [c._replace(text=text) for c in to_post]
-        print(outreach.preview_comments(to_post, skipped))
-        if to_post and input(f"Type SEND to post {len(to_post)} comments: ").strip() == "SEND":
+        preview = outreach.preview_comments(to_post, skipped)
+        if confirmed(preview, len(to_post), f"post {len(to_post)} comments"):
             failures = papers.post_comments(
                 core.login(config), to_post, history_file=core.FILE_HISTORY
             )
@@ -237,16 +232,27 @@ def main(argv: list[str] | None = None) -> None:
             else "Nothing sent from the app yet"
         )
     elif args.command == "email":
-        records = load_records(*args.numbers)
         body = args.body.read_text(encoding="utf-8")
-        papers.email(
-            core.login(config),
-            records,
-            args.role,
-            args.subject,
-            body,
-            history_file=core.FILE_HISTORY,
+        drafts, unreachable = outreach.direct(
+            load_records(*args.numbers), args.role, args.subject, body
         )
+        send(config, drafts, outreach.preview(drafts, unreachable))
+
+
+def confirmed(preview: str, count: int, what: str) -> bool:
+    """Shows everything about to go out; True only if there is something and the user types
+    SEND."""
+    print(preview)
+    return count > 0 and input(f"Type SEND to {what}: ").strip() == "SEND"
+
+
+def send(config: dict, drafts: list[papers.Draft], preview: str) -> None:
+    """Sends the drafts after a typed SEND, recording them in the history."""
+    if confirmed(preview, len(drafts), f"send {len(drafts)} messages"):
+        failures = papers.deliver(core.login(config), drafts, history_file=core.FILE_HISTORY)
+        print("\n".join([*failures, f"Sent {len(drafts) - len(failures)} of {len(drafts)}"]))
+    else:
+        print("Nothing sent")
 
 
 def document_lines(number: int, config: dict) -> list[str]:

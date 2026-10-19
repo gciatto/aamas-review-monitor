@@ -147,7 +147,7 @@ def test_tui_email_sends_only_after_typing_send(tmp_path, monkeypatch):
                 app.screen.query_one("#body").load_text("Dear {{fullname}}")
                 await pilot.click("#send")
                 assert isinstance(app.screen, Confirm)
-                assert "late-reviewers of papers #7" in str(app.screen.summary)
+                assert "=== To late-reviewers of #7 (2), via #7 ===" in app.screen.summary
                 app.screen.query_one("#confirm").value = answer
                 await pilot.click("#confirm-send")
                 if sent:
