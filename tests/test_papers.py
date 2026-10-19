@@ -1,4 +1,5 @@
 import copy
+from pathlib import Path
 
 from aamas_review_monitor import papers
 from aamas_review_monitor.collector import fetch
@@ -61,3 +62,17 @@ def test_email_late_reviewers_through_paper_invitation():
             },
         )
     ]
+
+
+def test_pdf_text_is_converted_once(tmp_path, monkeypatch):
+    calls = []
+
+    def pdftotext(command, check):
+        calls.append(command)
+        Path(command[-1]).write_text("text")
+
+    monkeypatch.setattr(papers.shutil, "which", lambda name: "/bin/pdftotext")
+    monkeypatch.setattr(papers.subprocess, "run", pdftotext)
+    pdf = tmp_path / "pdf_v1.pdf"
+    assert papers.pdf_text(pdf) == papers.pdf_text(pdf) == "text"
+    assert calls == [["/bin/pdftotext", "-enc", "UTF-8", "-q", str(pdf), str(pdf) + ".txt"]]

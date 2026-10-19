@@ -4,6 +4,8 @@ Layout: `<dir>/<number>/record.json` plus downloaded attachments next to it.
 """
 
 import json
+import shutil
+import subprocess
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -81,18 +83,41 @@ def reviews(record: dict, reveal: bool = False) -> str:
     return "\n\n".join(text) or f"#{record['number']}: no reviews yet"
 
 
+def attachment(record: dict, field: str, directory: Path) -> Path | None:
+    """Where the current version of an attachment is cached; None if the paper has none."""
+    value = record["content"].get(field, {}).get("value")
+    # ponytail: OpenReview attachment paths change with each upload, so the name is the version
+    return (
+        directory / str(record["number"]) / f"{field}_{PurePosixPath(value).name}"
+        if value
+        else None
+    )
+
+
 def download(client: Any, record: dict, field: str, directory: Path) -> Path | None:
     """Downloads an attachment unless the cached copy is current; None if the paper has none."""
-    value = record["content"].get(field, {}).get("value")
-    if not value:
-        return None
-    # ponytail: OpenReview attachment paths change with each upload, so the name is the version
-    target = directory / str(record["number"]) / f"{field}_{PurePosixPath(value).name}"
-    if not target.is_file():
-        for old in target.parent.glob(f"{field}_*"):
+    target = attachment(record, field, directory)
+    if target and not target.is_file():
+        for old in target.parent.glob(f"{field}_*"):  # older versions and their extracted text
             old.unlink()
         _write(target, client.get_attachment(field, id=record["id"]))
     return target
+
+
+def pdf_text(pdf: Path) -> str:
+    """Text of a PDF via xpdf's pdftotext, cached next to it.
+
+    pdftotext's default mode follows reading order, so two-column pages (as in AAMAS) come out
+    one column after the other; `-layout` would interleave the columns line by line.
+    """
+    text = pdf.with_name(pdf.name + ".txt")
+    if not text.is_file():
+        tool = shutil.which("pdftotext")
+        if not tool:
+            raise FileNotFoundError("pdftotext not found: install xpdf (`brew install xpdf`)")
+        subprocess.run([tool, "-enc", "UTF-8", "-q", str(pdf), str(text)], check=True)
+        text.chmod(0o600)
+    return text.read_text(encoding="utf-8", errors="replace")
 
 
 def recipients(record: dict, role: str) -> tuple[str, str, list[str]]:

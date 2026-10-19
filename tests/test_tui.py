@@ -1,8 +1,12 @@
 import asyncio
 import json
+import zipfile
+
+from textual.widgets import Static, Tree
 
 from aamas_review_monitor import __main__ as cli
-from aamas_review_monitor.tui import Monitor, Paper
+from aamas_review_monitor import tui
+from aamas_review_monitor.tui import Attachment, Monitor, Paper
 from tests.test_checks import CONFIG, paper
 
 
@@ -22,7 +26,7 @@ def test_tui_lists_and_filters_issues(tmp_path, monkeypatch):
             assert table.row_count == 5  # no SPC on #1, three short reviews on #2, #3 GREEN
             await pilot.press("g")
             assert table.row_count == 4
-            await pilot.press("g", "slash", *"no spc", "enter")
+            await pilot.press("g", "f", *"no spc", "enter")
             assert table.row_count == 1
             await pilot.press("o")
             assert opened == ["https://openreview.net/forum?id=p1"]
@@ -61,15 +65,43 @@ def cached_monitor(tmp_path, monkeypatch, answer="SEND"):
     return Monitor(config), client, opened
 
 
-def test_tui_downloads_and_opens_the_pdf(tmp_path, monkeypatch):
-    app, client, opened = cached_monitor(tmp_path, monkeypatch)
+def test_tui_downloads_once_then_shows_the_pdf(tmp_path, monkeypatch):
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    launched: list[list[str]] = []
+    monkeypatch.setattr(tui.subprocess, "Popen", lambda command, **kw: launched.append(command))
+    monkeypatch.setattr(tui.papers, "pdf_text", lambda path: "left column\nright column")
 
     async def scenario():
         async with app.run_test() as pilot:
             await pilot.press("p")
-            await pilot.press("U")  # paper 7 has no supplementary material
+            assert isinstance(app.screen, Attachment)
+            path = str(app.screen.path)
+            assert path.endswith("/papers/7/pdf_v1.pdf")
+            assert "right column" in str(app.screen.query_one("#text", Static).render())
+            await pilot.press("c", "v", "escape", "p")  # second time: cached, no download
+            assert isinstance(app.screen, Attachment)
+            assert len(launched) == 2 and launched[1][-1] == path  # reveal, then default viewer
         assert client.downloads == [("pdf", "abc")]
-        assert len(opened) == 1 and opened[0].endswith("/papers/7/pdf_v1.pdf")
+
+    asyncio.run(scenario())
+
+
+def test_tui_shows_the_tree_of_a_zip(tmp_path, monkeypatch):
+    app, _, _ = cached_monitor(tmp_path, monkeypatch)
+    record = tmp_path / "papers" / "7" / "record.json"
+    data = json.loads(record.read_text())
+    data["content"]["supplementary_material"] = {"value": "/attachment/s1.zip"}
+    record.write_text(json.dumps(data))
+    with zipfile.ZipFile(record.parent / "supplementary_material_s1.zip", "w") as archive:
+        archive.writestr("code/main.py", "print()")
+        archive.writestr("README.md", "hi")
+
+    async def scenario():
+        async with app.run_test() as pilot:
+            await pilot.press("u")
+            root = app.screen.query_one("#tree", Tree).root
+            assert [str(n.label).split()[0] for n in root.children] == ["code", "README.md"]
+            assert str(root.children[0].children[0].label).startswith("main.py")
 
     asyncio.run(scenario())
 
