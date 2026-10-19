@@ -6,6 +6,8 @@ Layout: `<dir>/<number>/record.json` plus downloaded attachments next to it.
 import json
 import shutil
 import subprocess
+import sys
+import zipfile
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -119,6 +121,35 @@ def pdf_text(pdf: Path) -> str:
         subprocess.run([tool, "-enc", "UTF-8", "-q", str(pdf), str(text)], check=True)
         text.chmod(0o600)
     return text.read_text(encoding="utf-8", errors="replace")
+
+
+def os_open(path: Path, reveal: bool = False) -> None:
+    """Opens a file with its default app or, with `reveal`, shows it in Finder/Explorer."""
+    if sys.platform == "darwin":
+        command = ["open", "-R", str(path)] if reveal else ["open", str(path)]
+    elif sys.platform == "win32":
+        command = (
+            ["explorer", f"/select,{path}"] if reveal else ["cmd", "/c", "start", "", str(path)]
+        )
+    else:  # file managers cannot portably select a file: open its folder
+        command = ["xdg-open", str(path.parent if reveal else path)]
+    subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def zip_entries(path: Path) -> list[zipfile.ZipInfo]:
+    """The entries of a zip file, capped for huge archives."""
+    with zipfile.ZipFile(path) as archive:
+        return archive.infolist()[:5000]
+
+
+def contents(path: Path) -> str:
+    """A PDF's text, a zip's file list, or why neither can be shown."""
+    if path.suffix.lower() == ".pdf":
+        return pdf_text(path)
+    if path.suffix.lower() == ".zip":
+        files = [e for e in zip_entries(path) if not e.is_dir()]
+        return "\n".join(f"{e.filename}  ({e.file_size:,} bytes)" for e in files)
+    return f"No preview for {path.suffix} files"
 
 
 def recipients(record: dict, role: str) -> tuple[str, str, list[str]]:

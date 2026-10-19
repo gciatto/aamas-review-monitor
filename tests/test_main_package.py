@@ -100,3 +100,62 @@ def test_retry_policy_comes_from_config_and_command_line(tmp_path, monkeypatch, 
         120,
     )
     assert capsys.readouterr().out == "[1/1] #7: failed (still down after the retries)\n"
+
+
+def cached_cli(tmp_path, monkeypatch):
+    """The CLI over one cached synthetic paper (#7), with a fake client."""
+    from aamas_review_monitor import papers
+    from aamas_review_monitor.collector import fetch, snapshot
+    from tests.test_collector import FakeClient
+
+    config, client = cli.load_config(), FakeClient()
+    monkeypatch.setattr(cli, "DIR_PAPERS", tmp_path / "papers")
+    monkeypatch.setattr(cli, "DIR_SNAPSHOTS", tmp_path / "snapshots")
+    monkeypatch.setattr(cli, "login", lambda config: client)
+    records = fetch(client, config)
+    papers.save(records, cli.DIR_PAPERS, [])
+    cli.DIR_SNAPSHOTS.mkdir()
+    snap = snapshot(records, config) | {"taken_at": "2026-10-19T08:00:00"}
+    (cli.DIR_SNAPSHOTS / "a.json").write_text(json.dumps(snap))
+    return client
+
+
+def test_report_filters_and_lists_green_papers(tmp_path, monkeypatch, capsys):
+    cached_cli(tmp_path, monkeypatch)
+    cli.main(["report", "--filter", "ratings"])
+    out = capsys.readouterr().out
+    assert "ratings [3, 6]" in out and "review of 1 words" not in out
+    cli.main(
+        ["report", "--filter", "nothing like this", "--green", "--csv", str(tmp_path / "x.csv")]
+    )
+    assert "#7" not in capsys.readouterr().out
+    assert (tmp_path / "x.csv").read_text().count("\n") == 1  # header only
+
+
+def test_browse_and_attachment(tmp_path, monkeypatch, capsys):
+    import zipfile
+
+    from aamas_review_monitor import papers
+
+    client = cached_cli(tmp_path, monkeypatch)
+    opened: list[str] = []
+    monkeypatch.setattr("webbrowser.open", opened.append)
+    cli.main(["browse", "7"])
+    assert opened == ["https://openreview.net/forum?id=abc"]
+
+    launched: list[list[str]] = []
+    monkeypatch.setattr(papers.subprocess, "Popen", lambda command, **kw: launched.append(command))
+    monkeypatch.setattr(papers, "pdf_text", lambda pdf: "left column\nright column")
+    cli.main(["attachment", "7", "--contents", "--open", "--reveal"])
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].endswith("papers/7/pdf_v1.pdf") and out[1:] == ["left column", "right column"]
+    assert client.downloads == [("pdf", "abc")] and len(launched) == 2
+
+    record = cli.DIR_PAPERS / "7" / "record.json"
+    data = json.loads(record.read_text())
+    data["content"]["supplementary_material"] = {"value": "/attachment/s1.zip"}
+    record.write_text(json.dumps(data))
+    with zipfile.ZipFile(record.parent / "supplementary_material_s1.zip", "w") as archive:
+        archive.writestr("code/main.py", "print()")
+    cli.main(["attachment", "7", "--supplementary", "--contents"])
+    assert capsys.readouterr().out.splitlines()[1] == "code/main.py  (7 bytes)"

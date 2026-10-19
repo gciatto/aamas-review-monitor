@@ -439,8 +439,37 @@ def check(snapshot: dict, config: dict) -> list[Issue]:
     return sorted(issues, key=lambda i: (i.severity != RED, i.number, i.code))
 
 
-def report(snapshot: dict, config: dict, previous: dict | None = None) -> str:
-    issues = check(snapshot, config)
+def green_rows(snapshot: dict, issues: list[Issue]) -> list[Issue]:
+    """One GREEN pseudo-issue per paper without issues, so listings can show every paper."""
+    flagged = {i.number for i in issues}
+    return [
+        Issue(p["number"], GREEN, "ok", "all checks pass", p["url"], tuple(p["spcs"]))
+        for p in snapshot["papers"]
+        if p["number"] not in flagged
+    ]
+
+
+def matches(issue: Issue, needle: str) -> bool:
+    """The filter of the CLI and the TUI: a case-insensitive substring of severity, paper
+    number ("#7"), SPCs or message."""
+    spcs = ", ".join(issue.spcs) or "(no SPC)"
+    return needle.lower() in f"{issue.severity} #{issue.number} {spcs} {issue.message}".lower()
+
+
+def report(
+    snapshot: dict,
+    config: dict,
+    previous: dict | None = None,
+    extra: list[Issue] | None = None,
+    needle: str = "",
+    green: bool = False,
+) -> str:
+    """Summary, changes since `previous`, and issues grouped by SPC. `extra` issues (document
+    checks) count in the summary but not in the history diff; `needle` filters the listing,
+    `green` adds a row for each paper without issues."""
+    issues = sorted(
+        check(snapshot, config) + (extra or []), key=lambda i: (i.severity != RED, i.number, i.code)
+    )
     status = {p["number"]: GREEN for p in snapshot["papers"]}
     for i in issues:
         status[i.number] = RED if RED in (status[i.number], i.severity) else YELLOW
@@ -449,7 +478,7 @@ def report(snapshot: dict, config: dict, previous: dict | None = None) -> str:
 
     resolved: dict[str, int] = defaultdict(int)
     if previous:
-        now = {(i.number, i.code) for i in issues}
+        now = {(i.number, i.code) for i in check(snapshot, config)}
         before = check(previous, config)
         for i in before:
             if (i.number, i.code) not in now:
@@ -462,12 +491,14 @@ def report(snapshot: dict, config: dict, previous: dict | None = None) -> str:
         )
 
     by_spc: dict[str, list[Issue]] = defaultdict(list)
-    for i in issues:
-        for spc in i.spcs or ("(no SPC)",):
-            by_spc[spc].append(i)
+    for i in issues + (green_rows(snapshot, issues) if green else []):
+        if matches(i, needle):
+            for spc in i.spcs or ("(no SPC)",):
+                by_spc[spc].append(i)
     for spc, mine in sorted(by_spc.items(), key=lambda kv: -sum(i.severity == RED for i in kv[1])):
         reds = sum(i.severity == RED for i in mine)
-        lines.append(f"\n{spc}: {len(mine)} open ({reds} RED), {resolved[spc]} resolved since")
+        open_ = sum(i.severity != GREEN for i in mine)
+        lines.append(f"\n{spc}: {open_} open ({reds} RED), {resolved[spc]} resolved since")
         lines += [f"  {i.severity:6} #{i.number:<5} {i.message}  {i.url}" for i in mine]
     return "\n".join(lines)
 

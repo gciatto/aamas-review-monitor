@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from aamas_review_monitor import papers
-from aamas_review_monitor.checks import RED, YELLOW, Finding, registrar, run
+from aamas_review_monitor.checks import RED, YELLOW, Finding, Issue, registrar, run
 
 FILE_INSPECTION = "inspection.json"
 HEADING_REFERENCES = re.compile(r"^\s*(References|REFERENCES|Bibliography)\s*$", re.M)
@@ -367,3 +367,19 @@ def downloaded(record: dict, config: dict, directory: Path) -> bool:
         for k in ("field_pdf", "field_supplementary")
     ]
     return all(f is None or f.is_file() for f in files)
+
+
+def snapshot_issues(snapshot: dict, config: dict, directory: Path) -> tuple[list[Issue], set[int]]:
+    """Cached document check results of the snapshot's papers (current attachments only), and
+    the numbers of the papers they cover."""
+    found, inspected, by_number = [], set(), {p["number"]: p for p in snapshot["papers"]}
+    for record in papers.load(directory) if directory.is_dir() else []:
+        paper, results = by_number.get(record["number"]), inspection(record, config, directory)
+        if paper is None or results is None:
+            continue
+        inspected.add(paper["number"])
+        spcs = tuple(paper["spcs"])
+        found += [
+            Issue(paper["number"], f.severity, c, f.message, paper["url"], spcs) for c, f in results
+        ]
+    return found, inspected

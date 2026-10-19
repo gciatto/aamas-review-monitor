@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import textwrap
+import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -15,7 +16,16 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from aamas_review_monitor import documents, papers
-from aamas_review_monitor.checks import Issue, check, legend, passed, report, write_csv
+from aamas_review_monitor.checks import (
+    Issue,
+    check,
+    green_rows,
+    legend,
+    matches,
+    passed,
+    report,
+    write_csv,
+)
 from aamas_review_monitor.collector import fetch, snapshot
 from aamas_review_monitor.resources import FILE_CONFIG
 
@@ -123,6 +133,18 @@ def main(argv: list[str] | None = None) -> None:
     commands.add_parser("sync", help="fetch papers and a new snapshot from OpenReview (read-only)")
     report_cmd = commands.add_parser("report", help="action queue from the latest snapshot")
     report_cmd.add_argument("--csv", type=Path, help="also write the issues to this CSV file")
+    report_cmd.add_argument("--filter", default="", help="only issues matching (SPC, #N, text)")
+    report_cmd.add_argument("--green", action="store_true", help="also list papers without issues")
+    browse_cmd = commands.add_parser("browse", help="open a paper on OpenReview in the browser")
+    attachment_cmd = commands.add_parser(
+        "attachment", help="a paper's PDF or supplementary: path, contents, open (downloads it)"
+    )
+    attachment_cmd.add_argument("--supplementary", action="store_true", help="instead of the PDF")
+    attachment_cmd.add_argument(
+        "--contents", action="store_true", help="print PDF text or zip files"
+    )
+    attachment_cmd.add_argument("--open", action="store_true", help="open with the default app")
+    attachment_cmd.add_argument("--reveal", action="store_true", help="show in Finder/Explorer")
     commands.add_parser("tui", help="interactive terminal UI over the latest snapshot")
     commands.add_parser("legend", help="what each check verifies, with current thresholds")
     inspect_cmd = commands.add_parser("inspect", help="document checks of PDFs (downloads them)")
@@ -130,7 +152,7 @@ def main(argv: list[str] | None = None) -> None:
     issues_cmd = commands.add_parser("issues", help="issues of a paper")
     reviews_cmd = commands.add_parser("reviews", help="reviews and meta-reviews of a paper")
     reviews_cmd.add_argument("--reveal", action="store_true", help="show reviewer identities")
-    for cmd in (show_cmd, issues_cmd, reviews_cmd):
+    for cmd in (show_cmd, issues_cmd, reviews_cmd, browse_cmd, attachment_cmd):
         cmd.add_argument("number", type=int)
     download_cmd = commands.add_parser("download", help="download PDFs (cached)")
     download_cmd.add_argument("--supplementary", action="store_true", help="supplementary instead")
@@ -171,10 +193,13 @@ def main(argv: list[str] | None = None) -> None:
         if latest is None:
             sys.exit(f"No snapshots in {DIR_SNAPSHOTS}: run `sync` first")
         if args.command == "report":
-            print(report(latest, config, previous))
+            extra, _ = documents.snapshot_issues(latest, config, DIR_PAPERS)
+            print(report(latest, config, previous, extra, args.filter, args.green))
             if args.csv:
+                issues = check(latest, config) + extra
+                issues += green_rows(latest, issues) if args.green else []
                 with args.csv.open("w", newline="", encoding="utf-8") as file:
-                    write_csv(check(latest, config), file)
+                    write_csv([i for i in issues if matches(i, args.filter)], file)
             return
         if args.command == "show":
             print(papers.metadata(load_records(args.number)[0], config) + "\n")
@@ -197,6 +222,23 @@ def main(argv: list[str] | None = None) -> None:
                 continue
             print(f"#{record['number']}: {len(found) or 'no'} document issues")
             print("\n".join(f"  {f.severity:6} {f.message}" for _, f in found))
+    elif args.command == "browse":
+        webbrowser.open(config["url_forum"] + load_records(args.number)[0]["id"])
+    elif args.command == "attachment":
+        (record,) = load_records(args.number)
+        field = config["field_supplementary" if args.supplementary else "field_pdf"]
+        path = papers.attachment(record, field, DIR_PAPERS)
+        if path is None:
+            sys.exit(f"#{args.number} has no {field}")
+        if not path.is_file():
+            papers.download(login(config), record, field, DIR_PAPERS)
+        print(path)
+        if args.contents:
+            print(papers.contents(path))
+        if args.open:
+            papers.os_open(path)
+        if args.reveal:
+            papers.os_open(path, reveal=True)
     elif args.command == "reviews":
         print(papers.reviews(load_records(args.number)[0], args.reveal))
     elif args.command == "download":
