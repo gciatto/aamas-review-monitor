@@ -1,3 +1,13 @@
+## [1.1.0](https://github.com/gciatto/aamas-review-monitor/compare/1.0.0...1.1.0) (2026-10-19)
+
+### Features
+
+* job log and interrupt in the TUI progress dialog ([b5925d2](https://github.com/gciatto/aamas-review-monitor/commit/b5925d2c6d512ade0925b228e80c53ccedde72b8))
+
+### Documentation
+
+* describe the job log and interrupting jobs ([1e7514d](https://github.com/gciatto/aamas-review-monitor/commit/1e7514d6ed36fd479af585d0d851513a5d2a0e09))
+
 ## 1.0.0 (2026-10-19)
 
 ### Features
