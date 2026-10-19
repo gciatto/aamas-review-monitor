@@ -1,3 +1,67 @@
+## 1.0.0 (2026-10-19)
+
+### Features
+
+* add deterministic review-process checks and SPC-grouped report ([6b3a9ab](https://github.com/gciatto/aamas-review-monitor/commit/6b3a9ab6d95d59751710d8e6f436f4cdb269ccd4))
+* add paper detail screen to the TUI ([0829a9d](https://github.com/gciatto/aamas-review-monitor/commit/0829a9dba4b5898cd8ad20be90776b2b95684089))
+* add read-only OpenReview collector of process metadata ([0114fc0](https://github.com/gciatto/aamas-review-monitor/commit/0114fc0fe84f186de4eeb1b36e70c7b7de7c46b1))
+* add sync and report commands with local snapshots ([fa613e5](https://github.com/gciatto/aamas-review-monitor/commit/fa613e5ad6c29ab7f81a70f2fde9342541ab2b7a))
+* add Textual TUI over the latest snapshot ([9db0db5](https://github.com/gciatto/aamas-review-monitor/commit/9db0db55a6f771520895964f672a3d615599eb0e))
+* attachment dialog with path, OS actions, zip tree and cached PDF text ([674e9be](https://github.com/gciatto/aamas-review-monitor/commit/674e9bef54ba9e6987211e0c0ea1b846f8875c20))
+* cache paper records and add show, issues, reviews, download and email commands ([ea2862c](https://github.com/gciatto/aamas-review-monitor/commit/ea2862c3682fa8d03f4a035691fe6a37041b34d7))
+* CLI parity with the TUI: report --filter/--green, browse, attachment ([c794466](https://github.com/gciatto/aamas-review-monitor/commit/c79446645fbca32ff2765a6aaac09bf582e84824))
+* configurable exponential backoff for OpenReview reads; bulk downloads survive failures ([09e5a6b](https://github.com/gciatto/aamas-review-monitor/commit/09e5a6b5734a884a0b65b67ccd0665ac611869cb))
+* download, email, GREEN rows and colored details in the TUI ([c8018c5](https://github.com/gciatto/aamas-review-monitor/commit/c8018c52844b8b452cac8f6c02e804df506e748b))
+* every TUI action in the command palette ([8ed971c](https://github.com/gciatto/aamas-review-monitor/commit/8ed971cac0463b625a90e2798a2e70973f1165ce))
+* flag meta-review recommendations at odds with how the ratings rank ([f9c44b5](https://github.com/gciatto/aamas-review-monitor/commit/f9c44b5bb74fd07ae47f6f89b4ff5c6fd6650918))
+* legend command and TUI legend dialog generated from check docstrings ([926bc3f](https://github.com/gciatto/aamas-review-monitor/commit/926bc3fa7c4a4e57ee2ab3d68e1b7eea086e94fd))
+* list the checks each paper passes ([b64886d](https://github.com/gciatto/aamas-review-monitor/commit/b64886d0fb5591648674dbd234f739a555a3698d))
+* more paper checks: milestones, late reviewers, recycled reviews, discussion, acknowledgements, SPC activity, meta-reviews ([7de5166](https://github.com/gciatto/aamas-review-monitor/commit/7de51665271b8bab636375125d2b43886f22e20b))
+* on-request document checks of PDFs and supplementary material ([3f4f710](https://github.com/gciatto/aamas-review-monitor/commit/3f4f710b11c5dc59711f560269b1b1147a98b045))
+* reuse the OpenReview session token across syncs ([2b1f3bd](https://github.com/gciatto/aamas-review-monitor/commit/2b1f3bdcbe71766af72421f5fecf620cdac3d83c))
+* show bulk keys in the TUI footer next to their single-paper actions ([08a8a5d](https://github.com/gciatto/aamas-review-monitor/commit/08a8a5d77e9d6ba27acd274f22dc9c1ddceb140f))
+* TUI icons and background jobs with progress, sign-in and SEND dialogs ([5557e1b](https://github.com/gciatto/aamas-review-monitor/commit/5557e1b1f32034a6588c33f2a59d1c05d00ecd8c))
+
+### Bug Fixes
+
+* legend shows milestones and similarity as percentages ([c95cc18](https://github.com/gciatto/aamas-review-monitor/commit/c95cc1811e18560c8e70b95db2b43d18af22cc8d))
+* read pdffonts columns by header, so poppler-utils works like xpdf ([6a2eec8](https://github.com/gciatto/aamas-review-monitor/commit/6a2eec867d870ee94f22852ba62d0b917987cad0))
+* read ratings from the AAMAS rating_proceedings field ([b7d2f2c](https://github.com/gciatto/aamas-review-monitor/commit/b7d2f2c1b6ab4c5da4d06c919bece6ac0f2e31e3))
+* table actions no longer crash the TUI from the details screen ([75b3f13](https://github.com/gciatto/aamas-review-monitor/commit/75b3f139299505adfc3c61a2150f60849f6ceaaf))
+
+### Documentation
+
+* describe retries and backoff options ([b098289](https://github.com/gciatto/aamas-review-monitor/commit/b0982897246cec6f2b9886b458e92df2186b2aef))
+* describe the attachment dialog and the f filter key ([46287ec](https://github.com/gciatto/aamas-review-monitor/commit/46287ec170be09f3d08016f07a00af9bd17e731a))
+* describe the new TUI keys ([3d8eaf6](https://github.com/gciatto/aamas-review-monitor/commit/3d8eaf6294085352c495927452d83529d6d07666))
+* describe the paper and document checks ([e687359](https://github.com/gciatto/aamas-review-monitor/commit/e687359f1dc67add39514d6cdfa6e136fcffa5e4))
+* describe the TUI and its key bindings ([bbd3bd1](https://github.com/gciatto/aamas-review-monitor/commit/bbd3bd1b4ecc19e029d998051275e6cc6272e3c7))
+* describe TUI icons, background jobs and dialogs ([059bb2c](https://github.com/gciatto/aamas-review-monitor/commit/059bb2c06b6c8f854ef8134065c44b32d9d7bfa9))
+* document paper commands, cache and email safeguards ([7955cbc](https://github.com/gciatto/aamas-review-monitor/commit/7955cbc9969b40d25c2872df949a109987ca0aca))
+* document the paper check convention and the legend ([a67c2e3](https://github.com/gciatto/aamas-review-monitor/commit/a67c2e3623b8a72a7e290ac0f03209c2cf0faab6))
+* document usage, configuration and confidentiality boundaries ([1714f64](https://github.com/gciatto/aamas-review-monitor/commit/1714f64742489f69884ed50c837ca59c201bc496))
+* point to the renamed aamas-review-monitor repository ([b340372](https://github.com/gciatto/aamas-review-monitor/commit/b340372904b152f539939f0814ab2732b1b7a45d))
+* rewrite the README around features, checks and installation ([113d0f7](https://github.com/gciatto/aamas-review-monitor/commit/113d0f79a61feebd13a86cc3fec4f33392e52cdc))
+
+### Tests
+
+* block real OpenReview clients in every test ([7c1a7f2](https://github.com/gciatto/aamas-review-monitor/commit/7c1a7f2c75f62a41d039ec783b8632ee89da8ff6))
+* fix Windows failures: OS-independent paths, wait for jobs started by dialog callbacks ([c074e9c](https://github.com/gciatto/aamas-review-monitor/commit/c074e9cb7451b0acfabe011228f9231306eeaedc))
+* inspect downloads missing PDFs and supplementary zips, single and bulk ([9df1a8c](https://github.com/gciatto/aamas-review-monitor/commit/9df1a8ca4f6be97e216e9fcfc3910c847845fd54))
+* make TUI attachment path assertion portable ([30dfbcb](https://github.com/gciatto/aamas-review-monitor/commit/30dfbcbf4818815ebab5415a4cad8226219f62d3))
+
+### Build and continuous integration
+
+* fall back to the workflow's own token when RELEASE_TOKEN is unset or empty ([0836f4e](https://github.com/gciatto/aamas-review-monitor/commit/0836f4eeca83dac5e44dbe88181e697ed003d86e))
+* release to GitHub only and keep wheels as workflow artifacts ([dc255dd](https://github.com/gciatto/aamas-review-monitor/commit/dc255dde4185fa2f84b4dfde0fc537996d40bdf8))
+
+### Refactoring
+
+* expose paper metadata and reviews as structured fields ([1b04364](https://github.com/gciatto/aamas-review-monitor/commit/1b04364a71476c5f9fc938d858c077cf89a0b361))
+* one documented function per paper check ([85fd214](https://github.com/gciatto/aamas-review-monitor/commit/85fd2148c36fd94d889fc9c61565eb13c1d62fb7))
+* rename project to aamas-review-monitor ([71ca653](https://github.com/gciatto/aamas-review-monitor/commit/71ca6530a8605c36a02d89c91dcb815cfe29cfe4))
+* separate token resume from login, report sync progress, split email into plan and send ([207cd89](https://github.com/gciatto/aamas-review-monitor/commit/207cd897620d8c00aa6f8d3f28d5a322d6a87f9b))
+
 ## [1.0.2](https://github.com/gciatto/aamas-review-monitor/compare/1.0.1...1.0.2) (2026-10-17)
 
 ### Bug Fixes
