@@ -40,34 +40,45 @@ def load(directory: Path, numbers: list[int] | None = None) -> list[dict]:
     return [json.loads(f.read_text(encoding="utf-8")) for f in files]
 
 
-def _fields(content: dict, skip: tuple[str, ...] = ()) -> list[str]:
-    lines = []
+def fields(content: dict, skip: tuple[str, ...] = ()) -> list[tuple[str, str]]:
+    """Non-empty (key, value) pairs of a note's content, lists joined by commas."""
+    pairs = []
     for key, field in content.items():
         value = field.get("value") if isinstance(field, dict) else None
         if key in skip or value in (None, "", []):
             continue
-        value = ", ".join(map(str, value)) if isinstance(value, list) else str(value)
-        lines.append(f"{key}: {value}")
-    return lines
+        pairs.append((key, ", ".join(map(str, value)) if isinstance(value, list) else str(value)))
+    return pairs
 
 
-def metadata(record: dict, config: dict) -> str:
-    skip = (config["field_pdf"], config["field_supplementary"])
-    head = f"#{record['number']}  {config['url_forum']}{record['id']}"
-    return "\n".join([head, *_fields(record["content"], skip)])
+def metadata_fields(record: dict, config: dict) -> list[tuple[str, str]]:
+    return fields(record["content"], (config["field_pdf"], config["field_supplementary"]))
 
 
-def reviews(record: dict, reveal: bool = False) -> str:
-    """Reviews and meta-reviews; reviewers stay anonymous unless `reveal` is set."""
+def review_blocks(record: dict, reveal: bool = False) -> list[tuple[str, list[tuple[str, str]]]]:
+    """(title, fields) of each review and meta-review; reviewers stay anonymous unless `reveal`."""
     blocks = []
     for kind in ("review", "meta_review"):
         for reply in replies(record, kind):
             signature = reply["signatures"][0]
             who = person(record, signature) if reveal else signature.removeprefix(record["prefix"])
-            blocks.append(
-                "\n".join([f"== {record['names'][kind]} by {who}", *_fields(reply["content"])])
-            )
-    return "\n\n".join(blocks) or f"#{record['number']}: no reviews yet"
+            blocks.append((f"{record['names'][kind]} by {who}", fields(reply["content"])))
+    return blocks
+
+
+def _lines(pairs: list[tuple[str, str]]) -> list[str]:
+    return [f"{key}: {value}" for key, value in pairs]
+
+
+def metadata(record: dict, config: dict) -> str:
+    head = f"#{record['number']}  {config['url_forum']}{record['id']}"
+    return "\n".join([head, *_lines(metadata_fields(record, config))])
+
+
+def reviews(record: dict, reveal: bool = False) -> str:
+    blocks = review_blocks(record, reveal)
+    text = ["\n".join([f"== {title}", *_lines(pairs)]) for title, pairs in blocks]
+    return "\n\n".join(text) or f"#{record['number']}: no reviews yet"
 
 
 def download(client: Any, record: dict, field: str, directory: Path) -> Path | None:
@@ -103,7 +114,7 @@ def email(
     role: str,
     subject: str,
     body: str,
-    confirm: Callable[[str], str] = input,
+    confirm: Callable[[str], str] | None = None,
 ) -> int:
     """Sends one message per paper to `role`, only after the user types SEND. Returns how many."""
     plan = [(record, *recipients(record, role)) for record in records]
@@ -115,7 +126,7 @@ def email(
     numbers = ", ".join(f"#{p[0]['number']}" for p in plan)
     print(f"To: {role} of papers {numbers}")
     print(f"({len(plan)} messages, {total} recipients)\nSubject: {subject}\n\n{body}\n")
-    if confirm(f"Type SEND to send {len(plan)} messages: ").strip() != "SEND":
+    if (confirm or input)(f"Type SEND to send {len(plan)} messages: ").strip() != "SEND":
         print("Nothing sent")
         return 0
     sent = 0
