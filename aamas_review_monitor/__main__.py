@@ -189,7 +189,7 @@ def main(argv: list[str] | None = None) -> None:
             set(args.spc) if args.spc else None,
             set(args.numbers) if args.numbers else None,
         )
-        send(config, drafts, outreach.preview(drafts, unreachable))
+        send(config, drafts, unreachable, state.latest)
     elif args.command == "comment":
         state = core.current(config)
         if state.latest is None:
@@ -201,7 +201,8 @@ def main(argv: list[str] | None = None) -> None:
         if args.text:
             text = args.text.read_text(encoding="utf-8")
             to_post = [c._replace(text=text) for c in to_post]
-        preview = outreach.preview_comments(to_post, skipped)
+        sent, notes = papers.history(core.FILE_HISTORY), [core.freshness(state.latest, config)]
+        preview = outreach.preview_comments(to_post, skipped, sent, notes)
         if confirmed(preview, len(to_post), f"post {len(to_post)} comments"):
             failures = papers.post_comments(
                 core.login(config), to_post, history_file=core.FILE_HISTORY
@@ -236,7 +237,7 @@ def main(argv: list[str] | None = None) -> None:
         drafts, unreachable = outreach.direct(
             load_records(*args.numbers), args.role, args.subject, body
         )
-        send(config, drafts, outreach.preview(drafts, unreachable))
+        send(config, drafts, unreachable, core.load_snapshots()[0])
 
 
 def confirmed(preview: str, count: int, what: str) -> bool:
@@ -246,8 +247,13 @@ def confirmed(preview: str, count: int, what: str) -> bool:
     return count > 0 and input(f"Type SEND to {what}: ").strip() == "SEND"
 
 
-def send(config: dict, drafts: list[papers.Draft], preview: str) -> None:
-    """Sends the drafts after a typed SEND, recording them in the history."""
+def send(
+    config: dict, drafts: list[papers.Draft], unreachable: list[str], latest: dict | None
+) -> None:
+    """Previews the drafts, warning on repeats and on an old snapshot, and sends them after a
+    typed SEND, recording them in the history."""
+    sent, notes = papers.history(core.FILE_HISTORY), [core.freshness(latest, config)]
+    preview = outreach.preview(drafts, unreachable, sent, notes)
     if confirmed(preview, len(drafts), f"send {len(drafts)} messages"):
         failures = papers.deliver(core.login(config), drafts, history_file=core.FILE_HISTORY)
         print("\n".join([*failures, f"Sent {len(drafts) - len(failures)} of {len(drafts)}"]))

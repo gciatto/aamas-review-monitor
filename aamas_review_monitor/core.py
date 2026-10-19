@@ -7,6 +7,7 @@ import getpass
 import json
 import os
 import threading
+from datetime import datetime, timezone
 from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
@@ -178,3 +179,17 @@ def records(*numbers: int) -> list[dict]:
     if not numbers and not DIR_PAPERS.is_dir():
         return []
     return papers.load(DIR_PAPERS, list(numbers))
+
+
+def freshness(latest: dict | None, config: dict, now: datetime | None = None) -> str:
+    """How old the snapshot is, with a warning past `snapshot_stale_hours`: what is sent from an
+    old snapshot may be about issues already resolved."""
+    if latest is None:
+        return "⚠ No snapshot: sync first"
+    taken = datetime.fromisoformat(latest["taken_at"])
+    taken = taken if taken.tzinfo else taken.replace(tzinfo=timezone.utc)
+    hours = ((now or datetime.now(timezone.utc)) - taken).total_seconds() / 3600
+    age = f"{hours:.0f} h" if hours >= 1 else f"{hours * 60:.0f} min"
+    line = f"Snapshot of {taken.astimezone():%Y-%m-%d %H:%M}, {age} old"
+    limit = config["snapshot_stale_hours"]
+    return f"⚠ {line}: older than {limit} h, sync first?" if hours > limit else line

@@ -70,3 +70,24 @@ def test_delivered_drafts_are_signed_as_the_papers_sacs():
     ((args, kwargs),) = client.messages
     assert args[1] == [f"{SUB}7/Area_Chair_9jqi"]
     assert kwargs["signature"] == f"{SUB}7/Senior_Area_Chairs"
+
+
+def test_previews_warn_when_the_same_message_already_went_out(tmp_path):
+    from aamas_review_monitor import papers
+
+    records, history = fetch(FakeClient(), CONFIG), tmp_path / "history.jsonl"
+    drafts, _ = outreach.compose(by_key()["spc-digest"], ISSUES, records, CONFIG, TODAY)
+    assert "⚠" not in outreach.preview(drafts, [], papers.history(history))
+    deliver(FakeClient(), drafts, history_file=history)
+    sent = papers.history(history)
+    text = outreach.preview(drafts, [], sent, ["Snapshot of today"])
+    assert text.startswith("1 messages\nSnapshot of today\n⚠ 1 of 1 went out before: see below\n")
+    assert "via #7 ===\n⚠ Already sent 20" in text
+    other, _ = outreach.direct(records, "spcs", "Something else", "Hi")  # not a repeat
+    assert "⚠" not in outreach.preview(other, [], sent)
+
+    found, _ = outreach.comments(ISSUES, records, {7}, False)
+    assert "⚠" not in outreach.preview_comments(found, [], sent)  # emails are not comments
+    papers.post_comments(FakeClient(), found, history_file=history)
+    text = outreach.preview_comments(found, [], papers.history(history))
+    assert "⚠ 1 of 1 papers were commented on before" in text

@@ -254,6 +254,13 @@ papers, to whom, the subject and body, and the template used. `history` and the 
 it, and paper details and the SPCs tab show the part about each paper or SPC. Comments are
 never retried automatically, so a comment can't be posted twice.
 
+Every preview also checks the history. It flags each email whose recipients already got the
+same template (or, for free-form emails, the same subject), and each paper that already has a
+comment from the app. It also says how old the snapshot behind it is, with a warning once it is
+older than `snapshot_stale_hours` (12 by default), because a reminder based on old data may
+chase work that is already done. Warnings don't block sending: you still decide when you type
+`SEND`.
+
 ## Configuration
 
 Defaults are in

@@ -8,6 +8,7 @@ their papers (any message reaches them), a reviewer reminder through the paper i
 
 import string
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 from typing import NamedTuple
@@ -181,14 +182,48 @@ def direct(
     return drafts, unreachable
 
 
-def preview(drafts: list[Draft], unreachable: list[str]) -> str:
-    """Every draft in full, for a confirmation: who, through which paper, subject and body."""
+def repeats(draft: Draft, sent: Sequence[dict]) -> list[dict]:
+    """Earlier emails from the history with the same template (or subject, if it has none) that
+    reached any of the draft's recipients."""
+    key = draft.template or draft.subject
+    return [
+        e
+        for e in sent
+        if e["kind"] == "email"
+        and e["status"] == "sent"
+        and (e["template"] or e["subject"]) == key
+        and set(e["recipients"]) & set(draft.members)
+    ]
+
+
+def _warnings(found: list[list[dict]], what: str) -> list[str]:
+    count = sum(bool(f) for f in found)
+    return [f"⚠ {count} of {len(found)} {what} before: see below"] if count else []
+
+
+def _before(entries: list[dict]) -> str:
+    return "".join(
+        f"⚠ Already sent {e['at'][:16].replace('T', ' ')}: {e['subject']}\n" for e in entries
+    )
+
+
+def preview(
+    drafts: list[Draft],
+    unreachable: list[str],
+    sent: Sequence[dict] = (),
+    notes: Sequence[str] = (),
+) -> str:
+    """Every draft in full, for a confirmation: who, through which paper, subject and body; and
+    a warning on those whose recipients already got the same email (`sent`, the history).
+    `notes` go under the count, e.g. how old the snapshot is."""
+    earlier = [repeats(d, sent) for d in drafts]
     blocks = [
-        f"=== To {d.to}, via #{d.record['number']} ===\nSubject: {d.subject}\n\n{d.body}"
-        for d in drafts
+        f"=== To {d.to}, via #{d.record['number']} ===\n{_before(e)}Subject: {d.subject}\n\n{d.body}"
+        for d, e in zip(drafts, earlier)
     ]
     skipped = [f"Not reachable: {line}" for line in unreachable]
-    return "\n".join([f"{len(drafts)} messages", *skipped, "", *blocks])
+    warned = _warnings(earlier, "went out")
+    return "\n".join([f"{len(drafts)} messages", *notes, *warned, *skipped, "", *blocks])
 
 
 ICONS = {RED: "🔴", YELLOW: "🟡"}
@@ -216,10 +251,27 @@ def comments(
     return found, skipped
 
 
-def preview_comments(found: list[Comment], skipped: list[str]) -> str:
+def preview_comments(
+    found: list[Comment], skipped: list[str], sent: Sequence[dict] = (), notes: Sequence[str] = ()
+) -> str:
+    """Every comment in full, warning on the papers the app already commented on (`sent`)."""
     readers = "PCs, SACs" + (" and SPCs" if found and found[0].spcs_read else "")
-    blocks = [
-        f"=== Comment on #{c.record['number']} ===\nTitle: {c.title}\n\n{c.text}" for c in found
+    earlier = [
+        [
+            e
+            for e in sent
+            if e["kind"] == "comment" and e["status"] == "sent" and e["via"] == c.record["number"]
+        ]
+        for c in found
     ]
-    lines = [f"{len(found)} comments, readable by {readers}", *(f"Skipped: {s}" for s in skipped)]
+    blocks = [
+        f"=== Comment on #{c.record['number']} ===\n{_before(e)}Title: {c.title}\n\n{c.text}"
+        for c, e in zip(found, earlier)
+    ]
+    lines = [
+        f"{len(found)} comments, readable by {readers}",
+        *notes,
+        *_warnings(earlier, "papers were commented on"),
+        *(f"Skipped: {s}" for s in skipped),
+    ]
     return "\n".join([*lines, "", *blocks])

@@ -644,9 +644,12 @@ class Monitor(App):
 
         self.push_screen(Confirm(preview), go)
 
-    def send(self, drafts: list[papers.Draft], preview: str, what: str = "") -> None:
+    def notes(self) -> list[str]:
+        return [core.freshness(self.latest, self.config)]
+
+    def send(self, drafts: list[papers.Draft], unreachable: list[str], what: str = "") -> None:
         self.confirm_then(
-            preview,
+            outreach.preview(drafts, unreachable, self.sent, self.notes()),
             f"Sending {len(drafts)} messages{what}…",
             lambda client, progress: papers.deliver(client, drafts, progress, core.FILE_HISTORY),
             len(drafts),
@@ -675,7 +678,7 @@ class Monitor(App):
                 return
 
             self.confirm_then(
-                outreach.preview_comments(found, skipped),
+                outreach.preview_comments(found, skipped, self.sent, self.notes()),
                 f"Posting {len(found)} comments…",
                 lambda client, progress: papers.post_comments(
                     client, found, progress, core.FILE_HISTORY
@@ -716,7 +719,7 @@ class Monitor(App):
                 self.notify("\n".join([*unreachable, f"Nothing to send with {template.name}"]))
                 return
 
-            self.send(drafts, outreach.preview(drafts, unreachable), f" ({template.name})")
+            self.send(drafts, unreachable, f" ({template.name})")
 
         self.push_screen(Templates(scope or ""), chosen)
 
@@ -964,7 +967,7 @@ class Monitor(App):
             if not drafts:
                 self.notify(f"No {form['role']} to email")
                 return
-            self.send(drafts, outreach.preview(drafts, unreachable))
+            self.send(drafts, unreachable)
 
         scope = f"paper #{numbers[0]}" if len(numbers) == 1 else f"{len(numbers)} papers"
         self.push_screen(Email(scope), review)

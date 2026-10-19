@@ -286,3 +286,14 @@ def test_retry_policy_covers_the_edit_endpoints_too():
     client = SimpleNamespace(session=requests.Session(), note_edits_url=url)
     core.tune(client, core.load_config())
     assert "POST" not in client.session.get_adapter(url).max_retries.allowed_methods
+
+
+def test_freshness_warns_on_old_snapshots():
+    from datetime import datetime, timezone
+
+    now, config = datetime(2026, 11, 11, 20, 0, tzinfo=timezone.utc), {"snapshot_stale_hours": 12}
+    fresh = core.freshness({"taken_at": "2026-11-11T19:30:00+00:00"}, config, now)
+    assert fresh.startswith("Snapshot of ") and fresh.endswith(", 30 min old")
+    old = core.freshness({"taken_at": "2026-11-11T06:00:00"}, config, now)  # naive: UTC
+    assert old.startswith("⚠ ") and old.endswith("14 h old: older than 12 h, sync first?")
+    assert core.freshness(None, config) == "⚠ No snapshot: sync first"
