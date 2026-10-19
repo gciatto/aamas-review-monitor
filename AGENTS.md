@@ -17,6 +17,7 @@ aamas_review_monitor/     the package, at the repo root (renamed by rename-templ
   documents.py    on-request document checks (xpdf tools, zipfile), cached per PDF version
   outreach.py     email templates (resources/templates/*.txt) -> per-SPC / per-paper drafts
   tui.py          Textual app; network jobs run in worker threads behind a blocking Busy dialog
+  screens.py      the TUI's screens and dialogs (details, attachment, legend, Busy, forms, Confirm)
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
 tests/            pytest unit tests
 docs/             README screenshots (Textual SVGs of synthetic data only: never real papers)
