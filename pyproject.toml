@@ -1,5 +1,5 @@
 [project]
-name = "template-python-project-uv"
+name = "aamas-review-monitor"
 version = "1.0.2"
 description = "A Python project template using uv"
 readme = "README.md"
@@ -10,14 +10,14 @@ requires-python = ">=3.10" # Update workflows/check.yml if you change this
 dependencies = []
 
 [project.scripts]
-main_package = "main_package.__main__:main"
+aamas_review_monitor = "aamas_review_monitor.__main__:main"
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = "main_package"
+module-name = "aamas_review_monitor"
 module-root = ""
 
 [dependency-groups]
@@ -38,8 +38,8 @@ ruff-check = "ruff check"
 ruff-fix = "ruff check --fix"
 format = "ruff format"
 format-check = "ruff format --check"
-mypy = "mypy main_package tests scripts"
-compile = "python -m compileall -q main_package tests scripts"
+mypy = "mypy aamas_review_monitor tests scripts"
+compile = "python -m compileall -q aamas_review_monitor tests scripts"
 static-checks = [
     "compile",
     "format-check",

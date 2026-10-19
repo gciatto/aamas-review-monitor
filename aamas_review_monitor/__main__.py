@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from main_package.greeting import greet
+from aamas_review_monitor.greeting import greet
 
 
 def main() -> None:

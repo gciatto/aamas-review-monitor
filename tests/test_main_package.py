@@ -1,9 +1,9 @@
 import subprocess
 import sys
 
-from main_package import __version__
-from main_package.greeting import greet
-from main_package.resources import DIR_RESOURCES, FILE_CONFIG, FILE_GREETING
+from aamas_review_monitor import __version__
+from aamas_review_monitor.greeting import greet
+from aamas_review_monitor.resources import DIR_RESOURCES, FILE_CONFIG, FILE_GREETING
 
 
 def test_version_comes_from_package_metadata():
@@ -22,6 +22,6 @@ def test_greet():
 
 def test_run_as_module():
     out = subprocess.run(
-        [sys.executable, "-m", "main_package", "Ada"], check=True, capture_output=True, text=True
+        [sys.executable, "-m", "aamas_review_monitor", "Ada"], check=True, capture_output=True, text=True
     )
     assert out.stdout.strip() == greet("Ada")

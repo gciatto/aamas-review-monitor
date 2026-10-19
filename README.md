@@ -10,15 +10,15 @@ It already includes:
 - [Renovate](https://docs.renovatebot.com/) configuration for automated dependency updates;
 - [semantic-release](https://semantic-release.gitbook.io/semantic-release/) configuration with conventional commits for automated releases to PyPI.
 
-The template starts with a minimal package named `main_package`, which will be renamed when you create a new repository from this template.
+The template starts with a minimal package named `aamas_review_monitor`, which will be renamed when you create a new repository from this template.
 
 ## Project Structure
 
 ```bash
 <root directory>
-├── main_package/                     # main package (renamed into your project name)
+├── aamas_review_monitor/                     # main package (renamed into your project name)
 │   ├── __init__.py                   # package version and logger
-│   ├── __main__.py                   # application entry point (also `python -m main_package`)
+│   ├── __main__.py                   # application entry point (also `python -m aamas_review_monitor`)
 │   ├── greeting.py                   # example module
 │   ├── model/                        # example subpackage
 │   │   └── __init__.py
@@ -28,7 +28,7 @@ The template starts with a minimal package named `main_package`, which will be r
 │       └── greeting.txt              # example long string (e.g. a prompt)
 ├── tests/                            # pytest test suite
 │   ├── test_githooks.py              # tests for scripts/githooks.py
-│   ├── test_main_package.py          # tests for the example package
+│   ├── test_aamas_review_monitor.py          # tests for the example package
 │   └── test_model.py                 # pytest examples
 ├── scripts/
 │   └── githooks.py                   # installs/removes local Git hooks
@@ -89,12 +89,12 @@ uv python list
     uv run poe test
     ```
 
-5. Start building your project in `main_package/` and add tests under `tests/`.
+5. Start building your project in `aamas_review_monitor/` and add tests under `tests/`.
 
 ## Main Commands
 
 ### Running the Application
-`uv run main_package` (or `uv run python -m main_package`) to run the application entry point defined in `pyproject.toml`.
+`uv run aamas_review_monitor` (or `uv run python -m aamas_review_monitor`) to run the application entry point defined in `pyproject.toml`.
 
 
 ### Dependency Management
@@ -102,7 +102,7 @@ uv python list
 | Command | Description |
 | --- | --- |
 | `uv sync` | Create or update the local environment from `pyproject.toml` and `uv.lock`. |
-| `uv run main_package` | Run the application entry point. |
+| `uv run aamas_review_monitor` | Run the application entry point. |
 | `uv add <package>` | Add a runtime dependency. |
 | `uv add --dev <package>` | Add a development dependency. |
 | `uv remove <package>` | Remove a dependency. | 
@@ -124,8 +124,8 @@ can be run through uv.
 | `uv run poe ruff-fix` | Lint and apply the automatic fixes Ruff knows for those problems. |
 | `uv run poe format-check` | Report files whose layout (quotes, wrapping, spacing) differs from Ruff's style. |
 | `uv run poe format` | Rewrite files into Ruff's style. |
-| `uv run poe mypy` | Type-check `main_package/`, `tests/` and `scripts/` with Mypy. |
-| `uv run poe compile` | Compile `main_package/`, `tests/` and `scripts/` to catch syntax errors. |
+| `uv run poe mypy` | Type-check `aamas_review_monitor/`, `tests/` and `scripts/` with Mypy. |
+| `uv run poe compile` | Compile `aamas_review_monitor/`, `tests/` and `scripts/` to catch syntax errors. |
 | `uv run poe static-checks` | Run `compile`, `format-check`, `ruff-check` and `mypy` (what CI runs); changes nothing. |
 | `uv run poe static-fixes` | Run `ruff-fix`, then `format`; fixes most `static-checks` failures except type errors. |
 | `uv run poe install-hooks [HOOK...]` | Install local Git hooks (see [Git Hooks](#git-hooks); default: all). |

@@ -6,9 +6,9 @@ secrets, Renovate) lives in `README.md`; do not duplicate it here.
 ## Layout
 
 ```
-main_package/     the package, at the repo root (renamed by rename-template.sh)
+aamas_review_monitor/     the package, at the repo root (renamed by rename-template.sh)
   __init__.py     `__version__` and the package logger (logging is configured only in `__main__.py`)
-  __main__.py     `main()`: the `[project.scripts]` entry point and `python -m main_package`
+  __main__.py     `main()`: the `[project.scripts]` entry point and `python -m aamas_review_monitor`
   greeting.py     example module
   model/          example subpackage
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
@@ -51,7 +51,7 @@ one tagged line each. Foreign hooks are never overwritten. `--no-verify` skips t
 - Manage dependencies with `uv add` / `uv add --dev`, never by hand-editing `uv.lock`.
 - Tests must not hit the network.
 - Long strings (LLM prompts, templates, messages), configuration, icons and other assets go in
-  files under `main_package/resources/`, never inline in code. Reference them through
+  files under `aamas_review_monitor/resources/`, never inline in code. Reference them through
   `Path` constants in `resources/__init__.py` (`FILE_CONFIG = DIR_RESOURCES / "config.json"`);
   everything in the package directory ships in the wheel.
 - Names go from general to specific: general prefix, specific suffix (`DIR_DATA`,

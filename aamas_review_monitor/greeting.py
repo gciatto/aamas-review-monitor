@@ -1,7 +1,7 @@
 import json
 
-from main_package.model import MyClass
-from main_package.resources import FILE_CONFIG, FILE_GREETING
+from aamas_review_monitor.model import MyClass
+from aamas_review_monitor.resources import FILE_CONFIG, FILE_GREETING
 
 
 def greet(name: str | None = None) -> str:

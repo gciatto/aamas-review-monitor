@@ -40,7 +40,7 @@ jobs:
 
       # Uncomment to change default logging level during release
       # - name: Change default logging level
-      #   run: sed -i -e 's/logging.DEBUG/logging.WARN/g' main_package/__main__.py
+      #   run: sed -i -e 's/logging.DEBUG/logging.WARN/g' aamas_review_monitor/__main__.py
 
       - name: Get Node Version
         id: get-node-version

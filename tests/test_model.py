@@ -1,6 +1,6 @@
 import pytest
 
-from main_package.model import MyClass
+from aamas_review_monitor.model import MyClass
 
 
 # can test using classes, name must begin with `Test`
