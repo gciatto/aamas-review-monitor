@@ -290,23 +290,25 @@ class Email(Screen[dict | None]):
 
 class Monitor(App):
     TITLE = "AAMAS Review Monitor"
-    # Lowercase keys act on the selected paper; uppercase ones on all the papers shown
+    # Lowercase keys act on the selected paper; uppercase ones on all the papers shown, hidden
+    # from the footer but named in their lowercase twin's label
     BINDINGS = [
+        # in footer order: what is used most comes first, as narrow terminals cut the tail
+        ("f", "focus('filter')", "Filter"),
         ("d", "details", "Details"),
-        ("o", "open", "Open in browser"),
-        ("g", "toggle_green", "Hide/show 🟢"),
-        ("p", "download('field_pdf')", "PDF"),
-        ("u", "download('field_supplementary')", "Supplementary"),
-        ("e", "email", "Email"),
-        ("i", "inspect", "Inspect PDF"),
+        ("p", "download('field_pdf')", "PDF (P: all)"),
+        ("u", "download('field_supplementary')", "Supp. (U: all)"),
+        ("i", "inspect", "Inspect (I: all)"),
+        ("e", "email", "Email (E: all)"),
+        ("s", "sync", "Sync"),
+        ("l", "legend", "Legend"),
+        ("g", "toggle_green", "🟢 on/off"),
+        ("o", "open", "Browser"),
+        ("r", "reload", "Reload"),
         Binding("P", "download('field_pdf', True)", "All PDFs", show=False),
         Binding("U", "download('field_supplementary', True)", "All supplementary", show=False),
         Binding("E", "email(True)", "Email all", show=False),
         Binding("I", "inspect(True)", "Inspect all", show=False),
-        ("s", "sync", "Sync"),
-        ("r", "reload", "Reload"),
-        ("l", "legend", "Legend"),
-        ("f", "focus('filter')", "Filter"),
         ("q", "quit", "Quit"),
     ]
 
@@ -326,7 +328,7 @@ class Monitor(App):
             placeholder="Filter by SPC, paper # or issue (f to focus, Enter to apply)", id="filter"
         )
         yield DataTable(id="issues", cursor_type="row", zebra_stripes=True)
-        yield Footer()
+        yield Footer(compact=True)
 
     def on_mount(self) -> None:
         self.query_one(DataTable).add_columns("Status", "Paper", "SPC", "Issue")
