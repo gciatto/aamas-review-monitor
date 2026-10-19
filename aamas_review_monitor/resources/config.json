@@ -2,7 +2,7 @@
   "venue_id": "ifaamas.org/AAMAS/2027/Conference",
   "url_api": "https://api2.openreview.net",
   "url_forum": "https://openreview.net/forum?id=",
-  "field_rating": "rating",
+  "field_rating": "rating_proceedings",
   "field_confidence": "confidence",
   "field_pdf": "pdf",
   "field_supplementary": "supplementary_material",
