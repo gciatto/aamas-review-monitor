@@ -14,6 +14,7 @@ aamas_review_monitor/     the package, at the repo root (renamed by rename-templ
   checks.py       deterministic per-paper checks, SPC-grouped report, CSV
   papers.py       record cache, metadata/reviews text, attachment downloads, emails
   documents.py    on-request document checks (xpdf tools, zipfile), cached per PDF version
+  outreach.py     email templates (resources/templates/*.txt) -> per-SPC / per-paper drafts
   tui.py          Textual app; network jobs run in worker threads behind a blocking Busy dialog
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
 tests/            pytest unit tests
