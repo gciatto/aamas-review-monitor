@@ -1,3 +1,37 @@
+## [1.3.0](https://github.com/gciatto/aamas-review-monitor/compare/1.2.0...1.3.0) (2026-10-19)
+
+### Features
+
+* flag signs of generated text in reviews and PDFs, by string matching only ([be7de9c](https://github.com/gciatto/aamas-review-monitor/commit/be7de9c035bdedee7be3db09848f17f2b2627d86))
+* previews warn about repeated emails and comments, and about old snapshots ([904d67d](https://github.com/gciatto/aamas-review-monitor/commit/904d67d7c4176e3cb8106aac50a871bc229ea7a8))
+* **tui:** marks and an action menu instead of uppercase bulk keys; details beside the queue ([bfa2612](https://github.com/gciatto/aamas-review-monitor/commit/bfa261212beac3cc9624c2f66846afff42d7d0d6))
+
+### Bug Fixes
+
+* reject misspelt, mistyped or malformed configuration overrides at startup ([65ba63d](https://github.com/gciatto/aamas-review-monitor/commit/65ba63df0edc3c2cd8601857f3c8512dd361d3cd))
+* **tui:** panel updates no longer crash the app while its screen is built or torn down ([9f47065](https://github.com/gciatto/aamas-review-monitor/commit/9f470658744693830d3630755c696bfc7ea7b53d))
+* **tui:** the SEND confirmation starts in its text box, ready to type SEND and Enter ([c4cd247](https://github.com/gciatto/aamas-review-monitor/commit/c4cd247c1def7b13b69a9713a6f71be8fe61de2a))
+
+### Documentation
+
+* screenshots with marks, the details panel and the phase header ([d94fe16](https://github.com/gciatto/aamas-review-monitor/commit/d94fe160337c6c55d26587ead3ce5941d46da916))
+* the free-form email preview, and how the tests are organised ([5bd9b7a](https://github.com/gciatto/aamas-review-monitor/commit/5bd9b7a324bdc610f5abf84e28b132b24c97592b))
+
+### Tests
+
+* core tests without a front end; TUI tests wait for each job's effect ([cad6935](https://github.com/gciatto/aamas-review-monitor/commit/cad69355922e6df4c10c8c06129ea0ed40da61bc))
+* pass paper numbers before the options, as documented, which every Python accepts ([f666290](https://github.com/gciatto/aamas-review-monitor/commit/f666290e069150da1e716927bcb82c011e951aa7))
+* say what a TUI test was waiting for when it times out ([376d16a](https://github.com/gciatto/aamas-review-monitor/commit/376d16a58f3bd4d3813ae71b9a7a729f13e52ce6))
+* type in the SEND box only once it has the focus ([6a8de54](https://github.com/gciatto/aamas-review-monitor/commit/6a8de545b4426edd2b0725625b361fc266ccc7b8))
+
+### Refactoring
+
+* free-form emails are drafts too, through the same preview and send path ([635613c](https://github.com/gciatto/aamas-review-monitor/commit/635613c46f5de9c67c61e55f1b1ecddf63a92e9f))
+* move the services shared by the CLI and the TUI into core ([0dddcee](https://github.com/gciatto/aamas-review-monitor/commit/0dddcee05c9d58b2695803c7e9ab2d9a8a886f86))
+* move the TUI's screens and dialogs to their own module ([ee6d77b](https://github.com/gciatto/aamas-review-monitor/commit/ee6d77b6ade5e600170889e45d25e6b4616cb1cb))
+* one per-paper download and inspect loop, shared by the CLI and the TUI ([4e87679](https://github.com/gciatto/aamas-review-monitor/commit/4e876796afa2f7b8180822fc3cf50d147c26f736))
+* one place computes the current issues; the summary is data, not report text ([9eea652](https://github.com/gciatto/aamas-review-monitor/commit/9eea65276ec76fe29aabbfeac5945909c62327d3))
+
 ## [1.2.0](https://github.com/gciatto/aamas-review-monitor/compare/1.1.0...1.2.0) (2026-10-19)
 
 ### Features
