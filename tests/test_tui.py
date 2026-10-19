@@ -73,6 +73,14 @@ async def done(app, pilot, effect):
     )
 
 
+async def confirm(app, pilot, answer):
+    """Types `answer` in the Confirm dialog's box, once it has the focus, and presses Enter."""
+    assert isinstance(app.screen, Confirm)
+    box = app.screen.query_one("#confirm")
+    await until(pilot, lambda: app.focused is box, state=lambda: f"focus on {app.focused!r}")
+    await pilot.press(*answer, "enter")
+
+
 def cached_monitor(tmp_path, monkeypatch):
     """A Monitor over one cached synthetic paper, with a fake client and no real terminal."""
     from aamas_review_monitor import papers
@@ -164,7 +172,7 @@ def test_tui_email_sends_only_after_typing_send(tmp_path, monkeypatch):
                 await pilot.click("#send")
                 assert isinstance(app.screen, Confirm)
                 assert "=== To late-reviewers of #7 (2), via #7 ===" in app.screen.summary
-                await pilot.press(*answer, "enter")  # the dialog starts in its SEND box
+                await confirm(app, pilot, answer)
                 await done(app, pilot, lambda: bool(notes) and not isinstance(app.screen, Confirm))
                 assert len(client.messages) == (answer == "SEND"), notes
 
@@ -348,7 +356,7 @@ def test_spc_tab_lists_issues_per_spc_and_sends_a_digest(tmp_path, monkeypatch):
             assert isinstance(app.screen, Confirm)
             assert "=== To ~Spc_One1, via #7 ===" in app.screen.summary
             assert "ratings [3, 6]" in app.screen.summary
-            await pilot.press(*"SEND", "enter")
+            await confirm(app, pilot, "SEND")
             await done(app, pilot, lambda: bool(app.sent))
             panel = str(app.query_one("#spc-issues").render())
             assert "Sent to them from this app" in panel and "email to ~Spc_One1 via #7" in panel
@@ -396,7 +404,7 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             await pilot.click("#comment-post")
             assert isinstance(app.screen, Confirm)
             assert app.screen.summary.startswith("1 comments, readable by PCs, SACs\n")
-            await pilot.press(*"SEND", "enter")
+            await confirm(app, pilot, "SEND")
             await done(app, pilot, lambda: bool(app.sent))
 
             ((_, _, note),) = client.comments
