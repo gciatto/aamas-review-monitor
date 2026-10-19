@@ -7,7 +7,7 @@ import getpass
 import json
 import os
 import threading
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
@@ -32,9 +32,27 @@ FILE_HISTORY = DIR_DATA / "history.jsonl"  # what the app sent: emails and comme
 
 
 def load_config() -> dict:
+    """The shipped settings with the user's overrides; ValueError on an override that is not a
+    setting (a typo would be silently ignored), of the wrong type, or a malformed date."""
     config = json.loads(FILE_CONFIG.read_text(encoding="utf-8"))
     local = DIR_DATA / "config.json"  # optional overrides, e.g. updated deadlines
-    return config | (json.loads(local.read_text(encoding="utf-8")) if local.is_file() else {})
+    overrides = json.loads(local.read_text(encoding="utf-8")) if local.is_file() else {}
+    for key, value in overrides.items():
+        default = config.get(key)
+        if key not in config:
+            raise ValueError(f"{local}: {key} is not a setting")
+        number = (int, float)  # either way: 1 or 0.5 seconds
+        kind = number if type(default) in number else type(default)
+        if not isinstance(value, kind) or isinstance(value, bool) != isinstance(default, bool):
+            raise ValueError(f"{local}: {key} should be like {default!r}, not {value!r}")
+    config |= overrides
+    dates = [v for k, v in config.items() if k.startswith("deadline_") or k == "discussion_start"]
+    for day in [*dates, *config["reviews_milestones"]]:
+        try:
+            date.fromisoformat(day)
+        except ValueError:
+            raise ValueError(f"{local}: {day!r} is not a YYYY-MM-DD date") from None
+    return config
 
 
 class Interrupted(BaseException):

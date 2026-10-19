@@ -267,8 +267,10 @@ Defaults are in
 [`aamas_review_monitor/resources/config.json`](aamas_review_monitor/resources/config.json): the
 venue, OpenReview field names, the AAMAS 2027 dates, every threshold, and the retry policy.
 Override any of them in `~/.aamas-review-monitor/config.json`, for example
-`{"reviews_words_min": 200, "deadline_meta_reviews": "2026-12-10"}`. Use `AAMAS_MONITOR_DATA` to
-keep the data folder elsewhere.
+`{"reviews_words_min": 200, "deadline_meta_reviews": "2026-12-10"}`. Overrides are checked at
+startup: a misspelt setting, a value of the wrong type or a malformed date stops the app with
+the reason, instead of being quietly ignored. Use `AAMAS_MONITOR_DATA` to keep the data folder
+elsewhere.
 
 ## Data and confidentiality
 

@@ -297,3 +297,20 @@ def test_freshness_warns_on_old_snapshots():
     old = core.freshness({"taken_at": "2026-11-11T06:00:00"}, config, now)  # naive: UTC
     assert old.startswith("⚠ ") and old.endswith("14 h old: older than 12 h, sync first?")
     assert core.freshness(None, config) == "⚠ No snapshot: sync first"
+
+
+def test_config_overrides_are_validated():
+    import pytest
+
+    local = core.DIR_DATA / "config.json"
+    for override, error in [
+        ('{"reviews_word_min": 200}', "reviews_word_min is not a setting"),
+        ('{"reviewers_min": "3"}', "reviewers_min should be like 3, not '3'"),
+        ('{"reviewers_min": true}', "reviewers_min should be like 3, not True"),
+        ('{"deadline_reviews": "13/11/2026"}', "'13/11/2026' is not a YYYY-MM-DD date"),
+    ]:
+        local.write_text(override)
+        with pytest.raises(ValueError, match=error):
+            core.load_config()
+    local.write_text('{"deadline_reviews": "2026-11-14", "backoff_seconds": 0.5}')  # was an int
+    assert core.load_config()["deadline_reviews"] == "2026-11-14"

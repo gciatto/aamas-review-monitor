@@ -42,6 +42,7 @@ from aamas_review_monitor import logger
 from aamas_review_monitor import documents, outreach, papers
 from aamas_review_monitor.checks import (
     GREEN,
+    ICONS,
     RED,
     YELLOW,
     Issue,
@@ -52,7 +53,6 @@ from aamas_review_monitor.checks import (
     summary,
 )
 
-ICONS = {RED: "🔴", YELLOW: "🟡", GREEN: "🟢"}
 RANKS = {ICONS[RED]: 0, ICONS[YELLOW]: 1, ICONS[GREEN]: 2}
 DIALOG_CSS = "align: center middle; & > Vertical { border: thick $accent; background: $surface;"
 Job = Callable[[Any, Callable[[int, int], None]], Any]  # (client, progress) -> result

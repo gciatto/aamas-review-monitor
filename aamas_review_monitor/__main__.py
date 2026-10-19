@@ -88,9 +88,11 @@ def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, handlers=handlers)
 
     overrides = ("retries", "backoff_seconds", "backoff_max_seconds")
-    config = core.load_config() | {
-        k: getattr(args, k) for k in overrides if getattr(args, k) is not None
-    }
+    try:
+        config = core.load_config()
+    except ValueError as e:
+        sys.exit(f"Configuration error: {e}")
+    config |= {k: getattr(args, k) for k in overrides if getattr(args, k) is not None}
     if args.command == "sync":
         file, changes = core.sync(config)
         print("\n".join([*changes, f"Saved {file}"]))

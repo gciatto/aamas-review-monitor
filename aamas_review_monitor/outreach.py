@@ -13,7 +13,7 @@ from datetime import date
 from pathlib import Path
 from typing import NamedTuple
 
-from aamas_review_monitor.checks import GREEN, RED, YELLOW, Issue
+from aamas_review_monitor.checks import GREEN, ICONS, Issue
 from aamas_review_monitor.collector import person
 from aamas_review_monitor.papers import Comment, Draft, recipients
 from aamas_review_monitor.resources import DIR_TEMPLATES, FILE_COMMENT
@@ -226,9 +226,6 @@ def preview(
     return "\n".join([f"{len(drafts)} messages", *notes, *warned, *skipped, "", *blocks])
 
 
-ICONS = {RED: "🔴", YELLOW: "🟡"}
-
-
 def comments(
     issues: list[Issue], records: list[dict], numbers: set[int], spcs_read: bool
 ) -> tuple[list[Comment], list[str]]:
@@ -245,7 +242,7 @@ def comments(
         elif not theirs:
             skipped.append(f"#{number}: no open issues")
         else:
-            lines = "\n".join(f"- {ICONS.get(i.severity, '')} {i.message}" for i in theirs)
+            lines = "\n".join(f"- {ICONS[i.severity]} {i.message}" for i in theirs)
             text = string.Template(body).safe_substitute(issues=lines).strip() + "\n"
             found.append(Comment(by_number[number], title, text, spcs_read))
     return found, skipped

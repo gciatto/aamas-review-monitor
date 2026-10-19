@@ -8,6 +8,7 @@ from datetime import date
 from typing import IO, Any, NamedTuple, TypeVar
 
 RED, YELLOW, GREEN = "RED", "YELLOW", "GREEN"
+ICONS = {RED: "🔴", YELLOW: "🟡", GREEN: "🟢"}
 
 
 class Issue(NamedTuple):
