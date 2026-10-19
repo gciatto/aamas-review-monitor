@@ -1,3 +1,26 @@
+## [1.2.0](https://github.com/gciatto/aamas-review-monitor/compare/1.1.0...1.2.0) (2026-10-19)
+
+### Features
+
+* comments and a History tab in the TUI ([cf0752b](https://github.com/gciatto/aamas-review-monitor/commit/cf0752b8d016d5061c720071ea2682dde3761b5b))
+* email templates composing SPC digests and reviewer reminders from the issues ([14fa61b](https://github.com/gciatto/aamas-review-monitor/commit/14fa61b3e0e8b51894cb420027d6dba8de296773))
+* post a paper's issues as a forum comment, and keep a history of what the app sent ([232e4c4](https://github.com/gciatto/aamas-review-monitor/commit/232e4c4f3336c41dfcfb5eb2a49161aab991e238))
+* SPCs tab and templated emails in the TUI ([7d93179](https://github.com/gciatto/aamas-review-monitor/commit/7d9317958fa4cbf8b31b24e2d77ae9bff5cff2f0))
+* templates and outreach commands: preview templated emails, send after SEND ([bc545f1](https://github.com/gciatto/aamas-review-monitor/commit/bc545f19bbc0953c4185fcfa8783777c0bef085a))
+
+### Documentation
+
+* add outreach to the AGENTS layout ([06b252f](https://github.com/gciatto/aamas-review-monitor/commit/06b252fb03064a5d4064a85801d40a6dd3e7c0a3))
+* AGENTS notes on test isolation and the history ([38347b4](https://github.com/gciatto/aamas-review-monitor/commit/38347b4cfc4fcaa0480ef24597a9e5e349c0400a))
+* describe comments, the history and the History tab ([c11d9d0](https://github.com/gciatto/aamas-review-monitor/commit/c11d9d0a4806a270b30baa5478f3f2a0735378d9))
+* describe the SPCs tab, templates and outreach ([7573613](https://github.com/gciatto/aamas-review-monitor/commit/75736132b39a334807b8cb9909f5cf99019dcedd))
+* release tags have no v prefix ([36bbdfc](https://github.com/gciatto/aamas-review-monitor/commit/36bbdfcde8ac56abe6ed61e351f54b47271b1d8e))
+
+### Tests
+
+* isolate every test from the real data folder ([c1749b4](https://github.com/gciatto/aamas-review-monitor/commit/c1749b46479de6c79f75a3622f642e9f0440edf1))
+* wait for background jobs' effects instead of a fixed number of ticks ([c6c661a](https://github.com/gciatto/aamas-review-monitor/commit/c6c661a34112be6fa12e28dc3fcc1d8f8417b3ef))
+
 ## [1.1.0](https://github.com/gciatto/aamas-review-monitor/compare/1.0.0...1.1.0) (2026-10-19)
 
 ### Features
