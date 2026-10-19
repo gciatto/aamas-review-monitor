@@ -28,9 +28,13 @@ last sync; `download` fetches only what is missing or outdated, into the same fo
 body and sends nothing unless you type `SEND`. `{{fullname}}` in the body becomes each
 recipient's name. Authors cannot be emailed: OpenReview only lets Program Chairs do that.
 
-In the TUI: `/` filters (SPC, paper number, issue), clicking a header sorts, `d` shows the
-paper's metadata, issues and anonymous reviews, `o` or Enter opens it on OpenReview, `s` syncs,
-`r` reloads, `q` quits.
+In the TUI every paper is listed: one row per issue, one GREEN row per paper without issues. `/`
+filters (SPC, paper number, issue), `g` hides or shows GREEN rows, clicking a header sorts, `s`
+syncs, `r` reloads, `q` quits. On the selected paper: Enter or `d` shows its metadata, failed and
+passed checks, and anonymous reviews, `o` opens it on OpenReview, `p` downloads and opens its PDF, `u` downloads its
+supplementary material, `e` opens an email form. `P`, `U` and `E` do the same for every paper
+shown. Downloads, logins and the email `SEND` confirmation run
+in the plain terminal, then the TUI comes back.
 
 Run `sync` daily: each run adds a snapshot, and `report` shows what is new or resolved per SPC
 since the previous one. Credentials come from `OPENREVIEW_USERNAME`/`OPENREVIEW_PASSWORD` or a
