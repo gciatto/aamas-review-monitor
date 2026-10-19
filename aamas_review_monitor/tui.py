@@ -2,16 +2,16 @@
 
 import os
 import subprocess
-import sys
 import webbrowser
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 from rich.text import Text
 from textual import on, work
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
@@ -31,7 +31,18 @@ from textual.widgets import (
 
 from aamas_review_monitor import __main__ as cli
 from aamas_review_monitor import documents, papers
-from aamas_review_monitor.checks import GREEN, RED, YELLOW, Issue, check, legend, passed, report
+from aamas_review_monitor.checks import (
+    GREEN,
+    RED,
+    YELLOW,
+    Issue,
+    check,
+    green_rows,
+    legend,
+    matches,
+    passed,
+    report,
+)
 
 ICONS = {RED: "🔴", YELLOW: "🟡", GREEN: "🟢"}
 RANKS = {ICONS[RED]: 0, ICONS[YELLOW]: 1, ICONS[GREEN]: 2}
@@ -94,19 +105,6 @@ class Paper(Screen):
         yield Footer()
 
 
-def os_open(path: Path, reveal: bool = False) -> None:
-    """Opens a file with its default app or, with `reveal`, shows it in Finder/Explorer."""
-    if sys.platform == "darwin":
-        command = ["open", "-R", str(path)] if reveal else ["open", str(path)]
-    elif sys.platform == "win32":
-        command = (
-            ["explorer", f"/select,{path}"] if reveal else ["cmd", "/c", "start", "", str(path)]
-        )
-    else:  # file managers cannot portably select a file: open its folder
-        command = ["xdg-open", str(path.parent if reveal else path)]
-    subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-
 class Attachment(ModalScreen):
     """A downloaded attachment: its path, OS actions, and its contents (zip tree or PDF text)."""
 
@@ -142,24 +140,23 @@ class Attachment(ModalScreen):
         tree: Tree[None] = Tree(self.path.name, id="tree")
         tree.root.expand()
         nodes = {"": tree.root}
-        with zipfile.ZipFile(self.path) as archive:
-            for info in archive.infolist():
-                parts = info.filename.rstrip("/").split("/")
-                for depth in range(1, len(parts) + 1):
-                    key, parent = "/".join(parts[:depth]), nodes["/".join(parts[: depth - 1])]
-                    if key in nodes:
-                        continue
-                    if depth == len(parts) and not info.is_dir():
-                        nodes[key] = parent.add_leaf(f"{parts[-1]}  ({info.file_size:,} bytes)")
-                    else:
-                        nodes[key] = parent.add(parts[depth - 1], expand=True)
+        for info in papers.zip_entries(self.path):
+            parts = info.filename.rstrip("/").split("/")
+            for depth in range(1, len(parts) + 1):
+                key, parent = "/".join(parts[:depth]), nodes["/".join(parts[: depth - 1])]
+                if key in nodes:
+                    continue
+                if depth == len(parts) and not info.is_dir():
+                    nodes[key] = parent.add_leaf(f"{parts[-1]}  ({info.file_size:,} bytes)")
+                else:
+                    nodes[key] = parent.add(parts[depth - 1], expand=True)
         return tree
 
     def action_folder(self) -> None:
-        os_open(self.path, reveal=True)
+        papers.os_open(self.path, reveal=True)
 
     def action_view(self) -> None:
-        os_open(self.path)
+        papers.os_open(self.path)
 
     def action_copy(self) -> None:
         self.app.copy_to_clipboard(str(self.path))
@@ -288,6 +285,26 @@ class Email(Screen[dict | None]):
         self.dismiss({"role": self.query_one(Select).value, "subject": subject, "body": body})
 
 
+# The command palette (ctrl+p): (title, help, action), the same actions as the key bindings
+COMMANDS = [
+    ("Sync with OpenReview", "Fetch papers, reviews and a new snapshot  [s]", "sync"),
+    ("Reload", "Re-read the cached snapshots and results  [r]", "reload"),
+    ("Filter", "By SPC, #paper, issue text or color  [f]", "focus('filter')"),
+    ("Show or hide green papers", "Papers without issues  [g]", "toggle_green"),
+    ("Paper details", "Metadata, checks, anonymous reviews of the selected paper  [d]", "details"),
+    ("Open on OpenReview", "The selected paper's forum, in the browser  [o]", "open"),
+    ("PDF", "Of the selected paper: path, text, open  [p]", "download('field_pdf')"),
+    ("PDFs of all shown papers", "Download the missing ones  [P]", "download('field_pdf', True)"),
+    ("Supplementary material", "Of the selected paper: path, files, open  [u]", "download('field_supplementary')"),
+    ("Supplementary material of all shown papers", "Download the missing ones  [U]", "download('field_supplementary', True)"),
+    ("Inspect", "Document checks of the selected paper, downloading what is missing  [i]", "inspect"),
+    ("Inspect all shown papers", "Document checks, downloading what is missing  [I]", "inspect(True)"),
+    ("Email", "Reviewers, late reviewers or SPCs of the selected paper  [e]", "email"),
+    ("Email all shown papers", "Reviewers, late reviewers or SPCs, one message per paper  [E]", "email(True)"),
+    ("Legend", "What each check verifies, with the current thresholds  [l]", "legend"),
+]  # fmt: skip
+
+
 class Monitor(App):
     TITLE = "AAMAS Review Monitor"
     # Lowercase keys act on the selected paper; uppercase ones on all the papers shown, hidden
@@ -341,45 +358,23 @@ class Monitor(App):
             self.issues = []
             text = f"No snapshots in {cli.DIR_SNAPSHOTS}: press s to sync"
         else:
-            self.issues = check(latest, self.config) + self.document_issues(latest)
-            flagged = {i.number for i in self.issues}
-            self.issues += [
-                Issue(p["number"], GREEN, "ok", "all checks pass", p["url"], tuple(p["spcs"]))
-                for p in latest["papers"]
-                if p["number"] not in flagged
-            ]
-            text = report(latest, self.config, previous).split("\n\n")[0]  # the summary lines
+            extra, self.inspected = documents.snapshot_issues(latest, self.config, cli.DIR_PAPERS)
+            self.issues = check(latest, self.config) + extra
+            self.issues += green_rows(latest, self.issues)
+            summary = report(latest, self.config, previous, extra)
+            text = summary.split("\n\n")[0]  # the summary lines
             for severity, icon in ICONS.items():
                 text = text.replace(f" {severity}", f" {icon}")
         self.query_one("#summary", Static).update(text)
         self.fill()
-
-    def document_issues(self, latest: dict) -> list[Issue]:
-        """Cached document check results of the snapshot's papers (for current PDFs only)."""
-        found, by_number = [], {p["number"]: p for p in latest["papers"]}
-        self.inspected = set()
-        for record in papers.load(cli.DIR_PAPERS) if cli.DIR_PAPERS.is_dir() else []:
-            paper = by_number.get(record["number"])
-            results = documents.inspection(record, self.config, cli.DIR_PAPERS)
-            if paper is None or results is None:
-                continue
-            self.inspected.add(paper["number"])
-            spcs = tuple(paper["spcs"])
-            found += [
-                Issue(paper["number"], f.severity, c, f.message, paper["url"], spcs)
-                for c, f in results
-            ]
-        return found
 
     def fill(self) -> None:
         table = self.query_one(DataTable)
         table.clear()
         needle = self.query_one(Input).value.lower()
         for n, i in enumerate(self.issues):
-            spcs = ", ".join(i.spcs) or "(no SPC)"
-            if self.hide_green and i.severity == GREEN:
-                continue
-            if needle in f"{i.severity} #{i.number} {spcs} {i.message}".lower():
+            if matches(i, needle) and not (self.hide_green and i.severity == GREEN):
+                spcs = ", ".join(i.spcs) or "(no SPC)"
                 table.add_row(ICONS[i.severity], i.number, spcs, i.message, key=str(n))
 
     def action_legend(self) -> None:
@@ -437,6 +432,12 @@ class Monitor(App):
             return [issue.number] if issue else []
         rows = self.query_one(DataTable).rows
         return sorted({self.issues[int(k.value or 0)].number for k in rows})
+
+    def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
+        yield from super().get_system_commands(screen)
+        if screen.query("#issues"):  # the main screen, where the actions apply
+            for title, help, action in COMMANDS:
+                yield SystemCommand(title, help, partial(self.run_action, action))
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         # While a job runs, the UI only allows quitting

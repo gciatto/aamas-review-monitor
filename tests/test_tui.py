@@ -76,7 +76,9 @@ def cached_monitor(tmp_path, monkeypatch):
 def test_tui_downloads_once_then_shows_the_pdf(tmp_path, monkeypatch):
     app, client, _ = cached_monitor(tmp_path, monkeypatch)
     launched: list[list[str]] = []
-    monkeypatch.setattr(tui.subprocess, "Popen", lambda command, **kw: launched.append(command))
+    monkeypatch.setattr(
+        tui.papers.subprocess, "Popen", lambda command, **kw: launched.append(command)
+    )
     monkeypatch.setattr(tui.papers, "pdf_text", lambda path: "left column\nright column")
 
     async def scenario():
@@ -207,3 +209,21 @@ def test_tui_bulk_download_survives_a_failure(tmp_path, monkeypatch):
 
     asyncio.run(scenario())
     assert notes == ["#7: rate limited\n0 of 1 papers have pdf: cached"]
+
+
+def test_command_palette_offers_every_action(tmp_path, monkeypatch):
+    app, _, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test() as pilot:
+            commands = {c.title: c for c in app.get_system_commands(app.screen)}
+            assert {title for title, _, _ in tui.COMMANDS} <= set(commands)
+            for _, _, action in tui.COMMANDS:  # every action names a real method
+                name = action.split("(")[0]
+                assert hasattr(app, f"action_{name}"), name
+            await commands["Legend"].callback()
+            await pilot.pause()
+            assert isinstance(app.screen, tui.Legend)
+            assert not any(c.title == "Legend" for c in app.get_system_commands(app.screen))
+
+    asyncio.run(scenario())
