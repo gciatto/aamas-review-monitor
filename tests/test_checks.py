@@ -209,3 +209,11 @@ def test_reviews_with_chatbot_phrases_or_dense_marker_words():
         (YELLOW, "review_marker_words:~R_11"),
     }
     assert issues(paper(), "2026-10-19") == set()  # old snapshots have neither field
+
+
+def test_review_findings_name_the_review_as_the_forum_does():
+    p = paper(words=40)
+    p["reviews"][0]["name"] = "Reviewer_aB3x"
+    messages = {i.message for i in check_paper(p, ctx("2026-10-19", p))}
+    assert "review of 40 words (Reviewer_aB3x)" in messages
+    assert "review of 40 words" in messages  # old snapshots: no name to give

@@ -54,6 +54,9 @@ tool is built around that rule:
 ## Checks
 
 `legend` (or `l` in the terminal UI) prints this list with the thresholds currently in use.
+Each flag says where it was found, whenever there is a place to point to: the PDF pages, the
+file in the supplementary zip, or the review, by the anonymous name the forum shows
+(`Reviewer_aB3x`). That holds in emails and comments too.
 Defaults follow the AAMAS 2027 timeline: 50% of reviews by 26 Oct, all by 13 Nov, rebuttal
 20–24 Nov, discussion from 25 Nov, acknowledgement by 3 Dec, meta-reviews by 9 Dec.
 

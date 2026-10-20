@@ -137,6 +137,8 @@ def summarize(record: dict, config: dict) -> dict:
         "reviews": [
             {
                 "reviewer": person(record, r["signatures"][0]),
+                # the anonymous name the forum shows (Reviewer_aB3x), to say which review
+                "name": r["signatures"][0].removeprefix(record["prefix"]),
                 "rating": _score(_value(r["content"], config["field_rating"])),
                 "confidence": _score(_value(r["content"], config["field_confidence"])),
                 "words": _words(r["content"]),

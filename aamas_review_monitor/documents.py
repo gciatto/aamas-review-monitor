@@ -72,7 +72,10 @@ document_check = registrar(DOCUMENT_CHECKS)
 
 
 def pdfinfo(pdf: Path) -> dict[str, str]:
-    lines = papers.tool("pdfinfo", "-enc", "UTF-8", str(pdf)).splitlines()
+    """pdfinfo's fields, with each page's size ("Page    3 size": "612 x 792 pts (letter)")."""
+    lines = papers.tool(
+        "pdfinfo", "-enc", "UTF-8", "-f", "1", "-l", "100000", str(pdf)
+    ).splitlines()
     return {k.strip(): v.strip() for k, _, v in (line.partition(":") for line in lines) if v}
 
 
@@ -116,9 +119,15 @@ def _main_pages(doc: Document) -> Parts | None:
 def _on(doc: Document, found: Callable[[str], object]) -> str:
     """The pages where `found(page text)` holds, e.g. " (p. 3, 5)"; empty if none (a match
     may straddle two pages)."""
-    numbers = [str(n) for n, page in enumerate(doc.pages, 1) if found(page)]
-    shown = ", ".join(numbers[:5]) + (", …" if len(numbers) > 5 else "")
-    return f" (p. {shown})" if numbers else ""
+    numbers = [n for n, page in enumerate(doc.pages, 1) if found(page)]
+    return f" ({_listed(numbers, len(doc.pages))})" if numbers else ""
+
+
+def _listed(numbers: list[int], total: int) -> str:
+    """Page numbers, briefly: "p. 3, 5", "p. 1, 2, 3, 4, 5, …", or "all pages"."""
+    if total > 1 and len(numbers) == total:
+        return "all pages"
+    return "p. " + ", ".join(map(str, numbers[:5])) + (", …" if len(numbers) > 5 else "")
 
 
 def _where(doc: Document, parts: Parts) -> str:
@@ -176,12 +185,23 @@ def too_short(doc: Document) -> list[Finding]:
 def page_size(doc: Document) -> list[Finding]:
     """US Letter pages
 
-    RED when the pages are not US Letter (612 x 792 pt), the size of the AAMAS template.
+    RED when pages are not US Letter (612 x 792 pt), the size of the AAMAS template, saying
+    which ones.
     """
-    size = re.match(r"([\d.]+) x ([\d.]+)", doc.info.get("Page size", ""))
-    if size and (float(size[1]), float(size[2])) != LETTER:
-        return [Finding(RED, f"page size {size[1]} x {size[2]} pt")]
-    return []
+    sizes = {
+        int(m[1]): value
+        for key, value in doc.info.items()
+        if (m := re.fullmatch(r"Page\s+(\d+) size", key))
+    } or {1: doc.info.get("Page size", "")}  # older pdfinfo output: the first page's only
+    wrong: dict[str, list[int]] = {}
+    for number, value in sorted(sizes.items()):
+        size = re.match(r"([\d.]+) x ([\d.]+)", value)
+        if size and (float(size[1]), float(size[2])) != LETTER:
+            wrong.setdefault(f"{size[1]} x {size[2]} pt", []).append(number)
+    return [
+        Finding(RED, f"page size {size} ({_listed(numbers, len(doc.pages))})")
+        for size, numbers in wrong.items()
+    ]
 
 
 @document_check
@@ -208,7 +228,8 @@ def template(doc: Document) -> list[Finding]:
     another or an older template was used, or the text extraction missed it.
     """
     first = " ".join(doc.pages[0].split()) if doc.pages else ""
-    return [] if TEMPLATE_MARK in first else [Finding(YELLOW, "no AAMAS 2027 copyright block")]
+    missing = Finding(YELLOW, "no AAMAS 2027 copyright block on page 1")
+    return [] if TEMPLATE_MARK in first else [missing]
 
 
 @document_check
@@ -268,14 +289,20 @@ def metadata_match(doc: Document) -> list[Finding]:
     content = doc.record["content"]
     title = _words(str(content.get("title", {}).get("value", "")))
     if title and sum(w in start for w in title) < 0.8 * len(title):
-        found.append(Finding(YELLOW, "OpenReview title not found in the PDF", "title"))
+        found.append(
+            Finding(YELLOW, "OpenReview title not found in the PDF's first 2 pages", "title")
+        )
     words = _words(str(content.get("abstract", {}).get("value", "")))
     phrases = [" ".join(words[i : i + 3]) for i in range(len(words) - 2)]
     if phrases:
         share = sum(p in start_text for p in phrases) / len(phrases)
         if share < 0.8:
             found.append(
-                Finding(YELLOW, f"{share:.0%} of the abstract found in the PDF", "abstract")
+                Finding(
+                    YELLOW,
+                    f"{share:.0%} of the abstract found in the PDF's first 2 pages",
+                    "abstract",
+                )
             )
     return found
 
@@ -310,21 +337,29 @@ def supplementary_anonymous(doc: Document) -> list[Finding]:
     """
     if doc.supplementary is None or not zipfile.is_zipfile(doc.supplementary):
         return []
-    found, homes, emails = [], set(), set()
+    found: list[Finding] = []
+    homes: dict[str, set[str]] = {}  # name -> the files it was found in
+    emails: dict[str, set[str]] = {}
     with zipfile.ZipFile(doc.supplementary) as archive:
         entries = _entries(archive)
-        if any("/.git/" in f"/{e.filename}" for e in entries):
-            found.append(Finding(RED, "contains a .git folder", "git"))
+        gits = sorted(
+            {e.filename.split(".git/")[0] for e in entries if "/.git/" in f"/{e.filename}"}
+        )
+        if gits:
+            found.append(Finding(RED, f"contains a .git folder: {gits[0]}.git/", "git"))
         for entry in entries:
             if Path(entry.filename).suffix.lower() in SUFFIXES_TEXT and not entry.is_dir():
                 with archive.open(entry) as file:
                     text = file.read(1_000_000).decode("utf-8", errors="replace")
-                homes |= {m[1] for m in PATTERN_HOME.findall(f"{entry.filename}\n{text}")}
-                emails |= set(PATTERN_EMAIL.findall(text))
-    if homes:
-        found.append(Finding(YELLOW, f"home folders: {', '.join(sorted(homes)[:3])}", "homes"))
-    if emails:
-        found.append(Finding(YELLOW, f"emails: {', '.join(sorted(emails)[:3])}", "emails"))
+                for m in PATTERN_HOME.findall(f"{entry.filename}\n{text}"):
+                    homes.setdefault(m[1], set()).add(entry.filename)
+                for email in PATTERN_EMAIL.findall(text):
+                    emails.setdefault(email, set()).add(entry.filename)
+    for what, code, by in (("home folders", "homes", homes), ("emails", "emails", emails)):
+        if by:
+            files = sorted(set().union(*by.values()))
+            where = ", ".join(files[:3]) + (", …" if len(files) > 3 else "")
+            found.append(Finding(YELLOW, f"{what}: {', '.join(sorted(by)[:3])} (in {where})", code))
     return found
 
 
@@ -342,7 +377,8 @@ def code_available(doc: Document) -> list[Finding]:
         with zipfile.ZipFile(doc.supplementary) as archive:
             if any(Path(e.filename).suffix.lower() in SUFFIXES_CODE for e in _entries(archive)):
                 return []
-    return [Finding(YELLOW, "experiments, but no code in the supplementary or linked")]
+    where = _on(doc, PATTERN_EXPERIMENTS.search)
+    return [Finding(YELLOW, f"experiments{where}, but no code in the supplementary or linked")]
 
 
 def _has_phrase(phrase: str, page: str) -> bool:
@@ -371,7 +407,12 @@ def marker_words(doc: Document) -> list[Finding]:
     1000 words. Many people write like this too: a weak hint, to be read before anything else.
     """
     described = markers.dense(*markers.words("\f".join(doc.pages)), doc.config)
-    return [Finding(YELLOW, described)] if described else []
+    if not described:
+        return []
+    counts = [sum(markers.words(page)[0].values()) for page in doc.pages]
+    densest = sorted((n for n in range(len(counts)) if counts[n]), key=lambda n: -counts[n])
+    where = ", ".join(str(n + 1) for n in densest[:3])
+    return [Finding(YELLOW, f"{described}, most on p. {where}")]
 
 
 def _checks_version() -> str:

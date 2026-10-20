@@ -186,6 +186,11 @@ def late_reviewer(paper: dict, ctx: Context) -> list[Finding]:
     ]
 
 
+def _which(review: dict) -> str:
+    """Which review, as the forum names it (" (Reviewer_aB3x)"); old snapshots lack it."""
+    return f" ({review['name']})" if review.get("name") else ""
+
+
 @paper_check
 def short_review(paper: dict, ctx: Context) -> list[Finding]:
     """Reviews long enough
@@ -194,7 +199,7 @@ def short_review(paper: dict, ctx: Context) -> list[Finding]:
     counted together).
     """
     return [
-        Finding(YELLOW, f"review of {r['words']} words", r["reviewer"])
+        Finding(YELLOW, f"review of {r['words']} words{_which(r)}", r["reviewer"])
         for r in paper["reviews"]
         if r["words"] < ctx.config["reviews_words_min"]
     ]
@@ -210,7 +215,9 @@ def review_chatbot_phrases(paper: dict, ctx: Context) -> list[Finding]:
     """
     return [
         Finding(
-            YELLOW, f"review with chatbot phrases: {'; '.join(r['phrases'][:3])}", r["reviewer"]
+            YELLOW,
+            f"review with chatbot phrases: {'; '.join(r['phrases'][:3])}{_which(r)}",
+            r["reviewer"],
         )
         for r in paper["reviews"]
         if r.get("phrases")
@@ -229,7 +236,7 @@ def review_marker_words(paper: dict, ctx: Context) -> list[Finding]:
     for r in paper["reviews"]:
         described = markers.dense(r.get("markers", {}), r["words"], ctx.config)
         if described:
-            found.append(Finding(YELLOW, f"review with {described}", r["reviewer"]))
+            found.append(Finding(YELLOW, f"review with {described}{_which(r)}", r["reviewer"]))
     return found
 
 
@@ -259,6 +266,7 @@ def recycled_review(paper: dict, ctx: Context) -> list[Finding]:
                 if score >= ctx.config["reviews_similarity_max"]:
                     message = (
                         f"review {score:.0%} similar to the same reviewer's on #{other['number']}"
+                        f"{_which(review)}"
                     )
                     found.append(
                         Finding(YELLOW, message, f"{review['reviewer']}@{other['number']}")

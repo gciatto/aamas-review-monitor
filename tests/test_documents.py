@@ -192,3 +192,35 @@ def test_text_findings_say_on_which_pages_to_look():
     assert found["chatbot_phrases"] == "chatbot phrases: certainly! here is (p. 2)"
     assert found["identifying_text:repositories"] == "repository links: someone (p. 2, 5)"
     assert found["identifying_text:phrases"] == "self-references: our previous work (p. 5)"
+
+
+def test_document_findings_say_where(tmp_path):
+    sizes = {f"Page {n:4} size": "612 x 792 pts (letter)" for n in range(1, 10)}
+    sizes["Page    3 size"] = sizes["Page    7 size"] = "595.276 x 841.89 pts (A4)"
+    found = {code: f.message for code, f in run(DOCUMENT_CHECKS, doc(paper(8), info=INFO | sizes))}
+    assert found["page_size"] == "page size 595.276 x 841.89 pt (p. 3, 7)"
+    every = {k: "595 x 842 pts" for k in sizes}
+    assert dict(run(DOCUMENT_CHECKS, doc(paper(8), info=INFO | every)))["page_size"].message == (
+        "page size 595 x 842 pt (all pages)"
+    )
+    zipped = tmp_path / "s.zip"
+    with zipfile.ZipFile(zipped, "w") as archive:
+        archive.writestr("tool/.git/HEAD", "ref")
+        archive.writestr("tool/run.sh", "cd /home/alice/tool")
+        archive.writestr("README.md", "Contact: alice@uni.example")
+    found = {
+        code: f.message for code, f in run(DOCUMENT_CHECKS, doc(paper(8), supplementary=zipped))
+    }
+    assert found["supplementary_anonymous:git"] == "contains a .git folder: tool/.git/"
+    assert found["supplementary_anonymous:homes"] == "home folders: alice (in tool/run.sh)"
+    assert found["supplementary_anonymous:emails"] == "emails: alice@uni.example (in README.md)"
+    lab = paper(8)
+    lab[2] += "\nOur experiments use three benchmarks, with experimental settings below.\n"
+    lab[3] += "\nMore experiments.\n"
+    found = {code: f.message for code, f in run(DOCUMENT_CHECKS, doc(lab))}
+    assert found["code_available"].startswith("experiments (p. 3, 4), but no code")
+    dense = paper(8)
+    dense[5] += "\nWe delve into the intricate realm and showcase pivotal results.\n" * 3
+    dense[2] += "\nWe delve deeper.\n"
+    found = {code: f.message for code, f in run(DOCUMENT_CHECKS, doc(dense))}
+    assert found["marker_words"].endswith(", most on p. 6, 3")

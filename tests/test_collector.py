@@ -98,6 +98,7 @@ def test_fetch_and_summarize_keep_only_process_metadata():
         "reviews": [
             {
                 "reviewer": "~Rev_A1",
+                "name": "Reviewer_aB3x",
                 "rating": 6,
                 "confidence": 4,
                 "words": 203,
@@ -108,6 +109,7 @@ def test_fetch_and_summarize_keep_only_process_metadata():
             },
             {
                 "reviewer": f"{SUB}7/Reviewer_hidden",
+                "name": "Reviewer_hidden",
                 "rating": 3,
                 "confidence": None,
                 "words": 1,
