@@ -52,6 +52,9 @@ def main(argv: list[str] | None = None) -> None:
     report_cmd.add_argument("--filter", default="", help="only issues matching (SPC, #N, text)")
     report_cmd.add_argument("--green", action="store_true", help="also list papers without issues")
     browse_cmd = commands.add_parser("browse", help="open a paper on OpenReview in the browser")
+    folder_cmd = commands.add_parser(
+        "folder", help="print and open the local folder of a paper's data (PDF, text, results)"
+    )
     attachment_cmd = commands.add_parser(
         "attachment", help="a paper's PDF or supplementary: path, contents, open (downloads it)"
     )
@@ -68,7 +71,7 @@ def main(argv: list[str] | None = None) -> None:
     issues_cmd = commands.add_parser("issues", help="issues of a paper")
     reviews_cmd = commands.add_parser("reviews", help="reviews and meta-reviews of a paper")
     reviews_cmd.add_argument("--reveal", action="store_true", help="show reviewer identities")
-    for cmd in (show_cmd, issues_cmd, reviews_cmd, browse_cmd, attachment_cmd):
+    for cmd in (show_cmd, issues_cmd, reviews_cmd, browse_cmd, attachment_cmd, folder_cmd):
         cmd.add_argument("number", type=int)
     download_cmd = commands.add_parser("download", help="download PDFs (cached)")
     download_cmd.add_argument("--supplementary", action="store_true", help="supplementary instead")
@@ -175,6 +178,12 @@ def main(argv: list[str] | None = None) -> None:
             print("\n".join(f"  {f.severity:6} {f.message}" for _, f in found))
     elif args.command == "browse":
         webbrowser.open(config["url_forum"] + load_records(args.number)[0]["id"])
+    elif args.command == "folder":
+        folder = core.DIR_PAPERS / str(args.number)
+        if not folder.is_dir():
+            sys.exit(f"#{args.number} is not cached. Is the paper yours? Run `sync` first")
+        print(folder)
+        papers.os_open(folder)
     elif args.command == "attachment":
         (record,) = load_records(args.number)
         field = config["field_supplementary" if args.supplementary else "field_pdf"]

@@ -182,6 +182,7 @@ Paper lists (`N ...`) default to all your papers.
 | `show N` / `issues N` | A paper's metadata and issues / only its issues (passed checks included) |
 | `reviews N [--reveal]` | Reviews and meta-reviews; reviewers stay anonymous unless `--reveal` |
 | `browse N` | Open the paper on OpenReview |
+| `folder N` | Print and open the paper's local data folder: record, PDF, supplementary, extracted text, check results |
 | `download [N ...] [--supplementary]` | Download PDFs or supplementary material, skipping current copies |
 | `attachment N [--supplementary] [--contents] [--open] [--reveal]` | A paper's PDF or zip, downloaded if needed: its path, its text or file list, open it, or show it in Finder/Explorer |
 | `inspect [N ...]` | Run the document checks, downloading what is missing |
@@ -229,8 +230,10 @@ in the command palette (`ctrl+p`):
 | `a` | Action menu for the marked papers or SPCs, else the selected one |
 | Enter, `d` | Paper details: metadata, every check with its outcome, anonymous reviews |
 | `o` | Open the paper on OpenReview |
+| `v` | Open the paper's PDF in your default viewer, downloading it first if needed |
+| `w` | Open the paper's local data folder in Finder/Explorer |
 | `p` | PDF: for one paper, a dialog with its path and text (`c` shows it in Finder/Explorer, `v` opens it, `y` copies the path); for marked papers, download the missing ones |
-| `u` | Supplementary material: the same, with the zip's file tree |
+| `u` | Supplementary material: the same dialog, showing the zip's file tree |
 | `i` | Run the document checks, downloading what is missing |
 | `m` | Templated email to the SPCs (SPCs tab) or to the papers' people, reviewed and editable before you type `SEND` |
 | `c` | Comment on each paper's forum with its issues (SPCs as readers optional), reviewed and editable before you type `SEND` |

@@ -540,3 +540,23 @@ def test_ignored_issues_stay_listed_in_gray_and_out_of_comments(tmp_path, monkey
             assert "ratings [3, 6]" not in item.text and "review of 1 words" in item.text
 
     asyncio.run(scenario())
+
+
+def test_open_the_pdf_directly_and_the_papers_folder(tmp_path, monkeypatch):
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    launched: list[list[str]] = []
+    monkeypatch.setattr(
+        tui.papers.subprocess, "Popen", lambda command, **kw: launched.append(command)
+    )
+
+    async def scenario():
+        async with app.run_test() as pilot:
+            await pilot.press("v")  # not downloaded yet: fetched first, then opened
+            await done(app, pilot, lambda: bool(launched))
+            assert launched[-1][-1] == str(tmp_path / "papers" / "7" / "pdf_v1.pdf")
+            await pilot.press("w")
+            assert launched[-1][-1] == str(tmp_path / "papers" / "7")
+            assert not isinstance(app.screen, Attachment)  # no dialog in between
+
+    asyncio.run(scenario())
+    assert client.downloads == [("pdf", "abc")]

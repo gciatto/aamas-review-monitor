@@ -315,3 +315,18 @@ def test_ignored_issues_are_listed_marked_and_left_out_of_counts_and_messages(
     cli.main(["ignore", "7", "disagreement", "--undo"])
     assert capsys.readouterr().out.strip() == "No issue is ignored"
     assert client.comments == []
+
+
+def test_folder_prints_and_opens_a_papers_data_folder(tmp_path, monkeypatch, capsys):
+    import pytest
+
+    from aamas_review_monitor import papers
+
+    cached_cli(tmp_path, monkeypatch)
+    launched: list[list[str]] = []
+    monkeypatch.setattr(papers.subprocess, "Popen", lambda command, **kw: launched.append(command))
+    cli.main(["folder", "7"])
+    assert capsys.readouterr().out.strip() == str(core.DIR_PAPERS / "7")
+    assert launched[0][-1] == str(core.DIR_PAPERS / "7")
+    with pytest.raises(SystemExit, match="#99 is not cached"):
+        cli.main(["folder", "99"])

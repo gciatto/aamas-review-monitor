@@ -73,8 +73,10 @@ COMMANDS = [
     ("Actions", "What can be done on the marked papers or SPCs, else on the selected one  [a]", "actions"),
     ("Paper details", "Metadata, checks, anonymous reviews of the selected paper  [d]", "details"),
     ("Open on OpenReview", "The selected paper's forum, in the browser  [o]", "open"),
+    ("Open the PDF", "The selected paper's PDF in your default viewer, downloading it if needed  [v]", "view_pdf"),
+    ("Open the paper's folder", "Where its data is kept: record, PDF, supplementary, text, results  [w]", "folder"),
     ("PDF", "One paper: path, text, open; marked papers: download the missing ones  [p]", "download('field_pdf')"),
-    ("Supplementary material", "One paper: path, files, open; marked papers: download  [u]", "download('field_supplementary')"),
+    ("Supplementary material: file tree", "One paper: path, file tree, open; marked papers: download  [u]", "download('field_supplementary')"),
     ("Inspect", "Document checks, downloading what is missing  [i]", "inspect"),
     ("Templated email", "From a template, to SPCs (SPCs tab) or to the papers' people  [m]", "mail"),
     ("Comment", "Post each paper's issues on its forum (one paper: editable)  [c]", "comment"),
@@ -89,7 +91,7 @@ TABLE_ACTIONS = {a.split("(")[0] for _, _, a in COMMANDS}
 # What the action menu offers, per tab
 MENU = {
     "papers": [
-        "details", "open", "download('field_pdf')", "download('field_supplementary')",
+        "details", "open", "view_pdf", "folder", "download('field_pdf')", "download('field_supplementary')",
         "inspect", "mail", "comment", "email",
     ],
     "spcs-tab": ["mail"],
@@ -134,6 +136,8 @@ class Monitor(App):
         ("q", "quit", "Quit"),
         Binding("d", "details", "Details", show=False),
         Binding("o", "open", "Browser", show=False),
+        Binding("v", "view_pdf", "Open PDF", show=False),
+        Binding("w", "folder", "Paper folder", show=False),
         Binding("p", "download('field_pdf')", "PDF", show=False),
         Binding("u", "download('field_supplementary')", "Supplementary", show=False),
         Binding("i", "inspect", "Inspect", show=False),
@@ -690,27 +694,44 @@ class Monitor(App):
             done,
         )
 
+    def with_attachment(self, number: int, key: str, then: Callable[[Path], object]) -> None:
+        """Calls `then` with a paper's attachment, downloading it first only if needed."""
+        field = self.config[key]
+        try:
+            (record,) = core.records(number)
+        except FileNotFoundError:
+            self.notify(f"#{number} is not cached: press s to sync", severity="error")
+            return
+        path = papers.attachment(record, field, core.DIR_PAPERS)
+        if path is None:
+            self.notify(f"#{number} has no {field}")
+        elif path.is_file():
+            then(path)
+        else:
+            self.online(
+                f"Downloading {field} of #{number}…",
+                lambda client, _: papers.download(client, record, field, core.DIR_PAPERS),
+                then,
+            )
+
+    def action_view_pdf(self) -> None:
+        if issue := self.selected():
+            self.with_attachment(issue.number, "field_pdf", papers.os_open)
+
+    def action_folder(self) -> None:
+        if issue := self.selected():
+            folder = core.DIR_PAPERS / str(issue.number)
+            if folder.is_dir():
+                papers.os_open(folder)
+            else:
+                self.notify(f"#{issue.number} is not cached: press s to sync", severity="error")
+
     def action_download(self, key: str) -> None:
         if not (numbers := self.scope()):
             return
         field = self.config[key]
         if len(numbers) == 1:  # one paper: show it, downloading first only if needed
-            try:
-                (record,) = core.records(*numbers)
-            except FileNotFoundError:
-                self.notify(f"#{numbers[0]} is not cached: press s to sync", severity="error")
-                return
-            path = papers.attachment(record, field, core.DIR_PAPERS)
-            if path is None:
-                self.notify(f"#{numbers[0]} has no {field}")
-            elif path.is_file():
-                self.push_screen(Attachment(path))
-            else:
-                self.online(
-                    f"Downloading {field} of #{numbers[0]}…",
-                    lambda client, _: papers.download(client, record, field, core.DIR_PAPERS),
-                    lambda path: self.push_screen(Attachment(path)),
-                )
+            self.with_attachment(numbers[0], key, lambda path: self.push_screen(Attachment(path)))
             return
 
         def job(client: Any, progress: Callable[[int, int], None]) -> tuple[int, list[str]]:
