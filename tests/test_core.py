@@ -58,7 +58,7 @@ def test_inspect_each_downloads_only_what_is_missing_and_survives_a_missing_tool
 
 
 def test_nothing_synced_yet_means_no_state_and_no_records():
-    assert core.current(CONFIG) == core.State(None, None, [], [], set())
+    assert core.current(CONFIG) == core.State(None, None, [], [], set(), set())
     assert core.records() == []  # nothing cached yet
 
 
@@ -148,3 +148,11 @@ def test_requests_are_spaced_by_the_rate_cap_and_the_wait_is_interruptible(monke
             slow.send(None)
     finally:
         core.INTERRUPT.clear()
+
+
+def test_ignored_issues_persist_and_can_be_counted_again():
+    assert core.ignored() == set()
+    core.ignore({(7, "disagreement"), (7, "short_review:~R1")})
+    assert core.ignore({(7, "disagreement")}, undo=True) == {(7, "short_review:~R1")}
+    assert core.ignored() == {(7, "short_review:~R1")}  # kept in the private data folder
+    assert oct(core.FILE_IGNORED.stat().st_mode & 0o777) == "0o600" or core.os.name == "nt"

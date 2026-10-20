@@ -512,3 +512,26 @@ def test_review_edits_each_message_and_refuses_empty_ones(tmp_path, monkeypatch)
     asyncio.run(scenario())
     assert [m[0][0] for m in client.messages] == ["Hi, paper 7", "Hi"]
     assert client.messages[1][0][2] == "Dear {{fullname}}, about #8"
+
+
+def test_ignored_issues_stay_listed_in_gray_and_out_of_comments(tmp_path, monkeypatch):
+    app, _, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(140, 40)) as pilot:
+            table = app.query_one("#issues")
+            rows = [table.get_row_at(r) for r in range(table.row_count)]
+            row = next(n for n, r in enumerate(rows) if r[4] == "ratings [3, 6]")
+            table.move_cursor(row=row)
+            await pilot.press("x")
+            assert (7, "disagreement") in app.ignored
+            assert table.row_count == len(rows)  # still listed
+            assert table.cursor_row == row and table.get_row_at(row)[1] == "⚪"
+            assert "ratings [3, 6] (ignored" in app.paper_text(7).plain
+            assert all(i.code != "disagreement" for i in app.by_spc()["~Spc_One1"])  # uncounted
+            await pilot.press("c")
+            await pilot.click("#comment-post")
+            (item,) = app.screen.items
+            assert "ratings [3, 6]" not in item.text and "review of 1 words" in item.text
+
+    asyncio.run(scenario())

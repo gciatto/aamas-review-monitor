@@ -23,3 +23,4 @@ def private_data(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(core, "DIR_PAPERS", data / "papers")
     monkeypatch.setattr(core, "FILE_TOKEN", data / "token")
     monkeypatch.setattr(core, "FILE_HISTORY", data / "history.jsonl")
+    monkeypatch.setattr(core, "FILE_IGNORED", data / "ignored.json")

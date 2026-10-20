@@ -3,7 +3,7 @@
 import csv
 import inspect
 from collections import Counter, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from datetime import date
 from typing import IO, Any, NamedTuple, TypeVar
 
@@ -522,12 +522,18 @@ def _changes(snapshot: dict, config: dict, previous: dict) -> tuple[int, list[Is
 
 
 def summary(
-    snapshot: dict, config: dict, previous: dict | None = None, extra: list[Issue] | None = None
+    snapshot: dict,
+    config: dict,
+    previous: dict | None = None,
+    extra: list[Issue] | None = None,
+    ignored: Collection[tuple[int, str]] = (),
 ) -> list[str]:
     """Papers per status and, given `previous`, the changes since. `extra` issues (document
-    checks) count in the status but not in the changes."""
+    checks) count in the status but not in the changes; `ignored` ones (number, code) don't."""
     status = {p["number"]: GREEN for p in snapshot["papers"]}
     for i in check(snapshot, config) + (extra or []):
+        if (i.number, i.code) in ignored:
+            continue
         status[i.number] = RED if RED in (status[i.number], i.severity) else YELLOW
     counts = {s: list(status.values()).count(s) for s in (RED, YELLOW, GREEN)}
     lines = [f"{len(status)} papers: " + ", ".join(f"{n} {s}" for s, n in counts.items())]
@@ -546,13 +552,15 @@ def report(
     extra: list[Issue] | None = None,
     needle: str = "",
     green: bool = False,
+    ignored: Collection[tuple[int, str]] = (),
 ) -> str:
     """Summary, changes since `previous`, and issues grouped by SPC. `needle` filters the
-    listing, `green` adds a row for each paper without issues."""
+    listing, `green` adds a row for each paper without issues; `ignored` issues are listed,
+    marked, but not counted."""
     issues = sorted(
         check(snapshot, config) + (extra or []), key=lambda i: (i.severity != RED, i.number, i.code)
     )
-    lines = summary(snapshot, config, previous, extra)
+    lines = summary(snapshot, config, previous, extra, ignored)
     resolved: dict[str, int] = defaultdict(int)
     for i in _changes(snapshot, config, previous)[1] if previous else []:
         for spc in i.spcs or ("(no SPC)",):
@@ -564,14 +572,24 @@ def report(
             for spc in i.spcs or ("(no SPC)",):
                 by_spc[spc].append(i)
     for spc, mine in sorted(by_spc.items(), key=lambda kv: -sum(i.severity == RED for i in kv[1])):
-        reds = sum(i.severity == RED for i in mine)
-        open_ = sum(i.severity != GREEN for i in mine)
+        counted = [i for i in mine if (i.number, i.code) not in ignored]
+        reds = sum(i.severity == RED for i in counted)
+        open_ = sum(i.severity != GREEN for i in counted)
         lines.append(f"\n{spc}: {open_} open ({reds} RED), {resolved[spc]} resolved since")
-        lines += [f"  {i.severity:6} #{i.number:<5} {i.message}  {i.url}" for i in mine]
+        lines += [
+            f"  {i.severity:6} #{i.number:<5} {i.message}"
+            + ("  (ignored)" if (i.number, i.code) in ignored else "")
+            + f"  {i.url}"
+            for i in mine
+        ]
     return "\n".join(lines)
 
 
-def write_csv(issues: list[Issue], file: IO[str]) -> None:
+def write_csv(
+    issues: list[Issue], file: IO[str], ignored: Collection[tuple[int, str]] = ()
+) -> None:
     writer = csv.writer(file)
-    writer.writerow(Issue._fields)
-    writer.writerows((*i[:5], ";".join(i.spcs)) for i in issues)
+    writer.writerow([*Issue._fields, "ignored"])
+    writer.writerows(
+        (*i[:5], ";".join(i.spcs), "yes" if (i.number, i.code) in ignored else "") for i in issues
+    )

@@ -54,7 +54,8 @@ from aamas_review_monitor.screens import (
     sent_lines,
 )
 
-RANKS = {ICONS[RED]: 0, ICONS[YELLOW]: 1, ICONS[GREEN]: 2}
+IGNORED, GRAY = "⚪", "grey50"  # how ignored issues look
+RANKS = {ICONS[RED]: 0, ICONS[YELLOW]: 1, ICONS[GREEN]: 2, IGNORED: 3}
 MARK = "✔"
 Job = Callable[[Any, Callable[[int, int], None]], Any]  # (client, progress) -> result
 
@@ -66,6 +67,7 @@ COMMANDS = [
     ("Reload", "Re-read the cached snapshots and results  [r]", "reload"),
     ("Filter", "By SPC, #paper, issue text or color  [f]", "focus('filter')"),
     ("Show or hide green papers", "Papers without issues  [g]", "toggle_green"),
+    ("Ignore or count again", "The selected issue: gray, uncounted, left out of emails and comments  [x]", "ignore"),
     ("Mark or unmark", "The selected paper (or SPC), to act on several at once  [space]", "mark"),
     ("Mark all shown", "Every paper (or SPC) shown; if all are marked, clears the marks  [*]", "mark_all"),
     ("Actions", "What can be done on the marked papers or SPCs, else on the selected one  [a]", "actions"),
@@ -128,6 +130,7 @@ class Monitor(App):
         ("s", "sync", "Sync"),
         ("l", "legend", "Legend"),
         ("g", "toggle_green", "🟢 on/off"),
+        ("x", "ignore", "Ignore"),
         ("q", "quit", "Quit"),
         Binding("d", "details", "Details", show=False),
         Binding("o", "open", "Browser", show=False),
@@ -144,6 +147,7 @@ class Monitor(App):
         super().__init__()
         self.config = config
         self.issues: list[Issue] = []  # plus one GREEN row per paper without issues
+        self.ignored: set[tuple[int, str]] = set()  # (number, code) the user ignores
         self.hide_green = False
         # papers whose current PDF went through the document checks
         self.inspected: set[int] = set()
@@ -201,14 +205,16 @@ class Monitor(App):
 
     def action_reload(self) -> None:
         state = core.current(self.config)
-        self.latest, self.inspected = state.latest, state.inspected
+        self.latest, self.inspected, self.ignored = state.latest, state.inspected, state.ignored
         self.papers = state.latest["papers"] if state.latest else []
         if state.latest is None:
             self.issues = []
             text = f"No snapshots in {core.DIR_SNAPSHOTS}: press s to sync"
         else:
             self.issues = state.issues + green_rows(state.latest, state.issues)
-            lines = summary(state.latest, self.config, state.previous, state.documents)
+            lines = summary(
+                state.latest, self.config, state.previous, state.documents, state.ignored
+            )
             text = "\n".join(lines)
             for severity, icon in ICONS.items():
                 text = text.replace(f" {severity}", f" {icon}")
@@ -228,15 +234,39 @@ class Monitor(App):
             if matches(i, needle) and not (self.hide_green and i.severity == GREEN):
                 spcs = ", ".join(i.spcs) or "(no SPC)"
                 mark = MARK if i.number in self.marked else ""
-                table.add_row(mark, ICONS[i.severity], i.number, spcs, i.message, key=str(n))
+                if (i.number, i.code) in self.ignored:  # still listed, in gray
+                    gray = [Text(str(c), GRAY) for c in (i.number, spcs, i.message)]
+                    table.add_row(mark, IGNORED, *gray, key=str(n))
+                else:
+                    table.add_row(mark, ICONS[i.severity], i.number, spcs, i.message, key=str(n))
         self.show_paper()
+
+    def active(self) -> list[Issue]:
+        """The issues not ignored: what emails and comments are about."""
+        return [i for i in self.issues if (i.number, i.code) not in self.ignored]
+
+    def action_ignore(self) -> None:
+        """Ignores the selected issue, or counts it again if it is ignored."""
+        issue = self.selected()
+        if self.query_one(TabbedContent).active != "papers" or issue is None:
+            return
+        if issue.severity == GREEN:
+            self.notify("Nothing to ignore: every check passes")
+            return
+        key, table = (issue.number, issue.code), self.query_one("#issues", DataTable)
+        undo, row = key in self.ignored, table.cursor_row
+        core.ignore({key}, undo)
+        self.action_reload()
+        table.move_cursor(row=row)
+        what = "counted again" if undo else "ignored: gray, left out of emails and comments"
+        self.notify(f"#{issue.number} {issue.message}: {what}")
 
     def by_spc(self) -> dict[str, list[Issue]]:
         """Open issues per SPC, every SPC of the snapshot included."""
         found: dict[str, list[Issue]] = {
             spc: [] for p in self.papers for spc in p["spcs"] or ["(no SPC)"]
         }
-        for i in self.issues:
+        for i in self.active():
             if i.severity != GREEN:
                 for spc in i.spcs or ("(no SPC)",):
                     found.setdefault(spc, []).append(i)
@@ -374,7 +404,7 @@ class Monitor(App):
             if spcs_read is None:
                 return
             found, skipped = outreach.comments(
-                self.issues, core.records(), set(numbers), spcs_read, self.config
+                self.active(), core.records(), set(numbers), spcs_read, self.config
             )
             if not found:
                 self.notify("\n".join([*skipped, "Nothing to comment on"]))
@@ -415,7 +445,7 @@ class Monitor(App):
             today = date.fromisoformat(latest["taken_at"][:10]) if latest else date.today()
             records = core.records()
             drafts, unreachable = outreach.compose(
-                template, self.issues, records, self.config, today, spcs, numbers
+                template, self.active(), records, self.config, today, spcs, numbers
             )
             if not drafts:
                 self.notify("\n".join([*unreachable, f"Nothing to send with {template.name}"]))
@@ -443,7 +473,13 @@ class Monitor(App):
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         event.data_table.sort(
             event.column_key,
-            key=lambda v: v if isinstance(v, int) else RANKS.get(str(v), str(v)),
+            key=lambda v: (
+                v
+                if isinstance(v, int)
+                else int(str(v))  # a gray paper number
+                if str(v).isdigit()
+                else RANKS.get(str(v), str(v))
+            ),
         )
 
     @on(DataTable.RowSelected, "#issues")
@@ -473,7 +509,7 @@ class Monitor(App):
             record = None
         inspected = number in self.inspected
         sent = [e for e in self.sent if papers.about(e, number)]
-        return details(number, record, self.config, mine, inspected, sent)
+        return details(number, record, self.config, mine, inspected, sent, self.ignored)
 
     def show_details(self, number: int) -> None:
         self.push_screen(Paper(self.paper_text(number)))

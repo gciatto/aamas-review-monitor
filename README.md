@@ -187,6 +187,7 @@ Paper lists (`N ...`) default to all your papers.
 | `outreach TEMPLATE [N ...] [--spc ID ...] [--edit]` | Compose templated emails from the current issues, preview every draft (`--edit`: edit each first), send after you type `SEND` |
 | `comment [N ...] [--spcs] [--text FILE] [--edit]` | Post each paper's open issues (or the file's text) as a comment on its forum, readable by PCs and SACs (and SPCs with `--spcs`), after you type `SEND` (`--edit`: edit each first) |
 | `history [N ...] [--full]` | Emails and comments sent from the app, newest first, optionally only about some papers |
+| `ignore [N CODE ...] [--undo]` | Ignore issues of a paper (codes are in brackets in `issues N`), or count them again; without arguments, list the ignored ones |
 
 Options that come before the command apply to every OpenReview request. `--rate` caps how
 many requests the app makes per second (5 by default, `0` for no cap), so bulk syncs and
@@ -220,6 +221,7 @@ in the command palette (`ctrl+p`):
 |---|---|
 | `f` | Filter by SPC, `#N`, issue text or color |
 | `g` | Show or hide 🟢 papers |
+| `x` | Ignore the selected issue, or count it again |
 | `space` / `*` | Mark or unmark the selected paper (or SPC) / everything shown |
 | `a` | Action menu for the marked papers or SPCs, else the selected one |
 | Enter, `d` | Paper details: metadata, every check with its outcome, anonymous reviews |
@@ -242,6 +244,15 @@ failed. Esc, or its Interrupt button, stops the job at the next paper, or right 
 retry wait. Work already done stays: downloads and inspections are kept, while an interrupted
 sync saves no snapshot. An expired session brings up a sign-in dialog. In the command line,
 retries and waits are logged to the terminal, and `ctrl+c` interrupts.
+
+### Ignoring issues
+
+A flag you have checked and judged harmless can be ignored: `x` on its row, or `ignore N CODE`.
+It stays in the list, in gray with ⚪, so nothing disappears silently, but it no longer makes the
+paper red or yellow, doesn't count for its SPC, and is left out of every email and comment.
+`report`, `issues` and the CSV mark it as ignored. It stays ignored across syncs for as long as
+its check keeps flagging it; for review checks, that is per reviewer. `x` again, or `--undo`,
+counts it again.
 
 ## Email
 
@@ -327,7 +338,7 @@ elsewhere.
   MinHash fingerprints of reviews (comparable, but the text can't be recovered from them), and
   which entries of the marker lists a review matches.
 - Paper content, reviews, PDFs, extracted text and document check results are cached in
-  `~/.aamas-review-monitor/papers/`, and what the app sent in `history.jsonl` next to it.
+  `~/.aamas-review-monitor/papers/`, what the app sent in `history.jsonl` next to it, and the issues you ignore in `ignored.json`.
 - **Run it in your own terminal, not through an AI coding assistant.** Its output and its cache
   hold submissions, reviews and the identities of reviewers and SPCs.
 - The project is developed and tested only on synthetic data. The screenshots above are

@@ -4,6 +4,7 @@ sign-in, confirmation and the email, comment and template forms."""
 import logging
 import subprocess
 import zipfile
+from collections.abc import Collection
 from pathlib import Path
 
 from rich.text import Text
@@ -50,9 +51,10 @@ def details(
     issues: list[Issue],
     inspected: bool = False,
     sent: list[dict] | None = None,
+    ignored: Collection[tuple[int, str]] = (),
 ) -> Text:
-    """Colored metadata, checks (failed and passed) and anonymous reviews of one paper;
-    passed document checks only if they were run (`inspected`)."""
+    """Colored metadata, checks (failed, ignored and passed) and anonymous reviews of one
+    paper; passed document checks only if they were run (`inspected`)."""
     text = Text()
 
     def section(title: str) -> None:
@@ -71,7 +73,10 @@ def details(
         pairs(papers.metadata_fields(record, config))
     section("Checks")
     for i in issues:
-        text.append(f"{ICONS[i.severity]} {i.message}\n")
+        if (i.number, i.code) in ignored:
+            text.append(f"⚪ {i.message} (ignored: x to count it again)\n", "grey50")
+        else:
+            text.append(f"{ICONS[i.severity]} {i.message}\n")
     for label in passed(issues):
         text.append(f"{ICONS[GREEN]} {label}\n")
     if inspected:

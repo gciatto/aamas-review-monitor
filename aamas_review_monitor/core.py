@@ -31,6 +31,7 @@ DIR_SNAPSHOTS = DIR_DATA / "snapshots"
 DIR_PAPERS = DIR_DATA / "papers"
 FILE_TOKEN = DIR_DATA / "token"
 FILE_HISTORY = DIR_DATA / "history.jsonl"  # what the app sent: emails and comments
+FILE_IGNORED = DIR_DATA / "ignored.json"  # issues the user chose to ignore: [number, code]
 
 
 def load_config() -> dict:
@@ -206,14 +207,37 @@ class State(NamedTuple):
     issues: list[Issue]
     documents: list[Issue]  # the document checks' issues, also in `issues`
     inspected: set[int]
+    ignored: set[tuple[int, str]]  # (number, code) of the issues the user ignores
+
+    @property
+    def active(self) -> list[Issue]:
+        """The issues not ignored: the ones that count, and that emails and comments are about."""
+        return [i for i in self.issues if (i.number, i.code) not in self.ignored]
 
 
 def current(config: dict) -> State:
     latest, previous = load_snapshots()
     if latest is None:
-        return State(None, None, [], [], set())
+        return State(None, None, [], [], set(), ignored())
     extra, inspected = documents.snapshot_issues(latest, config, DIR_PAPERS)
-    return State(latest, previous, check(latest, config) + extra, extra, inspected)
+    return State(latest, previous, check(latest, config) + extra, extra, inspected, ignored())
+
+
+def ignored() -> set[tuple[int, str]]:
+    """(paper number, issue code) of the issues the user ignores. An issue stays ignored for as
+    long as its check keeps flagging it, across syncs."""
+    if not FILE_IGNORED.is_file():
+        return set()
+    return {(n, c) for n, c in json.loads(FILE_IGNORED.read_text(encoding="utf-8"))}
+
+
+def ignore(keys: set[tuple[int, str]], undo: bool = False) -> set[tuple[int, str]]:
+    """Ignores the issues (or, with `undo`, no longer ignores them); returns all ignored."""
+    found = ignored() - keys if undo else ignored() | keys
+    DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+    FILE_IGNORED.touch(mode=0o600)
+    FILE_IGNORED.write_text(json.dumps(sorted(found)), encoding="utf-8")
+    return found
 
 
 def records(*numbers: int) -> list[dict]:

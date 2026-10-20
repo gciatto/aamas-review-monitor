@@ -289,3 +289,29 @@ def test_edit_opens_each_message_in_the_editor_before_the_preview(tmp_path, monk
     with pytest.raises(SystemExit, match="Comment on #7: empty"):
         cli.main(["comment", "7", "--edit"])
     assert client.comments == []
+
+
+def test_ignored_issues_are_listed_marked_and_left_out_of_counts_and_messages(
+    tmp_path, monkeypatch, capsys
+):
+    client = cached_cli(tmp_path, monkeypatch)
+    cli.main(["issues", "7"])
+    assert "ratings [3, 6]  [disagreement]" in capsys.readouterr().out
+    cli.main(["ignore", "7", "disagreement"])
+    assert capsys.readouterr().out.strip() == "#7  disagreement"
+    cli.main(["issues", "7"])
+    assert "ratings [3, 6]  [disagreement]  (ignored)" in capsys.readouterr().out
+    cli.main(["report", "--csv", str(tmp_path / "x.csv")])
+    out = capsys.readouterr().out
+    assert "ratings [3, 6]  (ignored)" in out
+    assert (
+        '"ratings [3, 6]",https://openreview.net/forum?id=abc,~Spc_One1,yes'
+        in (tmp_path / "x.csv").read_text()
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt="": "no")
+    cli.main(["comment", "7"])
+    out = capsys.readouterr().out
+    assert "review of 1 words" in out and "ratings [3, 6]" not in out
+    cli.main(["ignore", "7", "disagreement", "--undo"])
+    assert capsys.readouterr().out.strip() == "No issue is ignored"
+    assert client.comments == []

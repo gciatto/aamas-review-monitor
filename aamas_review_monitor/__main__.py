@@ -82,6 +82,12 @@ def main(argv: list[str] | None = None) -> None:
     )
     comment_cmd.add_argument("--spcs", action="store_true", help="let the papers' SPCs read it")
     comment_cmd.add_argument("--text", type=Path, help="post this file's text instead")
+    ignore_cmd = commands.add_parser(
+        "ignore", help="ignore issues of a paper (codes from `issues`); no arguments: list them"
+    )
+    ignore_cmd.add_argument("number", type=int, nargs="?")
+    ignore_cmd.add_argument("codes", nargs="*", help="issue codes, e.g. disagreement")
+    ignore_cmd.add_argument("--undo", action="store_true", help="count them again")
     history_cmd = commands.add_parser("history", help="emails and comments sent from the app")
     history_cmd.add_argument("--full", action="store_true", help="print the bodies too")
     outreach_cmd = commands.add_parser(
@@ -132,19 +138,29 @@ def main(argv: list[str] | None = None) -> None:
         if (latest := state.latest) is None:
             sys.exit(f"No snapshots in {core.DIR_SNAPSHOTS}: run `sync` first")
         if args.command == "report":
-            print(report(latest, config, state.previous, state.documents, args.filter, args.green))
+            print(
+                report(
+                    latest,
+                    config,
+                    state.previous,
+                    state.documents,
+                    args.filter,
+                    args.green,
+                    state.ignored,
+                )
+            )
             if args.csv:
                 issues = state.issues + (green_rows(latest, state.issues) if args.green else [])
                 with args.csv.open("w", newline="", encoding="utf-8") as file:
-                    write_csv([i for i in issues if matches(i, args.filter)], file)
+                    write_csv([i for i in issues if matches(i, args.filter)], file, state.ignored)
             return
         if args.command == "show":
             print(papers.metadata(load_records(args.number)[0], config) + "\n")
         mine = [i for i in check(latest, config) if i.number == args.number]
-        mine_documents = document_lines(args.number, config)
+        mine_documents = document_lines(args.number, config, state.ignored)
         print(
             "\n".join(
-                [f"{i.severity:6} {i.message}" for i in mine]
+                [issue_line(i, state.ignored) for i in mine]
                 + [f"{'GREEN':6} {label}" for label in passed(mine)]
                 + mine_documents
             )
@@ -194,7 +210,7 @@ def main(argv: list[str] | None = None) -> None:
         today = date.fromisoformat(state.latest["taken_at"][:10])
         drafts, unreachable = outreach.compose(
             chosen,
-            state.issues,
+            state.active,
             core.records(),
             config,
             today,
@@ -208,7 +224,7 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit("Run `sync` first")
         records = load_records(*args.numbers)
         to_post, skipped = outreach.comments(
-            state.issues, records, {r["number"] for r in records}, args.spcs, config
+            state.active, records, {r["number"] for r in records}, args.spcs, config
         )
         if args.text:
             text = args.text.read_text(encoding="utf-8")
@@ -230,6 +246,13 @@ def main(argv: list[str] | None = None) -> None:
             )
         else:
             print("Nothing posted")
+    elif args.command == "ignore":
+        if args.number is not None:
+            if not args.codes:
+                sys.exit("Which issues? Their codes are in `issues N`, in brackets")
+            core.ignore({(args.number, c) for c in args.codes}, args.undo)
+        listed = sorted(core.ignored())
+        print("\n".join(f"#{n}  {c}" for n, c in listed) or "No issue is ignored")
     elif args.command == "history":
         entries = papers.history(core.FILE_HISTORY)
         if args.numbers:
@@ -311,7 +334,13 @@ def send(
         print("Nothing sent")
 
 
-def document_lines(number: int, config: dict) -> list[str]:
+def issue_line(issue: Issue, ignored: set[tuple[int, str]]) -> str:
+    """An issue with its code (for `ignore`), marked when ignored."""
+    mark = "  (ignored)" if (issue.number, issue.code) in ignored else ""
+    return f"{issue.severity:6} {issue.message}  [{issue.code}]{mark}"
+
+
+def document_lines(number: int, config: dict, ignored: set[tuple[int, str]]) -> list[str]:
     """Cached document check results of a paper, as report lines."""
     try:
         (record,) = core.records(number)
@@ -321,7 +350,7 @@ def document_lines(number: int, config: dict) -> list[str]:
     if found is None:
         return [f"Document checks not run: `inspect {number}`"]
     issues = [Issue(number, f.severity, code, f.message, "", ()) for code, f in found]
-    return [f"{i.severity:6} {i.message}" for i in issues] + [
+    return [issue_line(i, ignored) for i in issues] + [
         f"{'GREEN':6} {label}" for label in passed(issues, documents.DOCUMENT_CHECKS)
     ]
 
