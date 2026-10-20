@@ -268,7 +268,9 @@ SPC's papers reaches them. Reviewers get one message per paper. Templates are pl
 
 - **Header:** `Name:`, `Description:`, `Audience:` (`spcs` or `late-reviewers`), `Codes:` (the
   issue codes it covers, or `*` for all) and `Subject:`.
-- **Body:** after a `---` line. Placeholders are `$issues`, `$papers`, `$count`, and per paper
+- **Body:** after a `---` line. Placeholders are `$issues` (in SPC messages and comments, each
+  paper's first issue from a check is followed by that check's legend entry, so the reader
+  knows what it verifies), `$papers`, `$count`, and per paper
   `$paper`/`$url`, plus `$deadline_reviews`, `$deadline_meta_reviews`,
   `$deadline_acknowledgements` and the `$days_...` left for each. OpenReview fills in
   `{{fullname}}`.

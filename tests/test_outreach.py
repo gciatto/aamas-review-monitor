@@ -34,9 +34,8 @@ def test_spc_digest_lists_every_issue_of_the_spc_and_goes_through_their_paper():
     assert draft.to == "~Spc_One1" and draft.members == [f"{SUB}7/Area_Chair_9jqi"]
     assert draft.invitation == f"{SUB}7/Area_Chairs/-/Message"
     assert draft.subject == "AAMAS 2027: status of your papers (#7)"
-    assert (
-        f"- #7 ({URL}): 2 reviews missing, 2 days left\n- #7 ({URL}): ratings [3, 6]" in draft.body
-    )
+    assert f"- #7 ({URL}): 2 reviews missing, 2 days left\n    Reviews on schedule: " in draft.body
+    assert f"- #7 ({URL}): ratings [3, 6]\n    Ratings within the allowed spread: " in draft.body
     assert draft.body.startswith("Dear {{fullname}},")  # OpenReview fills the name in
 
 
@@ -86,8 +85,25 @@ def test_previews_warn_when_the_same_message_already_went_out(tmp_path):
     other, _ = outreach.direct(records, "spcs", "Something else", "Hi")  # not a repeat
     assert "⚠" not in outreach.preview(other, [], sent)
 
-    found, _ = outreach.comments(ISSUES, records, {7}, False)
+    found, _ = outreach.comments(ISSUES, records, {7}, False, CONFIG)
     assert "⚠" not in outreach.preview_comments(found, [], sent)  # emails are not comments
     papers.post_comments(FakeClient(), found, history_file=history)
     text = outreach.preview_comments(found, [], papers.history(history))
     assert "⚠ 1 of 1 papers were commented on before" in text
+
+
+def test_each_failed_check_is_explained_once_per_paper_for_spcs_but_not_reviewers():
+    records = fetch(FakeClient(), CONFIG)
+    short = [
+        Issue(7, YELLOW, f"short_review:~R{n}", "review of 60 words", URL, ("~Spc_One1",))
+        for n in (1, 2)
+    ]
+    (draft,), _ = outreach.compose(by_key()["spc-digest"], ISSUES + short, records, CONFIG, TODAY)
+    assert draft.body.count("Reviews long enough: ") == 1
+    assert "shorter than 150 words" in draft.body
+    (comment,), _ = outreach.comments(ISSUES + short, records, {7}, True, CONFIG)
+    assert comment.text.count("Reviews long enough: ") == 1
+    (reminder,), _ = outreach.compose(
+        by_key()["reviewers-deadline"], ISSUES, records, CONFIG, TODAY
+    )
+    assert "Reviews on schedule: " not in reminder.body

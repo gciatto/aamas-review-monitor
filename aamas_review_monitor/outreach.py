@@ -7,13 +7,14 @@ their papers (any message reaches them), a reviewer reminder through the paper i
 """
 
 import string
+import textwrap
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date
 from pathlib import Path
 from typing import NamedTuple
 
-from aamas_review_monitor.checks import GREEN, ICONS, Issue
+from aamas_review_monitor.checks import GREEN, ICONS, Issue, legend
 from aamas_review_monitor.collector import person
 from aamas_review_monitor.papers import Comment, Draft, recipients
 from aamas_review_monitor.resources import DIR_TEMPLATES, FILE_COMMENT
@@ -68,8 +69,38 @@ def _values(config: dict, today: date) -> dict[str, str]:
     return values
 
 
-def _lines(issues: list[Issue]) -> str:
-    return "\n".join(f"- #{i.number} ({i.url}): {i.message}" for i in issues)
+def _legend(config: dict) -> dict[str, tuple[str, str]]:
+    """Label and description of every paper and document check, by code."""
+    from aamas_review_monitor.documents import DOCUMENT_CHECKS  # documents imports papers
+
+    entries = legend(config) + legend(config, DOCUMENT_CHECKS)
+    return {code: (label, text) for code, label, text in entries}
+
+
+def _paper_line(issue: Issue) -> str:
+    return f"- #{issue.number} ({issue.url}): {issue.message}"
+
+
+def _lines(
+    issues: list[Issue],
+    line: Callable[[Issue], str] = _paper_line,
+    explained: dict[str, tuple[str, str]] | None = None,
+) -> str:
+    """One line per issue; with `explained` (the legend), a paper's first issue from each
+    check is followed by what that check verifies, so readers know why it was flagged."""
+    found, seen = [], set()
+    for i in issues:
+        found.append(line(i))
+        code = i.code.split(":")[0]
+        if explained and code in explained and (i.number, code) not in seen:
+            seen.add((i.number, code))
+            label, text = explained[code]
+            found.append(
+                textwrap.fill(
+                    f"{label}: {text}", 92, initial_indent="    ", subsequent_indent="    "
+                )
+            )
+    return "\n".join(found)
 
 
 def _route(spc: str, records: dict[int, dict], numbers: list[int]) -> tuple[dict, str] | None:
@@ -116,7 +147,7 @@ def compose(
             fill = values | {
                 "count": str(len(papers)),
                 "papers": ", ".join(f"#{n}" for n in papers),
-                "issues": _lines(theirs),
+                "issues": _lines(theirs, explained=_legend(config)),
             }
             invitation, parent, _ = recipients(record, "spcs")
             subject = string.Template(template.subject).safe_substitute(fill)
@@ -227,10 +258,10 @@ def preview(
 
 
 def comments(
-    issues: list[Issue], records: list[dict], numbers: set[int], spcs_read: bool
+    issues: list[Issue], records: list[dict], numbers: set[int], spcs_read: bool, config: dict
 ) -> tuple[list[Comment], list[str]]:
-    """One forum comment per paper listing its open issues, from the comment template; also the
-    papers that cannot get one, and why."""
+    """One forum comment per paper listing its open issues, each check explained once, from the
+    comment template; also the papers that cannot get one, and why."""
     header, _, body = FILE_COMMENT.read_text(encoding="utf-8").partition("\n---\n")
     title = header.split(":", 1)[1].strip()
     by_number = {r["number"]: r for r in records}
@@ -242,7 +273,7 @@ def comments(
         elif not theirs:
             skipped.append(f"#{number}: no open issues")
         else:
-            lines = "\n".join(f"- {ICONS[i.severity]} {i.message}" for i in theirs)
+            lines = _lines(theirs, lambda i: f"- {ICONS[i.severity]} {i.message}", _legend(config))
             text = string.Template(body).safe_substitute(issues=lines).strip() + "\n"
             found.append(Comment(by_number[number], title, text, spcs_read))
     return found, skipped

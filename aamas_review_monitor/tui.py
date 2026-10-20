@@ -357,7 +357,7 @@ class Monitor(App):
         if not (numbers := self.scope()):
             return
         records, one = core.records(), len(numbers) == 1
-        draft, _ = outreach.comments(self.issues, records, set(numbers[:1]), True)
+        draft, _ = outreach.comments(self.issues, records, set(numbers[:1]), True, self.config)
         text = draft[0].text if draft and one else None
         if one and not draft:
             self.notify(f"#{numbers[0]}: no open issues to comment on, or not cached")
@@ -367,7 +367,9 @@ class Monitor(App):
             if form is None:
                 return
             spcs_read, edited = form
-            found, skipped = outreach.comments(self.issues, records, set(numbers), spcs_read)
+            found, skipped = outreach.comments(
+                self.issues, records, set(numbers), spcs_read, self.config
+            )
             if edited is not None:
                 found = [c._replace(text=edited) for c in found]
             if not found:

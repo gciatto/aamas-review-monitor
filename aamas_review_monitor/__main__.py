@@ -193,7 +193,7 @@ def main(argv: list[str] | None = None) -> None:
             sys.exit("Run `sync` first")
         records = load_records(*args.numbers)
         to_post, skipped = outreach.comments(
-            state.issues, records, {r["number"] for r in records}, args.spcs
+            state.issues, records, {r["number"] for r in records}, args.spcs, config
         )
         if args.text:
             text = args.text.read_text(encoding="utf-8")
