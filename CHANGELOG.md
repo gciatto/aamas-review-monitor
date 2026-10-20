@@ -1,3 +1,9 @@
+## [1.4.0](https://github.com/gciatto/aamas-review-monitor/compare/1.3.0...1.4.0) (2026-10-20)
+
+### Features
+
+* SPC emails and comments explain each failed check ([f61ed66](https://github.com/gciatto/aamas-review-monitor/commit/f61ed6696410e7295f75e60e684c6c7b729a3921))
+
 ## [1.3.0](https://github.com/gciatto/aamas-review-monitor/compare/1.2.0...1.3.0) (2026-10-19)
 
 ### Features
