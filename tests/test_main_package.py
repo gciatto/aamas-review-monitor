@@ -257,3 +257,35 @@ def test_comment_posts_issues_and_history_records_emails_and_comments(
     assert out[-1].startswith("2 entries in")
     cli.main(["history", "99"])
     assert capsys.readouterr().out.strip() == "Nothing sent from the app yet"
+
+
+def test_edit_opens_each_message_in_the_editor_before_the_preview(tmp_path, monkeypatch, capsys):
+    client = cached_cli(tmp_path, monkeypatch)
+    edited: list[str] = []
+
+    def editor(command, check):
+        file = Path(command[-1])
+        edited.append(file.read_text())
+        assert file.parent == core.DIR_DATA  # the private folder, not a public temp dir
+        file.write_text("Subject: Edited subject\n\nEdited body")
+
+    monkeypatch.setenv("EDITOR", "my-editor --wait")
+    monkeypatch.setattr(cli.subprocess, "run", editor)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "SEND")
+    cli.main(["outreach", "spc-digest", "--edit"])
+    out = capsys.readouterr().out
+    assert edited[0].startswith("Subject: AAMAS 2027: status of your papers (#7)\n\nDear")
+    assert "Subject: Edited subject\n\nEdited body" in out
+    assert (
+        client.messages[0][0][0] == "Edited subject" and client.messages[0][0][2] == "Edited body"
+    )
+    assert not (core.DIR_DATA / "draft.txt").exists()
+
+    monkeypatch.setattr(
+        cli.subprocess, "run", lambda command, check: Path(command[-1]).write_text("Title: x\n\n")
+    )
+    import pytest
+
+    with pytest.raises(SystemExit, match="Comment on #7: empty"):
+        cli.main(["comment", "7", "--edit"])
+    assert client.comments == []

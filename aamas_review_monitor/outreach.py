@@ -21,6 +21,7 @@ from aamas_review_monitor.resources import DIR_TEMPLATES, FILE_COMMENT
 
 AUDIENCES = ("spcs", "late-reviewers")
 COMMENT_CHARS_MAX = 5000  # OpenReview's Official_Comment limit
+COMMENT_LIMITS = (500, COMMENT_CHARS_MAX)  # title, text
 
 
 class Template(NamedTuple):
@@ -239,23 +240,47 @@ def _before(entries: list[dict]) -> str:
     )
 
 
+class Item(NamedTuple):
+    """One message or comment under review: where it goes, warnings, and its editable text."""
+
+    heading: str  # "To ~Ada_Lovelace1, via #7", "Comment on #7"
+    warnings: str  # "⚠ Already sent ..." lines, or ""
+    title: str  # subject, or comment title
+    text: str  # body, or comment text
+
+
+def review(
+    drafts: list[Draft],
+    unreachable: list[str],
+    sent: Sequence[dict] = (),
+    notes: Sequence[str] = (),
+) -> tuple[list[str], list[Item]]:
+    """Header lines (count, `notes` such as the snapshot's age, warnings, unreachable people)
+    and one item per draft, warning on those whose recipients already got the same email
+    (`sent`, the history)."""
+    earlier = [repeats(d, sent) for d in drafts]
+    items = [
+        Item(f"To {d.to}, via #{d.record['number']}", _before(e), d.subject, d.body)
+        for d, e in zip(drafts, earlier)
+    ]
+    skipped = [f"Not reachable: {line}" for line in unreachable]
+    return [f"{len(drafts)} messages", *notes, *_warnings(earlier, "went out"), *skipped], items
+
+
+def render(header: list[str], items: list[Item], field: str = "Subject") -> str:
+    """A review as plain text, every item in full."""
+    blocks = [f"=== {i.heading} ===\n{i.warnings}{field}: {i.title}\n\n{i.text}" for i in items]
+    return "\n".join([*header, "", *blocks])
+
+
 def preview(
     drafts: list[Draft],
     unreachable: list[str],
     sent: Sequence[dict] = (),
     notes: Sequence[str] = (),
 ) -> str:
-    """Every draft in full, for a confirmation: who, through which paper, subject and body; and
-    a warning on those whose recipients already got the same email (`sent`, the history).
-    `notes` go under the count, e.g. how old the snapshot is."""
-    earlier = [repeats(d, sent) for d in drafts]
-    blocks = [
-        f"=== To {d.to}, via #{d.record['number']} ===\n{_before(e)}Subject: {d.subject}\n\n{d.body}"
-        for d, e in zip(drafts, earlier)
-    ]
-    skipped = [f"Not reachable: {line}" for line in unreachable]
-    warned = _warnings(earlier, "went out")
-    return "\n".join([f"{len(drafts)} messages", *notes, *warned, *skipped, "", *blocks])
+    """Every draft in full, for a confirmation: see `review`."""
+    return render(*review(drafts, unreachable, sent, notes))
 
 
 def comments(
@@ -288,10 +313,11 @@ def comments(
     return found, skipped
 
 
-def preview_comments(
+def review_comments(
     found: list[Comment], skipped: list[str], sent: Sequence[dict] = (), notes: Sequence[str] = ()
-) -> str:
-    """Every comment in full, warning on the papers the app already commented on (`sent`)."""
+) -> tuple[list[str], list[Item]]:
+    """Header lines and one item per comment, warning on the papers the app already commented
+    on (`sent`)."""
     readers = "PCs, SACs" + (" and SPCs" if found and found[0].spcs_read else "")
     earlier = [
         [
@@ -301,14 +327,33 @@ def preview_comments(
         ]
         for c in found
     ]
-    blocks = [
-        f"=== Comment on #{c.record['number']} ===\n{_before(e)}Title: {c.title}\n\n{c.text}"
+    items = [
+        Item(f"Comment on #{c.record['number']}", _before(e), c.title, c.text)
         for c, e in zip(found, earlier)
     ]
-    lines = [
+    header = [
         f"{len(found)} comments, readable by {readers}",
         *notes,
         *_warnings(earlier, "papers were commented on"),
         *(f"Skipped: {s}" for s in skipped),
     ]
-    return "\n".join([*lines, "", *blocks])
+    return header, items
+
+
+def preview_comments(
+    found: list[Comment], skipped: list[str], sent: Sequence[dict] = (), notes: Sequence[str] = ()
+) -> str:
+    """Every comment in full: see `review_comments`."""
+    return render(*review_comments(found, skipped, sent, notes), "Title")
+
+
+def problems(items: list[Item], limits: tuple[int, int] | None) -> list[str]:
+    """What prevents sending the (edited) items: empty texts, or longer than `limits`
+    (title, text) allow."""
+    found = []
+    for i in items:
+        if not i.title.strip() or not i.text.strip():
+            found.append(f"{i.heading}: empty")
+        elif limits and (len(i.title) > limits[0] or len(i.text) > limits[1]):
+            found.append(f"{i.heading}: longer than OpenReview allows ({limits[0]}/{limits[1]})")
+    return found

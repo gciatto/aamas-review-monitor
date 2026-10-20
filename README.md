@@ -23,7 +23,7 @@ Papers where everything is on track stay out of your way.
   PDF text and its supplementary file tree, without leaving the terminal.
 - **Reminders that write themselves.** Each SPC can get one digest of every open issue on their
   papers. Ready-made templates cover late SPCs, late reviewers and approaching deadlines. Every
-  message is previewed before anything is sent, and all of it goes through OpenReview's own
+  message is previewed, and can be edited, before anything is sent, and all of it goes through OpenReview's own
   messaging. A paper's issues can also be posted as a comment on its forum.
 - **A record of every nudge.** Every email and comment the app sends is kept in a history, and
   shown on the paper and the SPC it concerns, so nobody gets the same reminder twice by accident.
@@ -182,10 +182,10 @@ Paper lists (`N ...`) default to all your papers.
 | `download [N ...] [--supplementary]` | Download PDFs or supplementary material, skipping current copies |
 | `attachment N [--supplementary] [--contents] [--open] [--reveal]` | A paper's PDF or zip, downloaded if needed: its path, its text or file list, open it, or show it in Finder/Explorer |
 | `inspect [N ...]` | Run the document checks, downloading what is missing |
-| `email ROLE [N ...] --subject S --body FILE` | Email `reviewers`, `late-reviewers` or `spcs`, one message per paper, after you type `SEND` |
+| `email ROLE [N ...] --subject S --body FILE [--edit]` | Email `reviewers`, `late-reviewers` or `spcs`, one message per paper, after you type `SEND` (`--edit`: edit each first) |
 | `templates` | List the email templates |
-| `outreach TEMPLATE [N ...] [--spc ID ...]` | Compose templated emails from the current issues, preview every draft, send after you type `SEND` |
-| `comment [N ...] [--spcs] [--text FILE]` | Post each paper's open issues (or the file's text) as a comment on its forum, readable by PCs and SACs (and SPCs with `--spcs`), after you type `SEND` |
+| `outreach TEMPLATE [N ...] [--spc ID ...] [--edit]` | Compose templated emails from the current issues, preview every draft (`--edit`: edit each first), send after you type `SEND` |
+| `comment [N ...] [--spcs] [--text FILE] [--edit]` | Post each paper's open issues (or the file's text) as a comment on its forum, readable by PCs and SACs (and SPCs with `--spcs`), after you type `SEND` (`--edit`: edit each first) |
 | `history [N ...] [--full]` | Emails and comments sent from the app, newest first, optionally only about some papers |
 
 Options that come before the command apply to every OpenReview request. `--rate` caps how
@@ -227,9 +227,9 @@ in the command palette (`ctrl+p`):
 | `p` | PDF: for one paper, a dialog with its path and text (`c` shows it in Finder/Explorer, `v` opens it, `y` copies the path); for marked papers, download the missing ones |
 | `u` | Supplementary material: the same, with the zip's file tree |
 | `i` | Run the document checks, downloading what is missing |
-| `m` | Templated email to the SPCs (SPCs tab) or to the papers' people, previewed in full before you type `SEND` |
-| `c` | Comment on each paper's forum with its issues (editable for one paper; SPCs as readers optional), previewed before you type `SEND` |
-| `e` | Free-form email to reviewers, late reviewers or SPCs, previewed before you type `SEND` |
+| `m` | Templated email to the SPCs (SPCs tab) or to the papers' people, reviewed and editable before you type `SEND` |
+| `c` | Comment on each paper's forum with its issues (SPCs as readers optional), reviewed and editable before you type `SEND` |
+| `e` | Free-form email to reviewers, late reviewers or SPCs, reviewed and editable before you type `SEND` |
 | `t` | Switch between the Papers, SPCs and History tabs |
 | `s` | Sync with OpenReview |
 | `l` | Legend of all checks |
@@ -287,13 +287,21 @@ Edit them, or add your own next to them.
 Chairs. Program Chairs and SACs can always read it, and you choose whether its SPCs can too
 (reviewers can't, at this stage). The text comes from
 [`resources/comment.txt`](aamas_review_monitor/resources/comment.txt) with the paper's open issues,
-and for a single paper you can edit it before posting.
+and you can edit each comment before posting.
 
 Every email and comment the app sends, or fails to send, is appended to
 `~/.aamas-review-monitor/history.jsonl`. It records when, through which paper, about which
 papers, to whom, the subject and body, and the template used. `history` and the History tab show
 it, and paper details and the SPCs tab show the part about each paper or SPC. Comments are
 never retried automatically, so a comment can't be posted twice.
+
+Nothing goes out unreviewed, and everything can be edited first. In the terminal UI, the
+review dialog lists every message or comment (⚠ marks repeats), with the selected one's
+subject (or title) and text editable beside it; typing `SEND` sends them all as edited. In the
+command line, `--edit` opens each one in `$VISUAL` or `$EDITOR` before the preview (the first
+line holds the subject); the draft file stays in the private data folder and is removed
+afterwards. Empty texts, and comments longer than OpenReview allows, are refused. The history
+records what was actually sent, edits included.
 
 Every preview also checks the history. It flags each email whose recipients already got the
 same template (or, for free-form emails, the same subject), and each paper that already has a

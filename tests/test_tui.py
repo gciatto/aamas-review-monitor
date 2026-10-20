@@ -6,7 +6,7 @@ from textual.widgets import Static, Tree
 
 from aamas_review_monitor import core
 from aamas_review_monitor import tui
-from aamas_review_monitor.tui import Attachment, Busy, Confirm, Login, Monitor, Paper
+from aamas_review_monitor.tui import Attachment, Busy, Login, Monitor, Paper, Review
 from tests.test_checks import CONFIG, paper
 
 
@@ -74,8 +74,8 @@ async def done(app, pilot, effect):
 
 
 async def confirm(app, pilot, answer):
-    """Types `answer` in the Confirm dialog's box, once it has the focus, and presses Enter."""
-    assert isinstance(app.screen, Confirm)
+    """Types `answer` in the Review dialog's box, once it has the focus, and presses Enter."""
+    assert isinstance(app.screen, Review)
     box = app.screen.query_one("#confirm")
     await until(pilot, lambda: app.focused is box, state=lambda: f"focus on {app.focused!r}")
     await pilot.press(*answer, "enter")
@@ -170,10 +170,10 @@ def test_tui_email_sends_only_after_typing_send(tmp_path, monkeypatch):
                 app.screen.query_one("#subject").value = "Hi"
                 app.screen.query_one("#body").load_text("Dear {{fullname}}")
                 await pilot.click("#send")
-                assert isinstance(app.screen, Confirm)
-                assert "=== To late-reviewers of #7 (2), via #7 ===" in app.screen.summary
+                assert isinstance(app.screen, Review)
+                assert app.screen.items[0].heading == "To late-reviewers of #7 (2), via #7"
                 await confirm(app, pilot, answer)
-                await done(app, pilot, lambda: bool(notes) and not isinstance(app.screen, Confirm))
+                await done(app, pilot, lambda: bool(notes) and not isinstance(app.screen, Review))
                 assert len(client.messages) == (answer == "SEND"), notes
 
     asyncio.run(scenario())
@@ -353,9 +353,9 @@ def test_spc_tab_lists_issues_per_spc_and_sends_a_digest(tmp_path, monkeypatch):
             assert "#7" in panel and "ratings [3, 6]" in panel
             await pilot.press("m")
             await choose_template(app, pilot, "spc-digest")
-            assert isinstance(app.screen, Confirm)
-            assert "=== To ~Spc_One1, via #7 ===" in app.screen.summary
-            assert "ratings [3, 6]" in app.screen.summary
+            assert isinstance(app.screen, Review)
+            (item,) = app.screen.items
+            assert item.heading == "To ~Spc_One1, via #7" and "ratings [3, 6]" in item.text
             await confirm(app, pilot, "SEND")
             await done(app, pilot, lambda: bool(app.sent))
             panel = str(app.query_one("#spc-issues").render())
@@ -377,10 +377,10 @@ def test_papers_tab_templated_reminder_to_late_reviewers_can_be_cancelled(tmp_pa
             await pilot.press("asterisk")  # every paper shown
             await pilot.press("m")
             await choose_template(app, pilot, "spc-deadline")  # no meta-review issue yet
-            assert not isinstance(app.screen, Confirm)
+            assert not isinstance(app.screen, Review)
             await pilot.press("m")
             await choose_template(app, pilot, "spc-digest")
-            assert isinstance(app.screen, Confirm)
+            assert isinstance(app.screen, Review)
             await pilot.press("escape")
             await pilot.pause()
 
@@ -397,13 +397,14 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             await pilot.press("c")
             form = app.screen
             assert isinstance(form, tui.CommentForm)
-            text = form.query_one("#comment-text")
-            assert "ratings [3, 6]" in text.text
-            text.load_text("Please check the reviews.")
             form.query_one("#spcs-read").value = False
             await pilot.click("#comment-post")
-            assert isinstance(app.screen, Confirm)
-            assert app.screen.summary.startswith("1 comments, readable by PCs, SACs\n")
+            review = app.screen
+            assert isinstance(review, Review)
+            assert review.header[0] == "1 comments, readable by PCs, SACs"
+            text = review.query_one("#review-text")
+            assert "ratings [3, 6]" in text.text  # editable before posting
+            text.load_text("Please check the reviews.")
             await confirm(app, pilot, "SEND")
             await done(app, pilot, lambda: bool(app.sent))
 
@@ -481,3 +482,33 @@ def test_panel_handlers_survive_a_screen_being_built_or_torn_down(tmp_path, monk
             assert app.hide_green  # still running and taking keys
 
     asyncio.run(scenario())
+
+
+def test_review_edits_each_message_and_refuses_empty_ones(tmp_path, monkeypatch):
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    second_paper()
+
+    async def scenario():
+        async with app.run_test(size=(140, 40)) as pilot:
+            app.marked = {7, 8}
+            await pilot.press("e")
+            app.screen.query_one("#subject").value = "Hi"
+            app.screen.query_one("#body").load_text("Dear {{fullname}}")
+            await pilot.click("#send")
+            review = app.screen
+            assert isinstance(review, Review) and len(review.items) == 2
+            review.query_one("#review-title").value = "Hi, paper 7"
+            review.query_one("#review-list").highlighted = 1  # to the second message
+            await pilot.pause()
+            assert review.query_one("#review-title").value == "Hi"
+            review.query_one("#review-text").load_text("")  # empty: refused
+            await confirm(app, pilot, "SEND")
+            assert isinstance(app.screen, Review) and client.messages == []
+            review.query_one("#review-text").load_text("Dear {{fullname}}, about #8")
+            review.query_one("#confirm").value = ""
+            await confirm(app, pilot, "SEND")
+            await done(app, pilot, lambda: len(app.sent) == 2)
+
+    asyncio.run(scenario())
+    assert [m[0][0] for m in client.messages] == ["Hi, paper 7", "Hi"]
+    assert client.messages[1][0][2] == "Dear {{fullname}}, about #8"

@@ -43,12 +43,12 @@ from aamas_review_monitor.screens import (
     Attachment,
     Busy,
     CommentForm,
-    Confirm,
     DialogLog,
     Email,
     Legend,
     Login,
     Paper,
+    Review,
     Templates,
     details,
     sent_lines,
@@ -330,63 +330,70 @@ class Monitor(App):
             "\n".join([*failures, summary]), severity="error" if failures else "information"
         )
 
-    def confirm_then(self, preview: str, label: str, job: Job, total: int, verb: str) -> None:
-        """Shows everything about to go out; runs `job` only after a typed SEND."""
+    def review_then(
+        self,
+        review: "tuple[list[str], list[outreach.Item]]",
+        field: str,
+        limits: tuple[int, int] | None,
+        verb: str,
+        go: "Callable[[list[outreach.Item]], None]",
+    ) -> None:
+        """Shows everything about to go out, editable; calls `go` with the edited items only
+        after a typed SEND."""
 
-        def go(confirmed: bool | None) -> None:
-            if not confirmed:
+        def reviewed(items: "list[outreach.Item] | None") -> None:
+            if items is None:
                 self.notify(f"Nothing {verb.lower()}")
-                return
-            self.online(label, job, lambda failures: self.sent_notice(failures, total, verb))
+            else:
+                go(items)
 
-        self.push_screen(Confirm(preview), go)
+        self.push_screen(Review(*review, field, limits), reviewed)
 
     def notes(self) -> list[str]:
         return [core.freshness(self.latest, self.config)]
 
     def send(self, drafts: list[papers.Draft], unreachable: list[str], what: str = "") -> None:
-        self.confirm_then(
-            outreach.preview(drafts, unreachable, self.sent, self.notes()),
-            f"Sending {len(drafts)} messages{what}…",
-            lambda client, progress: papers.deliver(client, drafts, progress, core.FILE_HISTORY),
-            len(drafts),
-            "Sent",
-        )
+        def go(items: "list[outreach.Item]") -> None:
+            edited = [d._replace(subject=i.title, body=i.text) for d, i in zip(drafts, items)]
+            self.online(
+                f"Sending {len(edited)} messages{what}…",
+                lambda client, progress: papers.deliver(
+                    client, edited, progress, core.FILE_HISTORY
+                ),
+                lambda failures: self.sent_notice(failures, len(edited)),
+            )
+
+        review = outreach.review(drafts, unreachable, self.sent, self.notes())
+        self.review_then(review, "Subject", None, "Sent", go)
 
     def action_comment(self) -> None:
         if not (numbers := self.scope()):
             return
-        records, one = core.records(), len(numbers) == 1
-        draft, _ = outreach.comments(self.issues, records, set(numbers[:1]), True, self.config)
-        text = draft[0].text if draft and one else None
-        if one and not draft:
-            self.notify(f"#{numbers[0]}: no open issues to comment on, or not cached")
-            return
 
-        def compose(form: tuple[bool, str | None] | None) -> None:
-            if form is None:
+        def compose(spcs_read: bool | None) -> None:
+            if spcs_read is None:
                 return
-            spcs_read, edited = form
             found, skipped = outreach.comments(
-                self.issues, records, set(numbers), spcs_read, self.config
+                self.issues, core.records(), set(numbers), spcs_read, self.config
             )
-            if edited is not None:
-                found = [c._replace(text=edited) for c in found]
             if not found:
                 self.notify("\n".join([*skipped, "Nothing to comment on"]))
                 return
 
-            self.confirm_then(
-                outreach.preview_comments(found, skipped, self.sent, self.notes()),
-                f"Posting {len(found)} comments…",
-                lambda client, progress: papers.post_comments(
-                    client, found, progress, core.FILE_HISTORY
-                ),
-                len(found),
-                "Posted",
-            )
+            def go(items: "list[outreach.Item]") -> None:
+                edited = [c._replace(title=i.title, text=i.text) for c, i in zip(found, items)]
+                self.online(
+                    f"Posting {len(edited)} comments…",
+                    lambda client, progress: papers.post_comments(
+                        client, edited, progress, core.FILE_HISTORY
+                    ),
+                    lambda failures: self.sent_notice(failures, len(edited), "Posted"),
+                )
 
-        self.push_screen(CommentForm(numbered(numbers), text), compose)
+            review = outreach.review_comments(found, skipped, self.sent, self.notes())
+            self.review_then(review, "Title", outreach.COMMENT_LIMITS, "Posted", go)
+
+        self.push_screen(CommentForm(numbered(numbers)), compose)
 
     def action_mail(self) -> None:
         spcs: set[str] | None = None

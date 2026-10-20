@@ -3,6 +3,9 @@ from __future__ import annotations
 import argparse
 import functools
 import logging
+import os
+import shlex
+import subprocess
 import sys
 import textwrap
 import webbrowser
@@ -86,6 +89,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     outreach_cmd.add_argument("template", help="a template key, from `templates`")
     outreach_cmd.add_argument("--spc", action="append", help="only this SPC (repeatable)")
+    for cmd in (email_cmd, outreach_cmd, comment_cmd):
+        cmd.add_argument(
+            "--edit", action="store_true", help="edit each message in $EDITOR before the preview"
+        )
     for cmd in (download_cmd, email_cmd, inspect_cmd, outreach_cmd, comment_cmd, history_cmd):
         cmd.add_argument("numbers", type=int, nargs="*", help="papers (default: all)")
     args = parser.parse_args(argv)
@@ -194,7 +201,7 @@ def main(argv: list[str] | None = None) -> None:
             set(args.spc) if args.spc else None,
             set(args.numbers) if args.numbers else None,
         )
-        send(config, drafts, unreachable, state.latest)
+        send(config, drafts, unreachable, state.latest, args.edit)
     elif args.command == "comment":
         state = core.current(config)
         if state.latest is None:
@@ -207,7 +214,13 @@ def main(argv: list[str] | None = None) -> None:
             text = args.text.read_text(encoding="utf-8")
             to_post = [c._replace(text=text) for c in to_post]
         sent, notes = papers.history(core.FILE_HISTORY), [core.freshness(state.latest, config)]
-        preview = outreach.preview_comments(to_post, skipped, sent, notes)
+        header, items = outreach.review_comments(to_post, skipped, sent, notes)
+        if args.edit:
+            items = edit(items, "Title")
+            to_post = [c._replace(title=i.title, text=i.text) for c, i in zip(to_post, items)]
+        if problems := outreach.problems(items, outreach.COMMENT_LIMITS):
+            sys.exit("\n".join([*problems, "Nothing posted"]))
+        preview = outreach.render(header, items, "Title")
         if confirmed(preview, len(to_post), f"post {len(to_post)} comments"):
             failures = papers.post_comments(
                 core.login(config), to_post, history_file=core.FILE_HISTORY
@@ -242,7 +255,7 @@ def main(argv: list[str] | None = None) -> None:
         drafts, unreachable = outreach.direct(
             load_records(*args.numbers), args.role, args.subject, body
         )
-        send(config, drafts, unreachable, core.load_snapshots()[0])
+        send(config, drafts, unreachable, core.load_snapshots()[0], args.edit)
 
 
 def confirmed(preview: str, count: int, what: str) -> bool:
@@ -252,13 +265,45 @@ def confirmed(preview: str, count: int, what: str) -> bool:
     return count > 0 and input(f"Type SEND to {what}: ").strip() == "SEND"
 
 
+def edit(items: list[outreach.Item], field: str) -> list[outreach.Item]:
+    """Opens each item in $VISUAL or $EDITOR, its first line holding the subject (or title).
+    The file lives in the private data folder, as the text is confidential, and is removed."""
+    default = "notepad" if sys.platform == "win32" else "vi"
+    editor = shlex.split(
+        os.environ.get("VISUAL") or os.environ.get("EDITOR") or default, posix=os.name != "nt"
+    )
+    file, edited = core.DIR_DATA / "draft.txt", []
+    core.DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        for item in items:
+            file.touch(mode=0o600)
+            file.write_text(f"{field}: {item.title}\n\n{item.text}", encoding="utf-8")
+            subprocess.run([*editor, str(file)], check=True)
+            first, _, text = file.read_text(encoding="utf-8").partition("\n")
+            title = first.removeprefix(f"{field}:").strip()
+            edited.append(item._replace(title=title, text=text.lstrip("\n")))
+    finally:
+        file.unlink(missing_ok=True)
+    return edited
+
+
 def send(
-    config: dict, drafts: list[papers.Draft], unreachable: list[str], latest: dict | None
+    config: dict,
+    drafts: list[papers.Draft],
+    unreachable: list[str],
+    latest: dict | None,
+    editing: bool = False,
 ) -> None:
-    """Previews the drafts, warning on repeats and on an old snapshot, and sends them after a
-    typed SEND, recording them in the history."""
+    """Previews the drafts (after editing them, if `editing`), warning on repeats and on an old
+    snapshot, and sends them after a typed SEND, recording them in the history."""
     sent, notes = papers.history(core.FILE_HISTORY), [core.freshness(latest, config)]
-    preview = outreach.preview(drafts, unreachable, sent, notes)
+    header, items = outreach.review(drafts, unreachable, sent, notes)
+    if editing:
+        items = edit(items, "Subject")
+        drafts = [d._replace(subject=i.title, body=i.text) for d, i in zip(drafts, items)]
+    if problems := outreach.problems(items, None):
+        sys.exit("\n".join([*problems, "Nothing sent"]))
+    preview = outreach.render(header, items)
     if confirmed(preview, len(drafts), f"send {len(drafts)} messages"):
         failures = papers.deliver(core.login(config), drafts, history_file=core.FILE_HISTORY)
         print("\n".join([*failures, f"Sent {len(drafts) - len(failures)} of {len(drafts)}"]))

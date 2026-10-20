@@ -9,7 +9,7 @@ from pathlib import Path
 from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
 from textual.widget import Widget
 from textual.widgets import (
@@ -267,29 +267,86 @@ class Login(ModalScreen[tuple[str, str] | None]):
             self.dismiss((username, password))
 
 
-class Confirm(ModalScreen[bool]):
-    """Shows the emails about to be sent; True only if the user types SEND."""
+class Review(ModalScreen["list[outreach.Item] | None"]):
+    """Every message (or comment) about to go out, each editable; returns the edited items
+    only if the user types SEND."""
 
-    DEFAULT_CSS = "Confirm {" + DIALOG_CSS + " width: 90%; height: 80%; padding: 1 2; } }"
-    BINDINGS = [("escape", "dismiss(False)", "Cancel")]
+    DEFAULT_CSS = (
+        "Review {" + DIALOG_CSS + " width: 95%; height: 90%; padding: 1 2; } }"
+        " Review #review-header { height: auto; max-height: 6; }"
+        " Review #review-list { width: 1fr; } Review #review-editor { width: 3fr; }"
+        " Review #review-text { height: 1fr; }"
+    )
+    BINDINGS = [("escape", "dismiss(None)", "Cancel")]
 
-    def __init__(self, summary: str) -> None:
+    def __init__(
+        self,
+        header: list[str],
+        items: "list[outreach.Item]",
+        field: str = "Subject",
+        limits: tuple[int, int] | None = None,
+    ) -> None:
         super().__init__()
-        self.summary = summary
+        self.header, self.items, self.field, self.limits = header, list(items), field, limits
+        self.current: int | None = None  # the item in the editor
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield VerticalScroll(Static(Text(self.summary)))
-            yield Input(placeholder="Type SEND to send, Esc to cancel", id="confirm")
+            yield VerticalScroll(Static(Text("\n".join(self.header))), id="review-header")
+            with Horizontal():
+                yield OptionList(
+                    *(
+                        Option(("⚠ " if i.warnings else "") + i.heading, str(n))
+                        for n, i in enumerate(self.items)
+                    ),
+                    id="review-list",
+                )
+                with Vertical(id="review-editor"):
+                    yield Static(id="review-about")
+                    yield Input(placeholder=self.field, id="review-title")
+                    yield TextArea(id="review-text", soft_wrap=False)  # lines as sent
+            yield Input(
+                placeholder="Edit any of them, then type SEND to send all; Esc cancels",
+                id="confirm",
+            )
             yield Button("Send", id="confirm-send", variant="error")
 
     def on_mount(self) -> None:
+        self.show(0)
         self.query_one("#confirm", Input).focus()  # ready to type SEND, or Esc
+
+    def keep(self) -> None:
+        """Takes the editor's text back into the item it shows."""
+        if self.current is not None:
+            title, text = self.query_one("#review-title", Input), self.query_one(TextArea)
+            item = self.items[self.current]
+            self.items[self.current] = item._replace(title=title.value, text=text.text)
+
+    def show(self, index: int) -> None:
+        self.current, item = index, self.items[index]
+        about = Text(item.heading, "bold")
+        about.append(f"\n{item.warnings}" if item.warnings else "", "bold yellow")
+        self.query_one("#review-about", Static).update(about)
+        self.query_one("#review-title", Input).value = item.title
+        self.query_one(TextArea).load_text(item.text)
+
+    @on(OptionList.OptionHighlighted, "#review-list")
+    def highlighted(self, event: OptionList.OptionHighlighted) -> None:
+        if self.current is not None and event.option.id != str(self.current):
+            self.keep()
+            self.show(int(event.option.id or 0))
 
     @on(Input.Submitted, "#confirm")
     @on(Button.Pressed, "#confirm-send")
     def submit(self) -> None:
-        self.dismiss(self.query_one("#confirm", Input).value.strip() == "SEND")
+        self.keep()
+        if self.query_one("#confirm", Input).value.strip() != "SEND":
+            self.dismiss(None)
+            return
+        if problems := outreach.problems(self.items, self.limits):
+            self.notify("\n".join(problems), severity="error")
+            return
+        self.dismiss(self.items)
 
 
 class Email(Screen[dict | None]):
@@ -321,18 +378,15 @@ class Email(Screen[dict | None]):
         self.dismiss({"role": self.query_one(Select).value, "subject": subject, "body": body})
 
 
-class CommentForm(ModalScreen["tuple[bool, str | None] | None"]):
-    """Who may read the comment and, for one paper, its editable text; a preview follows."""
+class CommentForm(ModalScreen["bool | None"]):
+    """Who may read the comments; each is reviewed, and can be edited, before posting."""
 
-    DEFAULT_CSS = (
-        "CommentForm {" + DIALOG_CSS + " width: 90%; height: 85%; padding: 1 2; } }"
-        " CommentForm TextArea { height: 1fr; }"
-    )
+    DEFAULT_CSS = "CommentForm {" + DIALOG_CSS + " width: 90%; height: auto; padding: 1 2; } }"
     BINDINGS = [("escape", "dismiss", "Cancel")]
 
-    def __init__(self, scope: str, text: str | None) -> None:
+    def __init__(self, scope: str) -> None:
         super().__init__()
-        self.scope, self.text = scope, text
+        self.scope = scope
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -340,19 +394,12 @@ class CommentForm(ModalScreen["tuple[bool, str | None] | None"]):
                 f"Comment on {self.scope}, signed as the paper's SACs. PCs and SACs read it."
             )
             yield Checkbox("The paper's SPCs can read it too", value=True, id="spcs-read")
-            if self.text is not None:
-                yield TextArea(self.text, id="comment-text")
-            else:
-                yield Static("Each paper gets its own open issues, from the comment template.")
+            yield Static("Each paper gets its own open issues, from the comment template.")
             yield Button("Review and post", id="comment-post", variant="primary")
 
     @on(Button.Pressed, "#comment-post")
     def submit(self) -> None:
-        text = self.query_one(TextArea).text.strip() if self.text is not None else None
-        if text == "":
-            self.notify("The comment is empty", severity="error")
-            return
-        self.dismiss((self.query_one(Checkbox).value, text))
+        self.dismiss(self.query_one(Checkbox).value)
 
 
 class Templates(ModalScreen["outreach.Template | None"]):
