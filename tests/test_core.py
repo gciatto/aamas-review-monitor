@@ -119,3 +119,32 @@ def test_config_overrides_are_validated():
             core.load_config()
     local.write_text('{"deadline_reviews": "2026-11-14", "backoff_seconds": 0.5}')  # was an int
     assert core.load_config()["deadline_reviews"] == "2026-11-14"
+
+
+def test_requests_are_spaced_by_the_rate_cap_and_the_wait_is_interruptible(monkeypatch):
+    import time
+
+    import pytest
+    from requests.adapters import HTTPAdapter
+
+    sent: list[float] = []
+    monkeypatch.setattr(
+        HTTPAdapter, "send", lambda self, request, **kw: sent.append(time.monotonic())
+    )
+    adapter = core.ThrottledAdapter(20)  # one request every 50 ms
+    for _ in range(4):
+        adapter.send(None)
+    assert sent[-1] - sent[0] >= 0.14  # 3 intervals, with some slack for the clock
+    unlimited = core.ThrottledAdapter(0)
+    start = time.monotonic()
+    for _ in range(50):
+        unlimited.send(None)
+    assert time.monotonic() - start < 0.1
+    slow = core.ThrottledAdapter(0.1)  # one request every 10 s
+    slow.send(None)
+    core.INTERRUPT.set()
+    try:
+        with pytest.raises(core.Interrupted):
+            slow.send(None)
+    finally:
+        core.INTERRUPT.clear()

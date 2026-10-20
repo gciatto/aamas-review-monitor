@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import threading
+import time
 from datetime import date, datetime, timezone
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -97,10 +98,30 @@ class LoggedRetry(Retry):
             raise Interrupted
 
 
+class ThrottledAdapter(HTTPAdapter):
+    """Spaces requests at least 1/`rate` seconds apart, across threads: a proactive brake, so
+    bulk jobs stay under OpenReview's rate limits instead of only backing off once hit. The wait
+    gives up if INTERRUPT is set."""
+
+    def __init__(self, rate: float, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.interval = 1 / rate if rate > 0 else 0.0  # 0: no cap
+        self.lock, self.slot = threading.Lock(), 0.0  # when the next request may start
+
+    def send(self, request: Any, *args: Any, **kwargs: Any) -> Any:
+        with self.lock:
+            now = time.monotonic()
+            wait, self.slot = max(0.0, self.slot - now), max(now, self.slot) + self.interval
+        if wait and INTERRUPT.wait(wait):
+            raise Interrupted
+        return super().send(request, *args, **kwargs)
+
+
 def tune(client: Any, config: dict) -> Any:
-    """Sets the client's retry policy from `config`: exponential backoff with jitter on rate
-    limits (429), server errors (5xx) and connection failures, honouring Retry-After. Only
-    reads are retried: a message POST is never resent, so no email can go out twice."""
+    """Sets the client's request policy from `config`: at most `requests_per_second_max`
+    requests per second, then exponential backoff with jitter on rate limits (429), server
+    errors (5xx) and connection failures, honouring Retry-After. Only reads are retried: a
+    message POST is never resent, so no email can go out twice."""
     retry = LoggedRetry(
         total=config["retries"],
         connect=config["retries"],
@@ -111,7 +132,9 @@ def tune(client: Any, config: dict) -> Any:
         raise_on_status=False,
         respect_retry_after_header=True,
     )
-    adapter = HTTPAdapter(max_retries=retry, pool_maxsize=128)
+    adapter = ThrottledAdapter(
+        config["requests_per_second_max"], max_retries=retry, pool_maxsize=128
+    )
     # openreview-py retries POSTs to its edit endpoints: a retried new comment could be posted
     # twice, so those get this policy too (requests picks the longest matching prefix)
     edits = [getattr(client, f"{kind}_edits_url", None) for kind in ("note", "invitation", "group")]

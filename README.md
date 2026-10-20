@@ -186,11 +186,13 @@ Paper lists (`N ...`) default to all your papers.
 | `comment [N ...] [--spcs] [--text FILE]` | Post each paper's open issues (or the file's text) as a comment on its forum, readable by PCs and SACs (and SPCs with `--spcs`), after you type `SEND` |
 | `history [N ...] [--full]` | Emails and comments sent from the app, newest first, optionally only about some papers |
 
-Options that come before the command apply to every OpenReview read:
-`--retries`, `--backoff` and `--backoff-max`. They set exponential backoff with jitter on rate
-limits, server errors and connection failures, and honour `Retry-After`. The defaults are 8
-retries, a first wait of 1 s and a longest wait of 120 s. Email is never retried, so no message
-goes out twice.
+Options that come before the command apply to every OpenReview request. `--rate` caps how
+many requests the app makes per second (5 by default, `0` for no cap), so bulk syncs and
+downloads stay under OpenReview's rate limits rather than only reacting once they hit them.
+`--retries`, `--backoff` and `--backoff-max` set exponential backoff with jitter on rate
+limits, server errors and connection failures, honouring `Retry-After`, for reads. The defaults
+are 8 retries, a first wait of 1 s and a longest wait of 120 s. Email is never retried, so no
+message goes out twice.
 
 ## Terminal UI
 

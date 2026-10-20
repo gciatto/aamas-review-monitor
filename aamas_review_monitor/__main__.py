@@ -26,7 +26,15 @@ LEGEND_STATUS = "RED: serious, needs you; YELLOW: needs SPC attention; GREEN: no
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="aamas_review_monitor")
-    retries = parser.add_argument_group("retries (OpenReview reads; defaults from the config)")
+    retries = parser.add_argument_group(
+        "pace and retries (OpenReview requests; defaults from the config)"
+    )
+    retries.add_argument(
+        "--rate",
+        type=float,
+        dest="requests_per_second_max",
+        help="most requests per second (0: no cap)",
+    )
     retries.add_argument("--retries", type=int, help="retries after a failure (config: retries)")
     retries.add_argument(
         "--backoff", type=float, dest="backoff_seconds", help="first wait in seconds, then doubling"
@@ -86,7 +94,7 @@ def main(argv: list[str] | None = None) -> None:
     handlers = [logging.NullHandler()] if args.command == "tui" else None
     logging.basicConfig(level=logging.INFO, handlers=handlers)
 
-    overrides = ("retries", "backoff_seconds", "backoff_max_seconds")
+    overrides = ("requests_per_second_max", "retries", "backoff_seconds", "backoff_max_seconds")
     try:
         config = core.load_config()
     except ValueError as e:

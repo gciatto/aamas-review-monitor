@@ -85,6 +85,7 @@ def test_retry_policy_comes_from_config_and_command_line(tmp_path, monkeypatch, 
     client = core.tune(SimpleNamespace(session=requests.Session()), core.load_config())
     retry = client.session.get_adapter("https://api2.openreview.net").max_retries
     assert (retry.total, retry.connect, retry.backoff_factor, retry.backoff_max) == (8, 8, 1, 120)
+    assert client.session.get_adapter("https://api2.openreview.net").interval == 0.2  # 5 per s
     assert 429 in retry.status_forcelist and "POST" not in retry.allowed_methods
 
     class Flaky(FakeClient):
@@ -95,7 +96,8 @@ def test_retry_policy_comes_from_config_and_command_line(tmp_path, monkeypatch, 
     monkeypatch.setattr(core, "login", lambda config: seen.append(config) or Flaky())
     monkeypatch.setattr(core, "DIR_PAPERS", tmp_path)
     papers.save(fetch(FakeClient(), core.load_config()), tmp_path, [])
-    cli.main(["--retries", "2", "--backoff", "0.5", "download", "7"])
+    cli.main(["--rate", "2", "--retries", "2", "--backoff", "0.5", "download", "7"])
+    assert seen[0]["requests_per_second_max"] == 2
     assert (seen[0]["retries"], seen[0]["backoff_seconds"], seen[0]["backoff_max_seconds"]) == (
         2,
         0.5,

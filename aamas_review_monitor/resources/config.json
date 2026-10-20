@@ -5,6 +5,7 @@
   "retries": 8,
   "backoff_seconds": 1,
   "backoff_max_seconds": 120,
+  "requests_per_second_max": 5,
   "snapshot_stale_hours": 12,
   "field_rating": "rating_proceedings",
   "field_confidence": "confidence",
