@@ -7,9 +7,8 @@ human to verify, never decisions. Results are cached next to the PDF, per attach
 import hashlib
 import json
 import re
-import shutil
-import subprocess
 import zipfile
+from functools import partial
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -72,20 +71,13 @@ DOCUMENT_CHECKS: list = []
 document_check = registrar(DOCUMENT_CHECKS)
 
 
-def _tool(name: str, *args: str) -> str:
-    tool = shutil.which(name)
-    if not tool:
-        raise FileNotFoundError(f"{name} not found: install xpdf (`brew install xpdf`)")
-    return subprocess.run([tool, *args], check=True, capture_output=True, text=True).stdout
-
-
 def pdfinfo(pdf: Path) -> dict[str, str]:
-    lines = _tool("pdfinfo", "-enc", "UTF-8", str(pdf)).splitlines()
+    lines = papers.tool("pdfinfo", "-enc", "UTF-8", str(pdf)).splitlines()
     return {k.strip(): v.strip() for k, _, v in (line.partition(":") for line in lines) if v}
 
 
 def pdffonts(pdf: Path) -> list[dict[str, str]]:
-    return parse_pdffonts(_tool("pdffonts", str(pdf)))
+    return parse_pdffonts(papers.tool("pdffonts", str(pdf)))
 
 
 def parse_pdffonts(output: str) -> list[dict[str, str]]:
@@ -119,6 +111,14 @@ def _main_pages(doc: Document) -> Parts | None:
             )
             return Parts(main, extra, index + 1)
     return None
+
+
+def _on(doc: Document, found: Callable[[str], object]) -> str:
+    """The pages where `found(page text)` holds, e.g. " (p. 3, 5)"; empty if none (a match
+    may straddle two pages)."""
+    numbers = [str(n) for n, page in enumerate(doc.pages, 1) if found(page)]
+    shown = ", ".join(numbers[:5]) + (", …" if len(numbers) > 5 else "")
+    return f" (p. {shown})" if numbers else ""
 
 
 def _where(doc: Document, parts: Parts) -> str:
@@ -240,13 +240,19 @@ def identifying_text(doc: Document) -> list[Finding]:
     if emails:
         found.append(Finding(YELLOW, f"emails on page 1: {', '.join(emails[:3])}", "emails"))
     if HEADING_ACKNOWLEDGEMENTS.search(text):
-        found.append(Finding(YELLOW, "Acknowledgements section", "acknowledgements"))
+        where = _on(doc, HEADING_ACKNOWLEDGEMENTS.search)
+        found.append(Finding(YELLOW, f"Acknowledgements section{where}", "acknowledgements"))
     owners = sorted({m[1] for m in PATTERN_REPOSITORY.findall(text)})
     if owners:
-        found.append(Finding(YELLOW, f"repository links: {', '.join(owners[:3])}", "repositories"))
+        where = _on(doc, PATTERN_REPOSITORY.search)
+        message = f"repository links: {', '.join(owners[:3])}{where}"
+        found.append(Finding(YELLOW, message, "repositories"))
     phrases = sorted({m.group(0) for m in PATTERN_SELF_REFERENCE.finditer(text)})
     if phrases:
-        found.append(Finding(YELLOW, f"self-references: {'; '.join(phrases[:3])}", "phrases"))
+        where = _on(doc, PATTERN_SELF_REFERENCE.search)
+        found.append(
+            Finding(YELLOW, f"self-references: {'; '.join(phrases[:3])}{where}", "phrases")
+        )
     return found
 
 
@@ -339,6 +345,10 @@ def code_available(doc: Document) -> list[Finding]:
     return [Finding(YELLOW, "experiments, but no code in the supplementary or linked")]
 
 
+def _has_phrase(phrase: str, page: str) -> bool:
+    return phrase in markers.phrases(page)
+
+
 @document_check
 def chatbot_phrases(doc: Document) -> list[Finding]:
     """No leftover chatbot phrases
@@ -348,7 +358,8 @@ def chatbot_phrases(doc: Document) -> list[Finding]:
     resources/ai_phrases.txt). A hint to read the passage, not proof.
     """
     found = markers.phrases("\f".join(doc.pages))
-    return [Finding(YELLOW, f"chatbot phrases: {'; '.join(found[:3])}")] if found else []
+    located = [f"{p}{_on(doc, partial(_has_phrase, p))}" for p in found[:3]]
+    return [Finding(YELLOW, f"chatbot phrases: {'; '.join(located)}")] if found else []
 
 
 @document_check
@@ -393,8 +404,7 @@ def inspect_paper(
     supplementary = papers.attachment(record, config["field_supplementary"], directory)
     if supplementary is not None and not supplementary.is_file():
         raise FileNotFoundError(f"#{record['number']}: supplementary material not downloaded")
-    pages = papers.pdf_text(pdf).split("\f")
-    pages = pages[:-1] if pages and not pages[-1].strip() else pages
+    pages = papers.pdf_pages(pdf)
     doc = Document(record, config, pages, pdfinfo(pdf), pdffonts(pdf), supplementary)
     found = run(DOCUMENT_CHECKS, doc)
     result = {

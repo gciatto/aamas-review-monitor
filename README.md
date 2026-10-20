@@ -85,7 +85,9 @@ Defaults follow the AAMAS 2027 timeline: 50% of reviews by 26 Oct, all by 13 Nov
 
 ### Document checks: on request (`inspect`, or `i`)
 
-These use the PDF's text and properties and the supplementary zip's contents. Missing files
+These use the PDF's text and properties and the supplementary zip's contents. The text is
+converted one page at a time, for as many pages as `pdfinfo` counts, so page counts are the
+PDF's own and findings about text say on which pages to look ("repository links: … (p. 2, 5)"). Missing files
 are downloaded first. Results are cached per uploaded version; a new upload, or an update of
 the checks themselves, makes them stale (shown as not run until you inspect again).
 

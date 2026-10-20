@@ -122,7 +122,7 @@ def test_inspection_is_cached_per_attachment_version(tmp_path, monkeypatch):
     record = RECORD | {"content": RECORD["content"] | {"pdf": {"value": "/pdf/v1.pdf"}}}
     (tmp_path / "7").mkdir()
     (tmp_path / "7" / "pdf_v1.pdf").write_bytes(b"%PDF")
-    monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "\f".join(paper(9)) + "\f")
+    monkeypatch.setattr(documents.papers, "pdf_pages", lambda pdf: paper(9))
     monkeypatch.setattr(documents, "pdfinfo", lambda pdf: INFO)
     monkeypatch.setattr(documents, "pdffonts", lambda pdf: FONTS)
     found = documents.inspect_paper(record, CONFIG, tmp_path)
@@ -182,3 +182,13 @@ def test_small_caps_and_numbered_headings_are_found():
     thanks = paper(8)
     thanks[3] += "\nA CKNOWLEDGMENTS\nWe thank..."
     assert (YELLOW, "identifying_text:acknowledgements") in codes(doc(thanks))
+
+
+def test_text_findings_say_on_which_pages_to_look():
+    pages = paper(8)
+    pages[1] += "\nCertainly! Here is the section.\nCode: github.com/someone/tool\n"
+    pages[4] += "\nAs in our previous work, we use github.com/someone/data.\n"
+    found = {code: f.message for code, f in run(DOCUMENT_CHECKS, doc(pages))}
+    assert found["chatbot_phrases"] == "chatbot phrases: certainly! here is (p. 2)"
+    assert found["identifying_text:repositories"] == "repository links: someone (p. 2, 5)"
+    assert found["identifying_text:phrases"] == "self-references: our previous work (p. 5)"

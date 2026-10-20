@@ -4,6 +4,7 @@ Layout: `<dir>/<number>/record.json` plus downloaded attachments next to it.
 """
 
 import json
+import re
 from datetime import datetime, timezone
 import shutil
 import subprocess
@@ -109,20 +110,38 @@ def download(client: Any, record: dict, field: str, directory: Path) -> Path | N
     return target
 
 
-def pdf_text(pdf: Path) -> str:
-    """Text of a PDF via xpdf's pdftotext, cached next to it.
+def tool(name: str, *args: str) -> str:
+    """The output of an xpdf tool (pdftotext, pdfinfo, pdffonts); FileNotFoundError if missing."""
+    found = shutil.which(name)
+    if not found:
+        raise FileNotFoundError(f"{name} not found: install xpdf (`brew install xpdf`)")
+    run = subprocess.run([found, *args], check=True, capture_output=True)
+    return run.stdout.decode("utf-8", errors="replace")
 
-    pdftotext's default mode follows reading order, so two-column pages (as in AAMAS) come out
-    one column after the other; `-layout` would interleave the columns line by line.
+
+def pdf_pages(pdf: Path) -> list[str]:
+    """The text of each page of a PDF, as many pages as pdfinfo counts, cached next to it.
+
+    Pages are converted one at a time (pdftotext -f N -l N), so text is always attributed to
+    its page, even across blank pages. pdftotext's default mode follows reading order, so
+    two-column pages (as in AAMAS) come out one column after the other; `-layout` would
+    interleave the columns line by line.
     """
-    text = pdf.with_name(pdf.name + ".txt")
-    if not text.is_file():
-        tool = shutil.which("pdftotext")
-        if not tool:
-            raise FileNotFoundError("pdftotext not found: install xpdf (`brew install xpdf`)")
-        subprocess.run([tool, "-enc", "UTF-8", "-q", str(pdf), str(text)], check=True)
-        text.chmod(0o600)
-    return text.read_text(encoding="utf-8", errors="replace")
+    cache = pdf.with_name(pdf.name + ".pages.txt")
+    if not cache.is_file():
+        info = re.search(r"^Pages:\s*(\d+)", tool("pdfinfo", str(pdf)), re.M)
+        pages = [
+            tool("pdftotext", "-enc", "UTF-8", "-q", "-f", str(n), "-l", str(n), str(pdf), "-")
+            for n in range(1, int(info.group(1)) + 1 if info else 1)
+        ]
+        _write(cache, "\f".join(page.replace("\f", "") for page in pages).encode())
+    return cache.read_text(encoding="utf-8", errors="replace").split("\f")
+
+
+def pdf_text(pdf: Path) -> str:
+    """A PDF's text for reading, with a marker where each page starts."""
+    pages = pdf_pages(pdf)
+    return "\n".join(f"── page {n} of {len(pages)} ──\n{page}" for n, page in enumerate(pages, 1))
 
 
 def os_open(path: Path, reveal: bool = False) -> None:

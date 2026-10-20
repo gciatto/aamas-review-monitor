@@ -58,7 +58,7 @@ def test_inspect_prints_document_issues_and_show_includes_them(tmp_path, monkeyp
     papers.save(records, core.DIR_PAPERS, [])
     core.DIR_SNAPSHOTS.mkdir()
     (core.DIR_SNAPSHOTS / "a.json").write_text(json.dumps(snapshot(records, config)))
-    monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "A Paper\nAnonymous Author(s)\f")
+    monkeypatch.setattr(documents.papers, "pdf_pages", lambda pdf: ["A Paper\nAnonymous Author(s)"])
     monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {"Page size": "595 x 842 pts"})
     monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
     cli.main(["show", "7"])
@@ -186,7 +186,7 @@ def test_inspect_downloads_missing_pdf_and_supplementary(tmp_path, monkeypatch, 
         "get_attachment",
         lambda field, id: client.downloads.append(field) or attachments[field],
     )
-    monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "A Paper\nAnonymous Author(s)\f")
+    monkeypatch.setattr(documents.papers, "pdf_pages", lambda pdf: ["A Paper\nAnonymous Author(s)"])
     monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {})
     monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
     cli.main(["inspect"])  # every paper: downloads what is missing

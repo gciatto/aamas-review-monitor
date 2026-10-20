@@ -1,5 +1,4 @@
 import copy
-from pathlib import Path
 
 from aamas_review_monitor import papers
 from aamas_review_monitor.collector import fetch
@@ -62,15 +61,27 @@ def test_email_late_reviewers_through_paper_invitation():
     ]
 
 
-def test_pdf_text_is_converted_once(tmp_path, monkeypatch):
-    calls = []
+def test_pdfs_are_converted_page_by_page_as_pdfinfo_counts_them_once(tmp_path, monkeypatch):
+    import subprocess
 
-    def pdftotext(command, check):
+    calls: list[list[str]] = []
+
+    def run(command, check, capture_output):
         calls.append(command)
-        Path(command[-1]).write_text("text")
+        if command[0].endswith("pdfinfo"):
+            out = "Title: x\nPages:          3\n"
+        else:  # pdftotext -f N -l N: page 2 is blank, and each page ends with a form feed
+            page = command[command.index("-f") + 1]
+            out = "" if page == "2" else f"text of page {page}\n"
+            out += "\f"
+        return subprocess.CompletedProcess(command, 0, out.encode())
 
-    monkeypatch.setattr(papers.shutil, "which", lambda name: "/bin/pdftotext")
-    monkeypatch.setattr(papers.subprocess, "run", pdftotext)
+    monkeypatch.setattr(papers.shutil, "which", lambda name: f"/bin/{name}")
+    monkeypatch.setattr(papers.subprocess, "run", run)
     pdf = tmp_path / "pdf_v1.pdf"
-    assert papers.pdf_text(pdf) == papers.pdf_text(pdf) == "text"
-    assert calls == [["/bin/pdftotext", "-enc", "UTF-8", "-q", str(pdf), str(pdf) + ".txt"]]
+    pages = ["text of page 1\n", "", "text of page 3\n"]
+    assert papers.pdf_pages(pdf) == papers.pdf_pages(pdf) == pages
+    assert len(calls) == 4  # pdfinfo, then 3 pages; the second time from the cache
+    assert calls[1][-6:] == ["-f", "1", "-l", "1", str(pdf), "-"]
+    text = papers.pdf_text(pdf)
+    assert text.startswith("── page 1 of 3 ──\ntext of page 1") and "── page 3 of 3 ──" in text

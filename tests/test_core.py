@@ -36,12 +36,12 @@ def test_download_each_survives_a_failure_and_papers_without_the_file():
 
 
 def test_inspect_each_downloads_only_what_is_missing_and_survives_a_missing_tool(monkeypatch):
-    def pdf_text(pdf: Path) -> str:
+    def pdf_pages(pdf: Path) -> list[str]:
         if "8" in pdf.parts:
             raise FileNotFoundError("pdftotext not found")
-        return "A Paper\nAnonymous Author(s)\f"
+        return ["A Paper\nAnonymous Author(s)"]
 
-    monkeypatch.setattr(documents.papers, "pdf_text", pdf_text)
+    monkeypatch.setattr(documents.papers, "pdf_pages", pdf_pages)
     monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {"Page size": "612 x 792 pts"})
     monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
     client = FakeClient()

@@ -210,7 +210,7 @@ def test_tui_inspects_the_pdf_and_shows_the_results(tmp_path, monkeypatch):
     from aamas_review_monitor import documents
 
     app, client, _ = cached_monitor(tmp_path, monkeypatch)
-    monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "A Paper\nAnonymous Author(s)\f")
+    monkeypatch.setattr(documents.papers, "pdf_pages", lambda pdf: ["A Paper\nAnonymous Author(s)"])
     monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {"Page size": "612 x 792 pts"})
     monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
 
@@ -274,7 +274,7 @@ def test_tui_bulk_inspect_downloads_what_is_missing(tmp_path, monkeypatch):
 
     app, client, _ = cached_monitor(tmp_path, monkeypatch)
     second_paper()
-    monkeypatch.setattr(documents.papers, "pdf_text", lambda pdf: "A Paper\nAnonymous Author(s)\f")
+    monkeypatch.setattr(documents.papers, "pdf_pages", lambda pdf: ["A Paper\nAnonymous Author(s)"])
     monkeypatch.setattr(documents, "pdfinfo", lambda pdf: {})
     monkeypatch.setattr(documents, "pdffonts", lambda pdf: [])
     notes: list[str] = []
