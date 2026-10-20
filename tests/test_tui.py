@@ -73,6 +73,13 @@ async def done(app, pilot, effect):
     )
 
 
+async def reviewing(app, pilot):
+    """The Review dialog, once it has opened and filled its editor with the first item."""
+    ready = lambda: isinstance(app.screen, Review) and app.screen.current is not None  # noqa: E731
+    await until(pilot, ready, state=lambda: f"screen {app.screen!r}")
+    return app.screen
+
+
 async def confirm(app, pilot, answer):
     """Types `answer` in the Review dialog's box, once it has the focus, and presses Enter."""
     assert isinstance(app.screen, Review)
@@ -170,7 +177,7 @@ def test_tui_email_sends_only_after_typing_send(tmp_path, monkeypatch):
                 app.screen.query_one("#subject").value = "Hi"
                 app.screen.query_one("#body").load_text("Dear {{fullname}}")
                 await pilot.click("#send")
-                assert isinstance(app.screen, Review)
+                await reviewing(app, pilot)
                 assert app.screen.items[0].heading == "To late-reviewers of #7 (2), via #7"
                 await confirm(app, pilot, answer)
                 await done(app, pilot, lambda: bool(notes) and not isinstance(app.screen, Review))
@@ -353,8 +360,7 @@ def test_spc_tab_lists_issues_per_spc_and_sends_a_digest(tmp_path, monkeypatch):
             assert "#7" in panel and "ratings [3, 6]" in panel
             await pilot.press("m")
             await choose_template(app, pilot, "spc-digest")
-            assert isinstance(app.screen, Review)
-            (item,) = app.screen.items
+            (item,) = (await reviewing(app, pilot)).items
             assert item.heading == "To ~Spc_One1, via #7" and "ratings [3, 6]" in item.text
             await confirm(app, pilot, "SEND")
             await done(app, pilot, lambda: bool(app.sent))
@@ -380,7 +386,7 @@ def test_papers_tab_templated_reminder_to_late_reviewers_can_be_cancelled(tmp_pa
             assert not isinstance(app.screen, Review)
             await pilot.press("m")
             await choose_template(app, pilot, "spc-digest")
-            assert isinstance(app.screen, Review)
+            await reviewing(app, pilot)
             await pilot.press("escape")
             await pilot.pause()
 
@@ -399,8 +405,7 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             assert isinstance(form, tui.CommentForm)
             form.query_one("#spcs-read").value = False
             await pilot.click("#comment-post")
-            review = app.screen
-            assert isinstance(review, Review)
+            review = await reviewing(app, pilot)
             assert review.header[0] == "1 comments, readable by PCs, SACs"
             text = review.query_one("#review-text")
             assert "ratings [3, 6]" in text.text  # editable before posting
@@ -495,8 +500,8 @@ def test_review_edits_each_message_and_refuses_empty_ones(tmp_path, monkeypatch)
             app.screen.query_one("#subject").value = "Hi"
             app.screen.query_one("#body").load_text("Dear {{fullname}}")
             await pilot.click("#send")
-            review = app.screen
-            assert isinstance(review, Review) and len(review.items) == 2
+            review = await reviewing(app, pilot)
+            assert len(review.items) == 2
             review.query_one("#review-title").value = "Hi, paper 7"
             review.query_one("#review-list").highlighted = 1  # to the second message
             await pilot.pause()
@@ -531,7 +536,7 @@ def test_ignored_issues_stay_listed_in_gray_and_out_of_comments(tmp_path, monkey
             assert all(i.code != "disagreement" for i in app.by_spc()["~Spc_One1"])  # uncounted
             await pilot.press("c")
             await pilot.click("#comment-post")
-            (item,) = app.screen.items
+            (item,) = (await reviewing(app, pilot)).items
             assert "ratings [3, 6]" not in item.text and "review of 1 words" in item.text
 
     asyncio.run(scenario())
