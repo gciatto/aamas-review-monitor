@@ -1,3 +1,10 @@
+## [1.5.0](https://github.com/gciatto/aamas-review-monitor/compare/1.4.0...1.5.0) (2026-10-20)
+
+### Features
+
+* cap OpenReview requests per second (--rate, default 5) ([aae6f2a](https://github.com/gciatto/aamas-review-monitor/commit/aae6f2a6fc92d4c433d06e394e8e71a115811e8d))
+* messages ask recipients to double-check the flags and explain how they were computed ([219931e](https://github.com/gciatto/aamas-review-monitor/commit/219931ea8fdd54792d503090421915c8ac13adcb))
+
 ## [1.4.0](https://github.com/gciatto/aamas-review-monitor/compare/1.3.0...1.4.0) (2026-10-20)
 
 ### Features

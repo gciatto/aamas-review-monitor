@@ -1,6 +1,6 @@
 [project]
 name = "aamas-review-monitor"
-version = "1.4.0"
+version = "1.5.0"
 description = "Read-only, deterministic OpenReview process monitor for AAMAS 2027 Senior Area Chairs"
 readme = "README.md"
 authors = [
