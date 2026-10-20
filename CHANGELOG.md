@@ -1,3 +1,19 @@
+## [1.6.0](https://github.com/gciatto/aamas-review-monitor/compare/1.5.0...1.6.0) (2026-10-20)
+
+### Features
+
+* every email and comment can be edited before it goes out ([248cb27](https://github.com/gciatto/aamas-review-monitor/commit/248cb27bcf59f40be182f3f130d924bc53d2a9a6))
+* ignore issues: listed in gray, uncounted, left out of emails and comments ([51f3926](https://github.com/gciatto/aamas-review-monitor/commit/51f3926e23722ce5ea41b3ea2c9a7ed9377256a9))
+* PDFs are converted page by page, as many pages as pdfinfo counts; text findings give pages ([2698371](https://github.com/gciatto/aamas-review-monitor/commit/2698371d06e9638d2933a0a77cdb5679e2b5d2fd))
+
+### Bug Fixes
+
+* page counts no longer miss the template's small-caps References heading; template check is YELLOW ([4d3f932](https://github.com/gciatto/aamas-review-monitor/commit/4d3f93251faf04a38a101646c8a0c33659ecb3ca))
+
+### Tests
+
+* inspect the review dialog only once it has opened and filled its editor ([ffe4f55](https://github.com/gciatto/aamas-review-monitor/commit/ffe4f55d2113724ccb31499c5e89651c82cdaaa0))
+
 ## [1.5.0](https://github.com/gciatto/aamas-review-monitor/compare/1.4.0...1.5.0) (2026-10-20)
 
 ### Features
