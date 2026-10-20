@@ -6,11 +6,18 @@ Subject: AAMAS 2027: your review of paper $paper
 ---
 Dear {{fullname}},
 
-Your review of AAMAS 2027 paper $paper ($url) has not been submitted yet. Reviews are due on
-$deadline_reviews ($days_reviews days from now).
+According to my automatic checks, your review of AAMAS 2027 paper $paper ($url) has not been
+submitted yet. Reviews are due on $deadline_reviews ($days_reviews days from now).
 
 If something prevents you from completing it, please let us know as soon as possible, so that
-we can make other arrangements in time.
+we can make other arrangements in time. The check may lag behind OpenReview: if you have
+already submitted your review, please ignore this message.
+
+How these checks work: they are computed automatically and deterministically, by a script
+I run on my own machine over what OpenReview shows me: process data (assignments, dates, word
+counts, scores) and, for some checks, the text of the PDFs or of the reviews. No generative AI
+is involved, and nothing about the submissions, the authors, the PC members or the SPCs is
+shared with anyone.
 
 Thank you for your work for AAMAS.
 

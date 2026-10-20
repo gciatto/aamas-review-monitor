@@ -107,3 +107,14 @@ def test_each_failed_check_is_explained_once_per_paper_for_spcs_but_not_reviewer
         by_key()["reviewers-deadline"], ISSUES, records, CONFIG, TODAY
     )
     assert "Reviews on schedule: " not in reminder.body
+
+
+def test_comments_drop_the_explanations_when_too_long_for_openreview(monkeypatch):
+    records = fetch(FakeClient(), CONFIG)
+    (explained,), _ = outreach.comments(ISSUES, records, {7}, True, CONFIG)
+    monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", len(explained.text) - 1)
+    (bare,), _ = outreach.comments(ISSUES, records, {7}, True, CONFIG)
+    assert "Reviews on schedule: " not in bare.text and "- 🔴 2 reviews missing" in bare.text
+    monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", 100)
+    found, skipped = outreach.comments(ISSUES, records, {7}, True, CONFIG)
+    assert found == [] and skipped[0].endswith("OpenReview allows 100")

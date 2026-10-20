@@ -6,12 +6,23 @@ Subject: AAMAS 2027: SPC actions pending ($papers)
 ---
 Dear {{fullname}},
 
-Some SPC actions on your papers are pending or overdue:
+According to my automatic process checks, some SPC actions on your papers are pending or
+overdue. Each point says what the check verifies:
 
 $issues
 
 The meta-review deadline is $deadline_meta_reviews ($days_meta_reviews days from now). Could you
-take care of these as soon as possible?
+please:
+- double-check these points on OpenReview: automatic checks can be wrong, and I would be glad
+  to hear when one is;
+- take care of the actual ones as soon as possible, involving the papers' PC members where
+  they are needed, e.g. to discuss or to acknowledge the rebuttal.
+
+How these checks work: they are computed automatically and deterministically, by a script
+I run on my own machine over what OpenReview shows me: process data (assignments, dates, word
+counts, scores) and, for some checks, the text of the PDFs or of the reviews. No generative AI
+is involved, and nothing about the submissions, the authors, the PC members or the SPCs is
+shared with anyone.
 
 Best regards,
 Your Senior Area Chair

@@ -20,6 +20,7 @@ from aamas_review_monitor.papers import Comment, Draft, recipients
 from aamas_review_monitor.resources import DIR_TEMPLATES, FILE_COMMENT
 
 AUDIENCES = ("spcs", "late-reviewers")
+COMMENT_CHARS_MAX = 5000  # OpenReview's Official_Comment limit
 
 
 class Template(NamedTuple):
@@ -273,9 +274,17 @@ def comments(
         elif not theirs:
             skipped.append(f"#{number}: no open issues")
         else:
-            lines = _lines(theirs, lambda i: f"- {ICONS[i.severity]} {i.message}", _legend(config))
-            text = string.Template(body).safe_substitute(issues=lines).strip() + "\n"
-            found.append(Comment(by_number[number], title, text, spcs_read))
+            # explained if it fits OpenReview's limit, else the bare list, else nothing
+            for explained in (_legend(config), None):
+                lines = _lines(theirs, lambda i: f"- {ICONS[i.severity]} {i.message}", explained)
+                text = string.Template(body).safe_substitute(issues=lines).strip() + "\n"
+                if len(text) <= COMMENT_CHARS_MAX:
+                    found.append(Comment(by_number[number], title, text, spcs_read))
+                    break
+            else:
+                skipped.append(
+                    f"#{number}: {len(text)} characters, OpenReview allows {COMMENT_CHARS_MAX}"
+                )
     return found, skipped
 
 

@@ -7,11 +7,19 @@ Subject: AAMAS 2027: meta-reviews due $deadline_meta_reviews
 Dear {{fullname}},
 
 A friendly reminder: meta-reviews are due on $deadline_meta_reviews, in $days_meta_reviews days.
-These papers still need one:
+According to my automatic process checks, these papers still need one:
 
 $issues
 
-Please remember both the Proceedings and the Findings recommendations.
+Please double-check on OpenReview, as automatic checks can be wrong, and remember both the
+Proceedings and the Findings recommendations. If other warnings of mine reached you about
+these papers, it is up to you to decide whether they deserve a place in your meta-review.
+
+How these checks work: they are computed automatically and deterministically, by a script
+I run on my own machine over what OpenReview shows me: process data (assignments, dates, word
+counts, scores) and, for some checks, the text of the PDFs or of the reviews. No generative AI
+is involved, and nothing about the submissions, the authors, the PC members or the SPCs is
+shared with anyone.
 
 Best regards,
 Your Senior Area Chair

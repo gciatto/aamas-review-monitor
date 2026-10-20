@@ -1,8 +1,17 @@
 Title: Process check: points needing attention
 ---
-The Senior Area Chair's automatic process checks currently flag the following on this paper:
+The Senior Area Chair's automatic process checks currently flag the following on this paper.
+Each point says what the check verifies:
 
 $issues
 
 These flags concern the reviewing process (assignments, schedule, discussion, meta-review),
-never the paper's merit. Please look into them, and reply here once they are addressed.
+never the paper's merit. The SPC is kindly asked to double-check them, since automatic checks
+can be wrong; to involve the PC members where needed; and to decide whether any of them
+deserves attention in the meta-review, or can be ignored. Please reply here once they are
+addressed, or to point out a wrong flag.
+
+These checks are computed automatically and deterministically, on the Senior Area Chair's
+machine, over OpenReview's process data (assignments, dates, word counts, scores) and, for some
+checks, the text of the PDF or of the reviews. No generative AI is involved, and nothing about
+the submission, its authors, the PC members or the SPCs is shared with anyone.

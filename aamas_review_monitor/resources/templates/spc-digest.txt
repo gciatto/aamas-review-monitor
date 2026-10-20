@@ -6,13 +6,26 @@ Subject: AAMAS 2027: status of your papers ($papers)
 ---
 Dear {{fullname}},
 
-Here is where the reviewing of the papers you are supervising as SPC stands. These are the
-points that currently need attention:
+Here is where the reviewing of the papers you are supervising as SPC stands, according to my
+automatic process checks. Each point says what the check verifies:
 
 $issues
 
-Each link opens the paper's forum on OpenReview. Thank you for taking care of them, and let me
-know if anything blocks you.
+Could you please:
+- double-check these points on OpenReview (each link opens the paper's forum): automatic
+  checks can be wrong, and I would be glad to hear when one is;
+- let the papers' PC members know about the points that concern them, e.g. missing or short
+  reviews, or a disagreement worth discussing;
+- decide, when writing your meta-reviews, whether each warning deserves your attention or can
+  be ignored: that call is yours.
+
+How these checks work: they are computed automatically and deterministically, by a script
+I run on my own machine over what OpenReview shows me: process data (assignments, dates, word
+counts, scores) and, for some checks, the text of the PDFs or of the reviews. No generative AI
+is involved, and nothing about the submissions, the authors, the PC members or the SPCs is
+shared with anyone.
+
+Thank you for taking care of them, and let me know if anything blocks you.
 
 Best regards,
 Your Senior Area Chair

@@ -9,6 +9,15 @@ Dear {{fullname}},
 A friendly reminder: your review of AAMAS 2027 paper $paper ($url) is due on
 $deadline_reviews, in $days_reviews days.
 
+This reminder comes from an automatic check that may lag behind OpenReview: if you have
+already submitted your review, please ignore it, and accept my thanks.
+
+How these checks work: they are computed automatically and deterministically, by a script
+I run on my own machine over what OpenReview shows me: process data (assignments, dates, word
+counts, scores) and, for some checks, the text of the PDFs or of the reviews. No generative AI
+is involved, and nothing about the submissions, the authors, the PC members or the SPCs is
+shared with anyone.
+
 Thank you for your work for AAMAS.
 
 Best regards,
