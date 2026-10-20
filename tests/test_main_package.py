@@ -69,7 +69,7 @@ def test_inspect_prints_document_issues_and_show_includes_them(tmp_path, monkeyp
     cli.main(["issues", "7"])
     out = capsys.readouterr().out
     assert (
-        "RED    no AAMAS 2027 copyright block" in out and "GREEN  Anonymous submission mode" in out
+        "YELLOW no AAMAS 2027 copyright block" in out and "GREEN  Anonymous submission mode" in out
     )
 
 

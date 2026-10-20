@@ -221,7 +221,7 @@ def test_tui_inspects_the_pdf_and_shows_the_results(tmp_path, monkeypatch):
             assert client.downloads == [("pdf", "abc")]  # fetched first, then inspected
             assert isinstance(app.screen, Paper)
             text = app.screen.text.plain
-            assert "🔴 no AAMAS 2027 copyright block" in text
+            assert "🟡 no AAMAS 2027 copyright block" in text
             assert "🟢 US Letter pages" in text and "not run" not in text
             await pilot.press("escape")
             codes = {i.code for i in app.issues if i.number == 7}

@@ -64,7 +64,7 @@ def test_format():
         (YELLOW, "fonts:typeface"),
     }
     old = [FIRST.replace("AAMAS 2027)", "AAMAS 2026)")] + paper(8)[1:]
-    assert codes(doc(old)) == {(RED, "template")}
+    assert codes(doc(old)) == {(YELLOW, "template")}
 
 
 def test_anonymity():
@@ -161,3 +161,24 @@ Helvetica                            Type 1            WinAnsi          no  no  
             ("NPWNPS+LinLibertineT", "yes"),
             ("Helvetica", "no"),
         ]
+
+
+def test_small_caps_and_numbered_headings_are_found():
+    """pdftotext may space out the template's small-caps headings: a later plain "References"
+    (here in an appendix) must not be taken for the end of the main text."""
+    pages = paper(6, after="A Proofs\nSome proofs.")
+    pages[6] = pages[6].replace("References", "R EFERENCES")
+    pages += [BODY, BODY, f"{HEADER}References\n[9] More."]
+    found = dict(run(DOCUMENT_CHECKS, doc(pages)))
+    assert "page_limit" not in found
+    assert found["appendix_in_paper"].message == (
+        "main text 6 pages + appendix 4 pages (References heading on page 7 of 10)"
+    )
+    numbered = paper(9)
+    numbered[9] = numbered[9].replace("References", "7  REFERENCES")
+    assert dict(run(DOCUMENT_CHECKS, doc(numbered)))["page_limit"].message == (
+        "main text on 9 pages (References heading on page 10 of 10)"
+    )
+    thanks = paper(8)
+    thanks[3] += "\nA CKNOWLEDGMENTS\nWe thank..."
+    assert (YELLOW, "identifying_text:acknowledgements") in codes(doc(thanks))

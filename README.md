@@ -86,8 +86,8 @@ Defaults follow the AAMAS 2027 timeline: 50% of reviews by 26 Oct, all by 13 Nov
 ### Document checks: on request (`inspect`, or `i`)
 
 These use the PDF's text and properties and the supplementary zip's contents. Missing files
-are downloaded first. Results are cached per uploaded version, and a new upload makes them
-stale.
+are downloaded first. Results are cached per uploaded version; a new upload, or an update of
+the checks themselves, makes them stale (shown as not run until you inspect again).
 
 | Check | Flags |
 |---|---|
@@ -96,7 +96,7 @@ stale.
 | Main text long enough | 🟡 main text under 6 pages |
 | US Letter pages | 🔴 any other page size |
 | Template fonts, all embedded | 🟡 fonts not embedded, or no Libertine (the template's typeface) |
-| AAMAS 2027 template | 🔴 no AAMAS 2027 copyright block on page 1 |
+| AAMAS 2027 template | 🟡 no AAMAS 2027 copyright block on page 1 |
 | Anonymous submission mode | 🔴 no "Anonymous Author(s)" on page 1, or a name in the PDF's Author metadata |
 | No identifying text | 🟡 emails on page 1, an Acknowledgements section, personal repository links, phrases like "our previous work" |
 | OpenReview metadata matches the PDF | 🟡 the OpenReview title or abstract largely missing from the PDF's first pages |

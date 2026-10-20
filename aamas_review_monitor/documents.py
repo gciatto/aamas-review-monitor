@@ -4,6 +4,7 @@ Deterministic and local (xpdf's pdftotext/pdfinfo/pdffonts, zipfile): they produ
 human to verify, never decisions. Results are cached next to the PDF, per attachment version.
 """
 
+import hashlib
 import json
 import re
 import shutil
@@ -17,12 +18,23 @@ from aamas_review_monitor import markers, papers
 from aamas_review_monitor.checks import RED, YELLOW, Finding, Issue, registrar, run
 
 FILE_INSPECTION = "inspection.json"
-HEADING_REFERENCES = re.compile(r"^\s*(References|REFERENCES|Bibliography)\s*$", re.M)
+
+
+def _heading(*words: str) -> re.Pattern[str]:
+    """A line that is only one of `words`, in any case, maybe numbered ("7 References"), and
+    maybe spaced out, as pdftotext extracts the template's small-caps headings ("R EFERENCES")."""
+    spaced = "|".join("[ \t]*".join(map(re.escape, word)) for word in words)
+    return re.compile(rf"^[ \t]*(\d+\.?[ \t]+)?({spaced})[ \t]*$", re.M | re.I)
+
+
+HEADING_REFERENCES = _heading("References", "Bibliography")
 # "Appendix", or a lettered section heading such as "A Proofs" alone on its line
 HEADING_APPENDIX = re.compile(
     r"^\s*(Appendix|APPENDIX|Appendices|[A-Z]\s+[A-Z][a-z]+(\s+[A-Za-z-]+){0,6})\s*$", re.M
 )
-HEADING_ACKNOWLEDGEMENTS = re.compile(r"^\s*(Acknowledge?ments?|ACKNOWLEDGE?MENTS?)\s*$", re.M)
+HEADING_ACKNOWLEDGEMENTS = _heading(
+    "Acknowledgements", "Acknowledgments", "Acknowledgement", "Acknowledgment"
+)
 PATTERN_EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 PATTERN_HOME = re.compile(r"(/Users/|/home/|C:\\\\Users\\\\)([A-Za-z][\w.-]+)")
 PATTERN_REPOSITORY = re.compile(r"(github\.com|gitlab\.com|bitbucket\.org)/([\w.-]+)", re.I)
@@ -87,8 +99,14 @@ def parse_pdffonts(output: str) -> list[dict[str, str]]:
     return [{k: line[a:b].strip() for k, (a, b) in zip(keys, spans)} for line in lines[2:]]
 
 
-def _main_pages(doc: Document) -> tuple[int, int] | None:
-    """(main text pages, appendix pages after the references); None without a References heading."""
+class Parts(NamedTuple):
+    main: int  # pages of main text
+    appendix: int  # pages of appendix after the references
+    references: int  # the page (from 1) with the References heading
+
+
+def _main_pages(doc: Document) -> Parts | None:
+    """How the PDF splits into main text and appendix; None without a References heading."""
     for index, page in enumerate(doc.pages):
         heading = HEADING_REFERENCES.search(page)
         if heading:
@@ -99,8 +117,12 @@ def _main_pages(doc: Document) -> tuple[int, int] | None:
             extra = (
                 len(doc.pages) - index - after[: appendix.start()].count("\f") if appendix else 0
             )
-            return main, extra
+            return Parts(main, extra, index + 1)
     return None
+
+
+def _where(doc: Document, parts: Parts) -> str:
+    return f"References heading on page {parts.references} of {len(doc.pages)}"
 
 
 def _words(text: str) -> list[str]:
@@ -119,7 +141,9 @@ def page_limit(doc: Document) -> list[Finding]:
         if len(doc.pages) > limit:
             return [Finding(YELLOW, f"{len(doc.pages)} pages, no References heading found")]
         return []
-    return [Finding(RED, f"main text on {parts[0]} pages")] if parts[0] > limit else []
+    if parts.main > limit:
+        return [Finding(RED, f"main text on {parts.main} pages ({_where(doc, parts)})")]
+    return []
 
 
 @document_check
@@ -130,8 +154,9 @@ def appendix_in_paper(doc: Document) -> list[Finding]:
     {pages_max} pages: AAMAS counts appendices in the paper toward the limit.
     """
     parts = _main_pages(doc)
-    if parts and parts[1] and sum(parts) > doc.config["pages_max"]:
-        return [Finding(RED, f"main text {parts[0]} pages + appendix {parts[1]} pages")]
+    if parts and parts.appendix and parts.main + parts.appendix > doc.config["pages_max"]:
+        message = f"main text {parts.main} pages + appendix {parts.appendix} pages"
+        return [Finding(RED, f"{message} ({_where(doc, parts)})")]
     return []
 
 
@@ -142,8 +167,8 @@ def too_short(doc: Document) -> list[Finding]:
     YELLOW when the text before the References heading spans fewer than {pages_min} pages.
     """
     parts = _main_pages(doc)
-    if parts and parts[0] < doc.config["pages_min"]:
-        return [Finding(YELLOW, f"main text on {parts[0]} pages")]
+    if parts and parts.main < doc.config["pages_min"]:
+        return [Finding(YELLOW, f"main text on {parts.main} pages ({_where(doc, parts)})")]
     return []
 
 
@@ -179,11 +204,11 @@ def fonts(doc: Document) -> list[Finding]:
 def template(doc: Document) -> list[Finding]:
     """AAMAS 2027 template
 
-    RED when the first page lacks the AAMAS 2027 copyright block of the template, e.g. because
-    another or an older template was used.
+    YELLOW when the first page lacks the AAMAS 2027 copyright block of the template, e.g. because
+    another or an older template was used, or the text extraction missed it.
     """
     first = " ".join(doc.pages[0].split()) if doc.pages else ""
-    return [] if TEMPLATE_MARK in first else [Finding(RED, "no AAMAS 2027 copyright block")]
+    return [] if TEMPLATE_MARK in first else [Finding(YELLOW, "no AAMAS 2027 copyright block")]
 
 
 @document_check
@@ -338,6 +363,13 @@ def marker_words(doc: Document) -> list[Finding]:
     return [Finding(YELLOW, described)] if described else []
 
 
+def _checks_version() -> str:
+    """Changes whenever the document checks' code or marker lists change, so that results
+    cached by an older version of the checks count as not run."""
+    files = [Path(__file__), Path(markers.__file__), markers.FILE_AI_PHRASES, markers.FILE_AI_WORDS]
+    return hashlib.sha256(b"".join(f.read_bytes() for f in files)).hexdigest()[:16]
+
+
 def _versions(record: dict, config: dict, directory: Path) -> dict[str, str | None]:
     files = {
         key: papers.attachment(record, config[key], directory)
@@ -367,7 +399,7 @@ def inspect_paper(
     found = run(DOCUMENT_CHECKS, doc)
     result = {
         "versions": _versions(record, config, directory),
-        "checks": [f.__name__ for f in DOCUMENT_CHECKS],
+        "checks": _checks_version(),
         "findings": [[c, *f] for c, f in found],
     }
     file = directory / str(record["number"]) / FILE_INSPECTION
@@ -378,14 +410,14 @@ def inspect_paper(
 
 def inspection(record: dict, config: dict, directory: Path) -> list[tuple[str, Finding]] | None:
     """Cached document check results for the current attachments; None if not (re)run yet, or
-    run before the current set of checks."""
+    run by another version of the checks."""
     file = directory / str(record["number"]) / FILE_INSPECTION
     if not file.is_file():
         return None
     result = json.loads(file.read_text(encoding="utf-8"))
     if result["versions"] != _versions(record, config, directory):
         return None
-    if result.get("checks") != [f.__name__ for f in DOCUMENT_CHECKS]:
+    if result.get("checks") != _checks_version():
         return None
     return [
         (code, Finding(severity, message, detail))
