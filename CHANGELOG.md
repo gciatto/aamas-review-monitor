@@ -1,3 +1,10 @@
+## [1.7.0](https://github.com/gciatto/aamas-review-monitor/compare/1.6.0...1.7.0) (2026-10-20)
+
+### Features
+
+* flags say where they were found: PDF pages, supplementary files, which review ([35a23c6](https://github.com/gciatto/aamas-review-monitor/commit/35a23c6990e650447a2bd388324d9f879e58eff8))
+* open a paper's PDF directly (v) and its local data folder (w, folder N) ([ccb1260](https://github.com/gciatto/aamas-review-monitor/commit/ccb126074d0b14f28ba59fdf6d4636b6d3294adc))
+
 ## [1.6.0](https://github.com/gciatto/aamas-review-monitor/compare/1.5.0...1.6.0) (2026-10-20)
 
 ### Features
