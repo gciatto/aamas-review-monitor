@@ -1,3 +1,21 @@
+## [1.8.0](https://github.com/gciatto/aamas-review-monitor/compare/1.7.0...1.8.0) (2026-10-26)
+
+### Features
+
+* filter the legend by text (legend TEXT, typing in the TUI's legend) ([3675840](https://github.com/gciatto/aamas-review-monitor/commit/3675840a206337e6faed1be966061c294b022dc0))
+* late-reviews comment and SPC email, chosen or suggested when only late reviews are selected ([fee7edc](https://github.com/gciatto/aamas-review-monitor/commit/fee7edc0f5dc6f2ceba02680cf4d77af7fde3727))
+* mark issues by color, sent status and check from a multi-select dialog (+) ([23bb5af](https://github.com/gciatto/aamas-review-monitor/commit/23bb5af55d024c735842c75e90d193e8c7ed60ca))
+* one subject or title with placeholders for all reviewed messages, placeholders explained ([fdd3e9f](https://github.com/gciatto/aamas-review-monitor/commit/fdd3e9fce507b52b26ce939e57432d4d10de04a4))
+* per-issue marks, Commented/Emailed columns and an unsent-only view (n) ([b8e4e95](https://github.com/gciatto/aamas-review-monitor/commit/b8e4e9551d88c87ba43bf633d1fca187b0e66fb1))
+
+### Bug Fixes
+
+* TUI sign-in no longer hangs on multi-factor prompts (suspends the app while logging in) ([fe4cc50](https://github.com/gciatto/aamas-review-monitor/commit/fe4cc500fbbf102b3e30daaa752d1bd4d06de90c))
+
+### Style improvements
+
+* order the Papers tab as status, paper, commented, emailed, SPC, issue ([aec89ea](https://github.com/gciatto/aamas-review-monitor/commit/aec89ea90c4bc972b9b9fdfeaa24e9ecdaba5324))
+
 ## [1.7.0](https://github.com/gciatto/aamas-review-monitor/compare/1.6.0...1.7.0) (2026-10-20)
 
 ### Features
