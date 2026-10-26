@@ -1,0 +1,33 @@
+Name: Late reviews
+Description: SPCs whose papers have missing or late reviews, reminded to chase the reviewers
+Audience: spcs
+Codes: missing_reviews, reviews_behind, late_reviewer
+Subject: AAMAS 2027: late reviews on your papers ($papers)
+---
+Dear {{fullname}},
+
+According to my automatic process checks, some reviews of the papers you are supervising as
+SPC are missing or behind schedule. Each point says what the check verifies:
+
+$issues
+
+Reviews are due on $deadline_reviews ($days_reviews days from now).
+As SPC, **it is your responsibility to remind these papers' PC members of their pending reviews**,
+and to follow up until they are in.
+
+So, could you please:
+- double-check these points on OpenReview: automatic checks can lag behind it;
+- remind the reviewers concerned as soon as possible;
+- let me and general chairs know if a reviewer does not respond or cannot complete their review,
+  so that we can find a replacement in time.
+
+How these checks work: they are computed automatically and deterministically, by a script
+I run on my own machine over what OpenReview shows me: process data (assignments, dates, word
+counts, scores) and, for some checks, the text of the PDFs or of the reviews. No generative AI
+is involved, and nothing about the submissions, the authors, the PC members or the SPCs is
+shared with anyone.
+
+Thank you for taking care of them.
+
+Best regards,
+Your Senior Area Chair

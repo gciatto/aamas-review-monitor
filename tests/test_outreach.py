@@ -118,3 +118,15 @@ def test_comments_drop_the_explanations_when_too_long_for_openreview(monkeypatch
     monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", 100)
     found, skipped = outreach.comments(ISSUES, records, {7}, True, CONFIG)
     assert found == [] and skipped[0].endswith("OpenReview allows 100")
+
+
+def test_late_reviews_alone_get_their_own_comment_and_suggested_spc_template():
+    records = fetch(FakeClient(), CONFIG)
+    late, other = ISSUES[:1], ISSUES[:2]
+    (comment,), _ = outreach.comments(late, records, {7}, True, CONFIG)
+    assert comment.title == "Process check: reviews late" and "responsibility" in comment.text
+    (comment,), _ = outreach.comments(other, records, {7}, True, CONFIG)
+    assert comment.title == "Process check: points needing attention"
+    choices = outreach.templates()
+    assert outreach.suggest(choices, late).key == "spc-late-reviews"
+    assert outreach.suggest(choices, other) is None  # disagreement: no narrower template

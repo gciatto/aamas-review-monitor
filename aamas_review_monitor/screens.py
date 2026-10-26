@@ -419,15 +419,17 @@ class CommentForm(ModalScreen["bool | None"]):
 
 
 class Templates(ModalScreen["outreach.Template | None"]):
-    """Picks an email template; drafts are previewed before anything is sent."""
+    """Picks an email template, the one suggested for the chosen issues highlighted; drafts are
+    previewed before anything is sent."""
 
     DEFAULT_CSS = "Templates {" + DIALOG_CSS + " width: 90%; height: auto; padding: 1 2; } }"
     BINDINGS = [("escape", "dismiss", "Cancel")]
 
-    def __init__(self, scope: str) -> None:
+    def __init__(self, scope: str, issues: list[Issue]) -> None:
         super().__init__()
         self.scope = scope
         self.choices = outreach.templates()
+        self.suggested = outreach.suggest(self.choices, issues)
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -435,13 +437,23 @@ class Templates(ModalScreen["outreach.Template | None"]):
             yield OptionList(
                 *(
                     Option(
-                        Text.assemble((t.name, "bold"), f"  to {t.audience}\n", t.description),
+                        Text.assemble(
+                            (t.name, "bold"),
+                            f"  to {t.audience}",
+                            ("  suggested" if t == self.suggested else "", "bold green"),
+                            "\n",
+                            t.description,
+                        ),
                         t.key,
                     )
                     for t in self.choices
                 ),
                 id="templates",
             )
+
+    def on_mount(self) -> None:
+        if self.suggested:
+            self.query_one(OptionList).highlighted = self.choices.index(self.suggested)
 
     @on(OptionList.OptionSelected, "#templates")
     def chosen(self, event: OptionList.OptionSelected) -> None:

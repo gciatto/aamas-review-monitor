@@ -285,6 +285,7 @@ templates:
 | `spc-digest` | each SPC | every open issue on the papers they supervise |
 | `spc-late` | each SPC with pending SPC work | meta-reviews, recommendations, stalled discussions, unacknowledged rebuttals, silence |
 | `spc-deadline` | each SPC still owing meta-reviews | the meta-review deadline |
+| `spc-late-reviews` | each SPC with missing or late reviews | reminding the reviewers is their job |
 | `reviewers-late` | each paper's late reviewers | their missing or behind-schedule review |
 | `reviewers-deadline` | each paper's late reviewers | the review deadline |
 
@@ -302,7 +303,9 @@ SPC's papers reaches them. Reviewers get one message per paper. Templates are pl
   `$deadline_acknowledgements` and the `$days_...` left for each. OpenReview fills in
   `{{fullname}}`.
 
-Edit them, or add your own next to them.
+Edit them, or add your own next to them. In the terminal UI, the picker suggests (and
+highlights) the SPC template about the fewest codes that covers every chosen issue: with only
+missing or late reviews selected, `spc-late-reviews`.
 
 ### Comments and history
 
@@ -310,7 +313,10 @@ Edit them, or add your own next to them.
 Chairs. Program Chairs and SACs can always read it, and you choose whether its SPCs can too
 (reviewers can't, at this stage). The text comes from
 [`resources/comment.txt`](aamas_review_monitor/resources/comment.txt) with the paper's open issues,
-and you can edit each comment before posting.
+and you can edit each comment before posting. A paper whose issues are all missing or late
+reviews gets [`resources/comment-late-reviews.txt`](aamas_review_monitor/resources/comment-late-reviews.txt)
+instead (its `Codes:` header says which), reminding the SPC that chasing reviewers is up to them:
+let SPCs read it, or it reaches no one who can act.
 
 Every email and comment the app sends, or fails to send, is appended to
 `~/.aamas-review-monitor/history.jsonl`. It records when, through which paper, about which

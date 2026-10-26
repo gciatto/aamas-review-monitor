@@ -1,0 +1,17 @@
+Title: Process check: reviews late
+Codes: missing_reviews, reviews_behind, late_reviewer
+---
+The Senior Area Chair's automatic process checks show that reviews of this paper are missing
+or behind schedule. Each point says what the check verifies:
+
+$issues
+
+As the paper's SPC, **it is your responsibility to remind its PC members of their pending reviews**,
+and to follow up until they are in. Please double-check on OpenReview first, since
+automatic checks can lag behind it, and reply here if a reviewer does not respond or cannot
+complete their review, so that a replacement can be found in time.
+
+These checks are computed automatically and deterministically, on the Senior Area Chair's
+machine, over OpenReview's process data (assignments, dates, word counts, scores) and, for some
+checks, the text of the PDF or of the reviews. No generative AI is involved, and nothing about
+the submission, its authors, the PC members or the SPCs is shared with anyone.

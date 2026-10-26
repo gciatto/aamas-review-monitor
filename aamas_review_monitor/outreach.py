@@ -17,7 +17,7 @@ from typing import NamedTuple
 from aamas_review_monitor.checks import GREEN, ICONS, Issue, legend
 from aamas_review_monitor.collector import person
 from aamas_review_monitor.papers import Comment, Draft, recipients
-from aamas_review_monitor.resources import DIR_TEMPLATES, FILE_COMMENT
+from aamas_review_monitor.resources import DIR_TEMPLATES, FILE_COMMENT, FILE_COMMENT_LATE_REVIEWS
 
 AUDIENCES = ("spcs", "late-reviewers")
 COMMENT_CHARS_MAX = 5000  # OpenReview's Official_Comment limit
@@ -37,18 +37,37 @@ class Template(NamedTuple):
         return not self.codes or issue.code.split(":")[0] in self.codes
 
 
-def parse(key: str, text: str) -> Template:
-    """A template file: `Key: value` header lines, a `---` line, then the body. Placeholders
-    use `$name` (OpenReview's own `{{fullname}}` is left alone)."""
+def _fields(text: str) -> tuple[dict[str, str], frozenset[str], str]:
+    """`Key: value` header lines (keys lowercased), the codes of the `Codes` one (empty for all,
+    also when missing or `*`), and the body after the `---` line."""
     header, _, body = text.partition("\n---\n")
     fields = dict(line.split(":", 1) for line in header.strip().splitlines())
     fields = {k.strip().lower(): v.strip() for k, v in fields.items()}
-    codes = {c.strip() for c in fields["codes"].split(",")} - {"*", ""}
+    codes = {c.strip() for c in fields.get("codes", "").split(",")} - {"*", ""}
+    return fields, frozenset(codes), body
+
+
+def parse(key: str, text: str) -> Template:
+    """A template file: `Key: value` header lines, a `---` line, then the body. Placeholders
+    use `$name` (OpenReview's own `{{fullname}}` is left alone)."""
+    fields, codes, body = _fields(text)
     assert fields["audience"] in AUDIENCES, f"{key}: unknown audience {fields['audience']}"
     return Template(
         key, fields["name"], fields["description"], fields["audience"], frozenset(codes),
         fields["subject"], body.strip() + "\n",
     )  # fmt: skip
+
+
+def _codes(issues: list[Issue]) -> set[str]:
+    return {i.code.split(":")[0] for i in issues if i.severity != GREEN}
+
+
+def suggest(choices: list[Template], issues: list[Issue]) -> Template | None:
+    """The SPC template about the fewest codes that still covers every issue, if any: e.g. the
+    late-reviews one when only missing or late reviews are chosen."""
+    codes = _codes(issues)
+    fitting = [t for t in choices if t.audience == "spcs" and codes and codes <= t.codes]
+    return min(fitting, key=lambda t: len(t.codes), default=None)
 
 
 def templates(directory: Path = DIR_TEMPLATES) -> list[Template]:
@@ -298,9 +317,11 @@ def comments(
     issues: list[Issue], records: list[dict], numbers: set[int], spcs_read: bool, config: dict
 ) -> tuple[list[Comment], list[str]]:
     """One forum comment per paper listing its open issues, each check explained once, from the
-    comment template; also the papers that cannot get one, and why."""
-    header, _, body = FILE_COMMENT.read_text(encoding="utf-8").partition("\n---\n")
-    title = header.split(":", 1)[1].strip()
+    first comment template whose codes cover them all (the late-reviews one, else the general
+    one); also the papers that cannot get one, and why."""
+    choices = [
+        _fields(f.read_text(encoding="utf-8")) for f in (FILE_COMMENT_LATE_REVIEWS, FILE_COMMENT)
+    ]
     by_number = {r["number"]: r for r in records}
     found, skipped = [], []
     for number in sorted(numbers):
@@ -310,6 +331,8 @@ def comments(
         elif not theirs:
             skipped.append(f"#{number}: no open issues")
         else:
+            fields, _, body = next(c for c in choices if not c[1] or _codes(theirs) <= c[1])
+            title = fields["title"]
             # explained if it fits OpenReview's limit, else the bare list, else nothing
             for explained in (_legend(config), None):
                 lines = _lines(theirs, lambda i: f"- {ICONS[i.severity]} {i.message}", explained)

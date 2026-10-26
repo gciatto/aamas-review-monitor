@@ -483,7 +483,11 @@ class Monitor(App):
 
             self.send(drafts, unreachable, f" ({template.name})")
 
-        self.push_screen(Templates(scope), chosen)
+        if spcs:
+            about = [i for i in self.active() if spcs & set(i.spcs)]
+        else:
+            about = [i for i in self.chosen() if numbers and i.number in numbers]
+        self.push_screen(Templates(scope, about), chosen)
 
     def action_legend(self) -> None:
         self.push_screen(Legend(self.config))
