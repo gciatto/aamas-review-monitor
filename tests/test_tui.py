@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import zipfile
 
@@ -189,6 +190,24 @@ def test_tui_email_sends_only_after_typing_send(tmp_path, monkeypatch):
     asyncio.run(scenario())
     assert notes == ["Nothing sent", "Sent 1 of 1"]
     assert client.messages[0][0] == ("Hi", ["~Rev_B1", "~Rev_C1"], "Dear {{fullname}}")
+
+
+def test_tui_signs_in_with_the_app_suspended(tmp_path, monkeypatch):
+    """openreview-py prompts for multi-factor codes in the terminal: the app must not hide it."""
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    monkeypatch.setattr(core, "resume", lambda config: None)
+    suspended: list[bool] = []
+
+    @contextlib.contextmanager
+    def suspend():
+        suspended.append(True)
+        yield
+        suspended.append(False)
+
+    monkeypatch.setattr(app, "suspend", suspend)
+    monkeypatch.setattr(core, "login", lambda config, *creds: suspended.append(creds) or client)
+    assert app.sign_in(("sac@example.org", "secret")) is client
+    assert suspended == [True, ("sac@example.org", "secret"), False]
 
 
 def test_tui_signs_in_and_syncs_in_background(tmp_path, monkeypatch):

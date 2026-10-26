@@ -11,7 +11,7 @@ from typing import Any
 
 from rich.text import Text
 from textual import events, on, work
-from textual.app import App, ComposeResult, SystemCommand
+from textual.app import App, ComposeResult, SuspendNotSupported, SystemCommand
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
@@ -658,7 +658,7 @@ class Monitor(App):
                     self.call_from_thread(busy.dismiss)
                     self.call_from_thread(self.ask_login, label, job, done)
                     return
-                client = core.login(self.config, *credentials)
+                client = self.call_from_thread(self.sign_in, credentials)
             result = job(client, progress)
         except core.Interrupted:
             self.call_from_thread(busy.dismiss)
@@ -675,6 +675,16 @@ class Monitor(App):
             logger.setLevel(level)
         self.call_from_thread(busy.dismiss)
         self.call_from_thread(done, result)
+
+    def sign_in(self, credentials: tuple[str, str]) -> Any:
+        """Logs in with the app suspended: openreview-py asks for any multi-factor code in the
+        terminal, which the app would otherwise hide (leaving the login stuck)."""
+        try:
+            with self.suspend():
+                print("Signing in to OpenReview: answer any multi-factor prompts here")
+                return core.login(self.config, *credentials)
+        except SuspendNotSupported:  # e.g. headless: no terminal to prompt in anyway
+            return core.login(self.config, *credentials)
 
     def ask_login(self, label: str, job: Job, done: Callable[[Any], object]) -> None:
         def signed_in(credentials: tuple[str, str] | None) -> None:

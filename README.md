@@ -165,7 +165,8 @@ aamas_review_monitor report   # or print it
 ```
 
 The first `sync` asks for your OpenReview credentials, or reads `OPENREVIEW_USERNAME` and
-`OPENREVIEW_PASSWORD`. Only the resulting session token is kept, for one week
+`OPENREVIEW_PASSWORD`. If your account uses multi-factor authentication, the code is asked in
+the terminal (the TUI steps aside while signing in). Only the resulting session token is kept, for one week
 (`~/.aamas-review-monitor/token`; delete it to sign out). Run `sync` daily. Each run adds a
 snapshot, and the report tells you what is new and what got resolved since the previous one.
 
