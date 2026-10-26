@@ -65,7 +65,10 @@ def main(argv: list[str] | None = None) -> None:
     attachment_cmd.add_argument("--open", action="store_true", help="open with the default app")
     attachment_cmd.add_argument("--reveal", action="store_true", help="show in Finder/Explorer")
     commands.add_parser("tui", help="interactive terminal UI over the latest snapshot")
-    commands.add_parser("legend", help="what each check verifies, with current thresholds")
+    legend_cmd = commands.add_parser(
+        "legend", help="what each check verifies, with current thresholds"
+    )
+    legend_cmd.add_argument("filter", nargs="?", default="", help="only checks mentioning this")
     inspect_cmd = commands.add_parser("inspect", help="document checks of PDFs (downloads them)")
     show_cmd = commands.add_parser("show", help="metadata and issues of a paper")
     issues_cmd = commands.add_parser("issues", help="issues of a paper")
@@ -127,7 +130,7 @@ def main(argv: list[str] | None = None) -> None:
         ]
         for title, checks in sections:
             print(f"\n== {title}")
-            for code, label, text in legend(config, checks):
+            for code, label, text in legend(config, checks, args.filter):
                 print(
                     f"\n{label} ({code})\n"
                     + textwrap.fill(text, 96, initial_indent="    ", subsequent_indent="    ")

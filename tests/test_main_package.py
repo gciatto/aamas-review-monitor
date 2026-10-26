@@ -45,6 +45,12 @@ def test_legend_lists_every_check(capsys):
     assert "{" not in out.replace("{'", "")  # every placeholder filled, labels have none
 
 
+def test_legend_filters_checks(capsys):
+    cli.main(["legend", "SPC ASSIGNED"])
+    out = capsys.readouterr().out
+    assert "SPC assigned" in out and "Enough reviewers assigned" not in out
+
+
 def test_inspect_prints_document_issues_and_show_includes_them(tmp_path, monkeypatch, capsys):
     from aamas_review_monitor import documents, papers
     from aamas_review_monitor.collector import fetch, snapshot

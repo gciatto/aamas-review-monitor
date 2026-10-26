@@ -178,7 +178,7 @@ Paper lists (`N ...`) default to all your papers.
 | `sync` | Fetch your papers, their reviews and attachments' versions; save a snapshot; report updated PDFs and supplementary material |
 | `report [--filter TEXT] [--green] [--csv FILE]` | The action queue by SPC, with changes since the last sync; filter by SPC, `#N`, issue or color; `--green` lists papers without issues too |
 | `tui` | The interactive terminal UI |
-| `legend` | What each check verifies, with the current thresholds |
+| `legend [TEXT]` | What each check verifies, with the current thresholds; `TEXT` keeps only the checks mentioning it |
 | `show N` / `issues N` | A paper's metadata and issues / only its issues (passed checks included) |
 | `reviews N [--reveal]` | Reviews and meta-reviews; reviewers stay anonymous unless `--reveal` |
 | `browse N` | Open the paper on OpenReview |
@@ -240,7 +240,7 @@ in the command palette (`ctrl+p`):
 | `e` | Free-form email to reviewers, late reviewers or SPCs, reviewed and editable before you type `SEND` |
 | `t` | Switch between the Papers, SPCs and History tabs |
 | `s` | Sync with OpenReview |
-| `l` | Legend of all checks |
+| `l` | Legend of all checks; type to filter them, Esc closes |
 | `r` / `q` | Reload / quit |
 
 Syncing, downloading, inspecting and sending run in the background behind a progress dialog,

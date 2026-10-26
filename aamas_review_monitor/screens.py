@@ -179,6 +179,15 @@ class Legend(ModalScreen):
         self.config = config
 
     def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Input(placeholder="Filter checks (Esc closes)", id="filter")
+            yield VerticalScroll(Static(self.text(""), id="legend"))
+
+    @on(Input.Changed, "#filter")
+    def refilter(self, event: Input.Changed) -> None:
+        self.query_one("#legend", Static).update(self.text(event.value))
+
+    def text(self, query: str) -> Text:
         text = Text()
         text.append("Status\n", "bold underline")
         text.append(f"{ICONS[RED]} serious, needs you   {ICONS[YELLOW]} needs SPC attention   ")
@@ -189,14 +198,16 @@ class Legend(ModalScreen):
         ]
         for title, checks in sections:
             text.append(f"\n{title}\n", "bold underline")
-            for code, label, description in legend(self.config, checks):
+            entries = legend(self.config, checks, query)
+            if not entries:
+                text.append("\nNo check matches\n", "dim")
+            for code, label, description in entries:
                 text.append(f"\n{label}", "bold cyan")
                 text.append(f"  {code}\n", "dim")
                 text.append(f"{description}\n")
         text.highlight_words([RED], "bold red")
         text.highlight_words([YELLOW], "bold yellow")
-        with Vertical():
-            yield VerticalScroll(Static(text, id="legend"))
+        return text
 
 
 class Busy(ModalScreen):

@@ -42,6 +42,9 @@ def test_tui_lists_and_filters_issues(tmp_path, monkeypatch):
             await pilot.press("l")
             legend = str(app.screen.query_one("#legend", Static).render())
             assert "Enough reviewers assigned" in legend and "fewer than 3 reviewers" in legend
+            await pilot.press(*"spc")  # the filter has the focus
+            legend = str(app.screen.query_one("#legend", Static).render())
+            assert "SPC assigned" in legend and "Enough reviewers assigned" not in legend
             await pilot.press("escape")
 
     asyncio.run(scenario())

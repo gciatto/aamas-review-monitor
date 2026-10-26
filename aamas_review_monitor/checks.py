@@ -463,14 +463,16 @@ def _doc(function: Callable) -> tuple[str, str]:
     return label, " ".join(description.split())
 
 
-def legend(config: dict, checks: list | None = None) -> list[tuple[str, str, str]]:
-    """(code, label, description) of every check, thresholds filled in from `config`."""
+def legend(config: dict, checks: list | None = None, query: str = "") -> list[tuple[str, str, str]]:
+    """(code, label, description) of every check, thresholds filled in from `config`; with a
+    `query`, only the entries containing it (any case)."""
     milestones = config.get("reviews_milestones", {}).items()
     shown = config | {"reviews_milestones": ", ".join(f"{s:.0%} by {d}" for d, s in milestones)}
-    return [
+    entries = [
         (f.__name__, _doc(f)[0], _doc(f)[1].format_map(shown))
         for f in (CHECKS if checks is None else checks)
     ]
+    return [e for e in entries if query.casefold() in " ".join(e).casefold()]
 
 
 def passed(issues: list[Issue], checks: list | None = None) -> list[str]:
