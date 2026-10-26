@@ -618,3 +618,25 @@ def test_comments_list_only_the_marked_issues(tmp_path, monkeypatch):
             assert first in text and second not in text
 
     asyncio.run(scenario())
+
+
+def test_mark_dialog_marks_the_issues_matching_every_chosen_group(tmp_path, monkeypatch):
+    app, _, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.press("plus")
+            dialog = app.screen
+            assert isinstance(dialog, tui.Marks)
+            options = [value for _, value in dialog.options]
+            assert "sent:unsent" in options and "check:disagreement" in options
+            marks = dialog.query_one("#marks")
+            marks.select("check:disagreement")
+            marks.select("sent:unsent")
+            await pilot.click("#marks-apply")
+            assert {code for _, code in app.marked} == {"disagreement"}
+            await pilot.press("plus")
+            await pilot.click("#marks-none")
+            assert app.marked == set()
+
+    asyncio.run(scenario())

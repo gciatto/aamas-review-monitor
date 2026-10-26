@@ -233,6 +233,7 @@ in the command palette (`ctrl+p`):
 | `n` | Show only the issues no comment or email listed yet (then `*` marks them), or all |
 | `x` | Ignore the selected issue, or count it again |
 | `space` / `*` | Mark or unmark the selected issue (or SPC) / everything shown |
+| `+` | Mark the shown issues by color, sent status (never commented on, emailed, or either) and check, picking several options: any option within a group, every group chosen; `None` clears the marks |
 | `a` | Action menu for the marked papers or SPCs, else the selected one |
 | Enter, `d` | Paper details: metadata, every check with its outcome, anonymous reviews |
 | `o` | Open the paper on OpenReview |

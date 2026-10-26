@@ -2,6 +2,7 @@
 
 import logging
 import os
+from collections import Counter
 import webbrowser
 from collections.abc import Callable, Iterable
 from datetime import date
@@ -34,6 +35,7 @@ from aamas_review_monitor.checks import (
     YELLOW,
     Issue,
     green_rows,
+    legend,
     matches,
     phase,
     summary,
@@ -47,6 +49,7 @@ from aamas_review_monitor.screens import (
     Email,
     Legend,
     Login,
+    Marks,
     Paper,
     Review,
     Templates,
@@ -72,6 +75,7 @@ COMMANDS = [
     ("Ignore or count again", "The selected issue: gray, uncounted, left out of emails and comments  [x]", "ignore"),
     ("Mark or unmark", "The selected issue (or SPC), to act on several at once  [space]", "mark"),
     ("Mark all shown", "Every issue (or SPC) shown; if all are marked, clears the marks  [*]", "mark_all"),
+    ("Mark by color, check or sent status", "The shown issues matching the chosen options, or none  [+]", "mark_some"),
     ("Actions", "What can be done on the marked papers or SPCs, else on the selected one  [a]", "actions"),
     ("Paper details", "Metadata, checks, anonymous reviews of the selected paper  [d]", "details"),
     ("Open on OpenReview", "The selected paper's forum, in the browser  [o]", "open"),
@@ -129,6 +133,7 @@ class Monitor(App):
         ("f", "focus('filter')", "Filter"),
         ("space", "mark", "Mark"),
         ("asterisk", "mark_all", "Mark all"),
+        ("plus", "mark_some", "Mark…"),
         ("a", "actions", "Actions"),
         ("t", "switch_tab", "Tab"),
         ("s", "sync", "Sync"),
@@ -621,6 +626,57 @@ class Monitor(App):
         self.show_marks()
         what = what[:-1] if count == 1 else what
         self.notify(f"{count} {what} marked" if count else "Marks cleared")
+
+    def facets(self, issue: Issue) -> set[str]:
+        """The `group:value` options of the Marks dialog an issue matches."""
+        color = IGNORED if (issue.number, issue.code) in self.ignored else ICONS[issue.severity]
+        found = {f"color:{color}", f"check:{issue.code.split(':')[0]}"}
+        if issue.severity == GREEN:
+            return found
+        commented, emailed = self.last_sent(issue, "comment"), self.last_sent(issue, "email")
+        if not commented:
+            found.add("sent:uncommented")
+        if not emailed:
+            found.add("sent:unemailed")
+        if not (commented or emailed):
+            found.add("sent:unsent")
+        return found
+
+    def action_mark_some(self) -> None:
+        if self.on_spcs():
+            return
+        shown = [self.issues[int(k.value or 0)] for k in self.query_one("#issues", DataTable).rows]
+        facets = {(i.number, i.code): self.facets(i) for i in shown}
+        counts = Counter(f for found in facets.values() for f in found)
+        labels = {code: label for code, label, _ in legend(self.config)}
+        labels |= {code: label for code, label, _ in legend(self.config, documents.DOCUMENT_CHECKS)}
+        labels["ok"] = "All checks pass"
+        sent = {"unsent": "never commented on nor emailed", "uncommented": "never commented on",
+                "unemailed": "never emailed"}  # fmt: skip
+        colors = {ICONS[RED]: "serious, needs you", ICONS[YELLOW]: "needs SPC attention",
+                  ICONS[GREEN]: "no process issue", IGNORED: "ignored"}  # fmt: skip
+        options = [(f"{icon} {what}", f"color:{icon}") for icon, what in colors.items()]
+        options += [(what, f"sent:{k}") for k, what in sent.items()]
+        options += [
+            (f"{labels.get(f[6:], f[6:])}  {f[6:]}", f) for f in sorted(counts) if f[:6] == "check:"
+        ]
+        options = [(f"{label}  ({counts[f]})", f) for label, f in options if counts[f]]
+
+        def chosen(picked: set[str] | None) -> None:
+            if picked is None:
+                return
+            groups = {p.split(":")[0] for p in picked}
+            self.marked = {
+                key
+                for key, found in facets.items()
+                if picked
+                and all(any(p in found for p in picked if p.startswith(f"{g}:")) for g in groups)
+            }
+            self.show_marks()
+            count = len(self.marked)
+            self.notify(f"{count} issue{'s' * (count != 1)} marked" if count else "Marks cleared")
+
+        self.push_screen(Marks(options), chosen)
 
     def action_actions(self) -> None:
         tab = self.query_one(TabbedContent).active

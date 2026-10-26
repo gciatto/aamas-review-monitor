@@ -24,6 +24,7 @@ from textual.widgets import (
     ProgressBar,
     RichLog,
     Select,
+    SelectionList,
     Static,
     TextArea,
     Tree,
@@ -483,6 +484,39 @@ class Templates(ModalScreen["outreach.Template | None"]):
     @on(OptionList.OptionSelected, "#templates")
     def chosen(self, event: OptionList.OptionSelected) -> None:
         self.dismiss(next(t for t in self.choices if t.key == event.option.id))
+
+
+class Marks(ModalScreen["set[str] | None"]):
+    """Picks which shown issues to mark: options are `group:value`; an issue is marked if, in
+    every group with a chosen option, it matches one of them. Returns the options, or none to
+    clear the marks."""
+
+    DEFAULT_CSS = (
+        "Marks {" + DIALOG_CSS + " width: 90; height: auto; padding: 1 2; } }"
+        " Marks SelectionList { height: auto; max-height: 26; }"
+        " Marks Horizontal { height: auto; } Marks Button { margin: 1 1 0 0; }"
+    )
+    BINDINGS = [("escape", "dismiss", "Cancel")]
+
+    def __init__(self, options: list[tuple[str, str]]) -> None:
+        super().__init__()
+        self.options = options  # (label, "group:value")
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static("Mark the shown issues matching any chosen option of each group")
+            yield SelectionList[str](*self.options, id="marks")
+            with Horizontal(classes="buttons"):
+                yield Button("Mark", id="marks-apply", variant="primary")
+                yield Button("None", id="marks-none")
+
+    @on(Button.Pressed, "#marks-apply")
+    def apply(self) -> None:
+        self.dismiss(set(self.query_one(SelectionList).selected))
+
+    @on(Button.Pressed, "#marks-none")
+    def clear(self) -> None:
+        self.dismiss(set())
 
 
 class Actions(ModalScreen["str | None"]):
