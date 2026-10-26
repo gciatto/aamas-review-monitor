@@ -272,7 +272,7 @@ def test_tui_bulk_download_survives_a_failure(tmp_path, monkeypatch):
 
     async def scenario():
         async with app.run_test() as pilot:
-            app.marked = {7, 8}  # #8 is cached but not in the snapshot, so not shown
+            app.marked = {(7, "x"), (8, "x")}  # #8 is cached but not in the snapshot, so not shown
             await pilot.press("p")
             await done(app, pilot, lambda: bool(notes))
 
@@ -311,7 +311,7 @@ def test_tui_bulk_inspect_downloads_what_is_missing(tmp_path, monkeypatch):
 
     async def scenario():
         async with app.run_test() as pilot:
-            app.marked = {7, 8}
+            app.marked = {(7, "x"), (8, "x")}
             await pilot.press("i")
             await done(app, pilot, lambda: len(notes) == 1)
             assert notes == ["Inspected 2 of 2 papers"]
@@ -346,7 +346,7 @@ def test_bulk_job_logs_its_steps_and_can_be_interrupted(tmp_path, monkeypatch):
 
     async def scenario():
         async with app.run_test() as pilot:
-            app.marked = {7, 8}
+            app.marked = {(7, "x"), (8, "x")}
             await pilot.press("p")
             await pilot.pause()
             assert isinstance(app.screen, Busy)
@@ -414,7 +414,7 @@ def test_papers_tab_templated_reminder_to_late_reviewers_can_be_cancelled(tmp_pa
 
     asyncio.run(scenario())
     assert client.messages == []
-    assert notes == ["1 paper marked", "Nothing to send with Meta-review deadline", "Nothing sent"]
+    assert notes == ["4 issues marked", "Nothing to send with Meta-review deadline", "Nothing sent"]
 
 
 def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkeypatch):
@@ -447,6 +447,14 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             ]
             assert "Please check the reviews." in str(app.query_one("#history-entry").render())
             await pilot.press("t")  # back to Papers
+            table = app.query_one("#issues")
+            rows = [table.get_row_at(r) for r in range(table.row_count)]
+            commented = [r for r in rows if r[2] == 7 and r[1] != "🟢"]
+            assert commented and all(r[5] and not r[6] for r in commented)  # date, no email
+            await pilot.press("n")  # only issues never sent: none of #7's
+            assert all(table.get_row_at(r)[2] != 7 for r in range(table.row_count))
+            await pilot.press("n")
+            assert table.row_count == len(rows)
             await pilot.press("enter")
             assert "comment to PCs, SACs via #7" in app.screen.text.plain
 
@@ -464,8 +472,9 @@ def test_marks_scope_the_action_menu_and_wide_terminals_show_details(tmp_path, m
             assert "Paper #7" in str(app.query_one("#paper-detail").render())
             await pilot.press("space")
             table = app.query_one("#issues")
-            assert app.marked == {7}
-            assert all(table.get_row_at(r)[0] == "✔" for r in range(table.row_count))
+            assert {n for n, _ in app.marked} == {7}
+            marks = [table.get_row_at(r)[0] for r in range(table.row_count)]
+            assert marks[0] == "✔" and set(marks[1:]) == {""}  # the issue, not its paper
             await pilot.press("a")
             menu = app.screen
             assert isinstance(menu, tui.Actions) and menu.scope == "Act on paper #7"
@@ -517,7 +526,7 @@ def test_review_edits_each_message_and_refuses_empty_ones(tmp_path, monkeypatch)
 
     async def scenario():
         async with app.run_test(size=(140, 40)) as pilot:
-            app.marked = {7, 8}
+            app.marked = {(7, "x"), (8, "x")}
             await pilot.press("e")
             app.screen.query_one("#subject").value = "Hi"
             app.screen.query_one("#body").load_text("Dear {{fullname}}")
@@ -582,3 +591,21 @@ def test_open_the_pdf_directly_and_the_papers_folder(tmp_path, monkeypatch):
 
     asyncio.run(scenario())
     assert client.downloads == [("pdf", "abc")]
+
+
+def test_comments_list_only_the_marked_issues(tmp_path, monkeypatch):
+    app, _, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(140, 40)) as pilot:
+            table = app.query_one("#issues")
+            (_, _, n1, _, first, *_), (_, _, n2, _, second, *_) = map(table.get_row_at, (0, 1))
+            assert n1 == n2 == 7  # two issues of one paper
+            await pilot.press("space", "c")
+            app.screen.query_one("#spcs-read").value = False
+            await pilot.click("#comment-post")
+            review = await reviewing(app, pilot)
+            text = review.query_one("#review-text").text
+            assert first in text and second not in text
+
+    asyncio.run(scenario())

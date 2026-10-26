@@ -207,7 +207,9 @@ message goes out twice.
 `tui` has three tabs (`t` switches between them):
 
 - **Papers:** every paper, with one row per issue and a 🟢 row for each paper without issues.
-  On terminals at least 120 columns wide, the selected paper's details sit beside the list.
+  The Commented and Emailed columns give the date of the last comment or templated email
+  that listed the issue. On terminals at least 120 columns wide, the selected paper's details
+  sit beside the list.
 - **SPCs:** each SPC with their papers, open issues and 🔴/🟡 counts, worst first, and the selected
   SPC's issues paper by paper, plus what was sent to them.
 - **History:** every email and comment sent from the app, newest first, with the full text of
@@ -216,9 +218,11 @@ message goes out twice.
 The line above the tabs says where the process stands ("Reviewing: reviews due 13 Nov, in 25
 days") and how old the snapshot is, in yellow once it is past `snapshot_stale_hours`.
 
-Actions apply to the **marked** papers (or SPCs), and to the selected one when nothing is
-marked. `space` marks or unmarks, `*` marks everything the filter shows (or clears the marks if
-all are marked), and `a` opens a menu of what can be done, naming the papers it will act on.
+Marks are per issue: actions apply to the papers of the **marked** issues (or to the marked
+SPCs), and to the selected paper when nothing is marked. Comments and templated emails list
+only the marked issues, so a paper can get a new comment about just its new issues. `space`
+marks or unmarks, `*` marks everything the filter shows (or clears the marks if all are
+marked), and `a` opens a menu of what can be done, naming the papers it will act on.
 The footer shows only these few keys. Each action also has its own key, listed in the menu and
 in the command palette (`ctrl+p`):
 
@@ -226,8 +230,9 @@ in the command palette (`ctrl+p`):
 |---|---|
 | `f` | Filter by SPC, `#N`, issue text or color |
 | `g` | Show or hide 🟢 papers |
+| `n` | Show only the issues no comment or email listed yet (then `*` marks them), or all |
 | `x` | Ignore the selected issue, or count it again |
-| `space` / `*` | Mark or unmark the selected paper (or SPC) / everything shown |
+| `space` / `*` | Mark or unmark the selected issue (or SPC) / everything shown |
 | `a` | Action menu for the marked papers or SPCs, else the selected one |
 | Enter, `d` | Paper details: metadata, every check with its outcome, anonymous reviews |
 | `o` | Open the paper on OpenReview |

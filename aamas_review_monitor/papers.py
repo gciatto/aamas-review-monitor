@@ -198,6 +198,7 @@ class Draft(NamedTuple):
     to: str  # who it is for, for previews and logs ("reviewers of #7", "~Ada_Lovelace1")
     papers: tuple[int, ...] = ()  # the papers it is about (default: the one it goes through)
     template: str = ""  # the template it came from, if any
+    issues: tuple[tuple[int, str], ...] = ()  # (number, code) of the issues it lists
 
 
 class Comment(NamedTuple):
@@ -207,6 +208,7 @@ class Comment(NamedTuple):
     title: str
     text: str
     spcs_read: bool  # the paper's SPCs can read it (PCs and SACs always can)
+    issues: tuple[tuple[int, str], ...] = ()  # (number, code) of the issues it lists
 
 
 def record_history(file: Path | None, entry: dict) -> None:
@@ -232,6 +234,14 @@ def about(entry: dict, number: int) -> bool:
     return entry["via"] == number or number in entry.get("papers", [])
 
 
+def mentions(entry: dict, number: int, code: str, message: str) -> bool:
+    """Whether a history entry lists an issue: by its recorded issues or, in entries from
+    before they were recorded, by the issue's message in the body."""
+    if "issues" in entry:
+        return [number, code] in entry["issues"]
+    return about(entry, number) and message in entry["body"]
+
+
 def deliver(
     client: Any,
     drafts: list[Draft],
@@ -254,6 +264,7 @@ def deliver(
             "subject": d.subject,
             "body": d.body,
             "template": d.template,
+            "issues": list(d.issues),
         }
         try:
             client.post_message(
@@ -304,6 +315,7 @@ def post_comments(
             "subject": c.title,
             "body": c.text,
             "template": "",
+            "issues": list(c.issues),
         }
         try:
             client.post_note_edit(

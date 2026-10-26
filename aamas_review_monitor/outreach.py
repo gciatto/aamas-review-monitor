@@ -165,6 +165,7 @@ def compose(
                     spc,
                     tuple(papers),
                     template.key,
+                    tuple((i.number, i.code) for i in theirs),
                 )
             )
     else:
@@ -190,9 +191,19 @@ def compose(
             subject = string.Template(template.subject).safe_substitute(fill)
             body = string.Template(template.body).safe_substitute(fill)
             to = f"late reviewers of #{number} ({len(members)})"
+            listed = tuple((i.number, i.code) for i in theirs)
             drafts.append(
                 Draft(
-                    paper, invitation, parent, members, subject, body, to, (number,), template.key
+                    paper,
+                    invitation,
+                    parent,
+                    members,
+                    subject,
+                    body,
+                    to,
+                    (number,),
+                    template.key,
+                    listed,
                 )
             )
     return drafts, unreachable
@@ -304,7 +315,8 @@ def comments(
                 lines = _lines(theirs, lambda i: f"- {ICONS[i.severity]} {i.message}", explained)
                 text = string.Template(body).safe_substitute(issues=lines).strip() + "\n"
                 if len(text) <= COMMENT_CHARS_MAX:
-                    found.append(Comment(by_number[number], title, text, spcs_read))
+                    listed = tuple((i.number, i.code) for i in theirs)
+                    found.append(Comment(by_number[number], title, text, spcs_read, listed))
                     break
             else:
                 skipped.append(

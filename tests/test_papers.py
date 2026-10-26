@@ -85,3 +85,12 @@ def test_pdfs_are_converted_page_by_page_as_pdfinfo_counts_them_once(tmp_path, m
     assert calls[1][-6:] == ["-f", "1", "-l", "1", str(pdf), "-"]
     text = papers.pdf_text(pdf)
     assert text.startswith("── page 1 of 3 ──\ntext of page 1") and "── page 3 of 3 ──" in text
+
+
+def test_history_entries_mention_their_issues_or_older_ones_their_messages():
+    entry = {"via": 7, "papers": [7], "body": "- 2 reviews late", "issues": [[7, "late"]]}
+    assert papers.mentions(entry, 7, "late", "anything")
+    assert not papers.mentions(entry, 7, "no_spc", "2 reviews late")
+    older = {k: v for k, v in entry.items() if k != "issues"}
+    assert papers.mentions(older, 7, "late", "2 reviews late")
+    assert not papers.mentions(older, 8, "late", "2 reviews late")

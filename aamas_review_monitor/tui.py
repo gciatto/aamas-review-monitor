@@ -61,15 +61,17 @@ Job = Callable[[Any, Callable[[int, int], None]], Any]  # (client, progress) -> 
 
 
 # The command palette (ctrl+p): (title, help ending with the key, action), the same actions
-# as the key bindings. Actions on papers apply to the marked ones, else to the selected one.
+# as the key bindings. Actions on papers apply to the papers of the marked issues, else to the
+# selected one; emails and comments list only the marked issues.
 COMMANDS = [
     ("Sync with OpenReview", "Fetch papers, reviews and a new snapshot  [s]", "sync"),
     ("Reload", "Re-read the cached snapshots and results  [r]", "reload"),
     ("Filter", "By SPC, #paper, issue text or color  [f]", "focus('filter')"),
     ("Show or hide green papers", "Papers without issues  [g]", "toggle_green"),
+    ("Only issues never sent, or all", "Issues no comment or email listed yet  [n]", "toggle_unsent"),
     ("Ignore or count again", "The selected issue: gray, uncounted, left out of emails and comments  [x]", "ignore"),
-    ("Mark or unmark", "The selected paper (or SPC), to act on several at once  [space]", "mark"),
-    ("Mark all shown", "Every paper (or SPC) shown; if all are marked, clears the marks  [*]", "mark_all"),
+    ("Mark or unmark", "The selected issue (or SPC), to act on several at once  [space]", "mark"),
+    ("Mark all shown", "Every issue (or SPC) shown; if all are marked, clears the marks  [*]", "mark_all"),
     ("Actions", "What can be done on the marked papers or SPCs, else on the selected one  [a]", "actions"),
     ("Paper details", "Metadata, checks, anonymous reviews of the selected paper  [d]", "details"),
     ("Open on OpenReview", "The selected paper's forum, in the browser  [o]", "open"),
@@ -120,7 +122,7 @@ def numbered(numbers: list[int]) -> str:
 
 class Monitor(App):
     TITLE = "AAMAS Review Monitor"
-    # Actions on papers apply to the marked ones (space, *), else to the selected one; the
+    # Actions on papers apply to those of the marked issues (space, *), else to the selected one; the
     # footer shows the few keys needed to get anywhere, the menu (a) the rest with their keys
     BINDINGS = [
         # in footer order: what is used most comes first, as narrow terminals cut the tail
@@ -134,6 +136,7 @@ class Monitor(App):
         ("g", "toggle_green", "🟢 on/off"),
         ("x", "ignore", "Ignore"),
         ("q", "quit", "Quit"),
+        Binding("n", "toggle_unsent", "Unsent only", show=False),
         Binding("d", "details", "Details", show=False),
         Binding("o", "open", "Browser", show=False),
         Binding("v", "view_pdf", "Open PDF", show=False),
@@ -153,12 +156,13 @@ class Monitor(App):
         self.issues: list[Issue] = []  # plus one GREEN row per paper without issues
         self.ignored: set[tuple[int, str]] = set()  # (number, code) the user ignores
         self.hide_green = False
+        self.unsent_only = False  # only issues no sent comment or email listed
         # papers whose current PDF went through the document checks
         self.inspected: set[int] = set()
         self.latest: dict | None = None  # the latest snapshot
         self.papers: list[dict] = []  # the latest snapshot's
         self.sent: list[dict] = []  # the history, newest first
-        self.marked: set[int] = set()  # papers
+        self.marked: set[tuple[int, str]] = set()  # issues: (number, code)
         self.marked_spcs: set[str] = set()
 
     def compose(self) -> ComposeResult:
@@ -194,7 +198,7 @@ class Monitor(App):
     def on_mount(self) -> None:
         issues = self.query_one("#issues", DataTable)
         self.mark_column = issues.add_column("", width=1)  # empty until something is marked
-        issues.add_columns("Status", "Paper", "SPC", "Issue")
+        issues.add_columns("Status", "Paper", "SPC", "Issue", "Commented", "Emailed")
         self.query_one("#history", DataTable).add_columns("", "When", "Kind", "Via", "To")
         spcs = self.query_one("#spcs", DataTable)
         self.spc_mark_column = spcs.add_column("", width=1)
@@ -226,23 +230,43 @@ class Monitor(App):
         header = Text(f"{phase(self.config, date.today())}  ·  ", "bold")
         header.append(fresh, "bold yellow" if fresh.startswith("⚠") else "")
         self.query_one("#summary", Static).update(Text.assemble(header, "\n", text))
+        self.fill_history()  # first: the table shows when each issue went out
         self.fill()
         self.fill_spcs()
-        self.fill_history()
+
+    def last_sent(self, issue: Issue, kind: str) -> str:
+        """When a sent `kind` ("comment", "email") last listed the issue (MM-DD), or ""."""
+        if issue.severity == GREEN:
+            return ""
+        return next(
+            (
+                e["at"][5:10]
+                for e in self.sent  # newest first
+                if e["kind"] == kind
+                and e["status"] == "sent"
+                and papers.mentions(e, issue.number, issue.code, issue.message)
+            ),
+            "",
+        )
 
     def fill(self) -> None:
         table = self.query_one("#issues", DataTable)
         table.clear()
         needle = self.query_one("#filter", Input).value.lower()
         for n, i in enumerate(self.issues):
-            if matches(i, needle) and not (self.hide_green and i.severity == GREEN):
-                spcs = ", ".join(i.spcs) or "(no SPC)"
-                mark = MARK if i.number in self.marked else ""
-                if (i.number, i.code) in self.ignored:  # still listed, in gray
-                    gray = [Text(str(c), GRAY) for c in (i.number, spcs, i.message)]
-                    table.add_row(mark, IGNORED, *gray, key=str(n))
-                else:
-                    table.add_row(mark, ICONS[i.severity], i.number, spcs, i.message, key=str(n))
+            if not matches(i, needle) or (self.hide_green and i.severity == GREEN):
+                continue
+            sent = self.last_sent(i, "comment"), self.last_sent(i, "email")
+            done = any(sent) or i.severity == GREEN or (i.number, i.code) in self.ignored
+            if self.unsent_only and done:
+                continue
+            spcs = ", ".join(i.spcs) or "(no SPC)"
+            mark = MARK if (i.number, i.code) in self.marked else ""
+            if (i.number, i.code) in self.ignored:  # still listed, in gray
+                gray = [Text(str(c), GRAY) for c in (i.number, spcs, i.message)]
+                table.add_row(mark, IGNORED, *gray, *sent, key=str(n))
+            else:
+                table.add_row(mark, ICONS[i.severity], i.number, spcs, i.message, *sent, key=str(n))
         self.show_paper()
 
     def active(self) -> list[Issue]:
@@ -358,6 +382,7 @@ class Monitor(App):
     def sent_notice(self, failures: list[str], total: int, verb: str = "Sent") -> None:
         """After sending: the outcome, and the history tab updated."""
         self.fill_history()
+        self.fill()
         self.fill_spcs()
         summary = f"{verb} {total - len(failures)} of {total}"
         self.notify(
@@ -408,7 +433,7 @@ class Monitor(App):
             if spcs_read is None:
                 return
             found, skipped = outreach.comments(
-                self.active(), core.records(), set(numbers), spcs_read, self.config
+                self.chosen(), core.records(), set(numbers), spcs_read, self.config
             )
             if not found:
                 self.notify("\n".join([*skipped, "Nothing to comment on"]))
@@ -445,11 +470,12 @@ class Monitor(App):
         def chosen(template: outreach.Template | None) -> None:
             if template is None:
                 return
+            issues = self.active() if spcs else self.chosen()
             latest = self.latest
             today = date.fromisoformat(latest["taken_at"][:10]) if latest else date.today()
             records = core.records()
             drafts, unreachable = outreach.compose(
-                template, self.active(), records, self.config, today, spcs, numbers
+                template, issues, records, self.config, today, spcs, numbers
             )
             if not drafts:
                 self.notify("\n".join([*unreachable, f"Nothing to send with {template.name}"]))
@@ -465,6 +491,13 @@ class Monitor(App):
     def action_toggle_green(self) -> None:
         self.hide_green = not self.hide_green
         self.fill()
+
+    def action_toggle_unsent(self) -> None:
+        self.unsent_only = not self.unsent_only
+        self.fill()
+        self.notify(
+            "Only issues never commented on or emailed" if self.unsent_only else "All issues"
+        )
 
     @on(Input.Changed, "#filter")
     def filter_changed(self) -> None:
@@ -528,14 +561,19 @@ class Monitor(App):
             text = self.paper_text(issue.number) if issue else Text("No paper", "italic")
             self.query_one("#paper-detail", Static).update(text)
 
-    def shown(self) -> list[int]:
+    def shown(self) -> set[tuple[int, str]]:
         rows = self.query_one("#issues", DataTable).rows
-        return sorted({self.issues[int(k.value or 0)].number for k in rows})
+        return {(i.number, i.code) for i in (self.issues[int(k.value or 0)] for k in rows)}
+
+    def chosen(self) -> list[Issue]:
+        """The issues emails and comments list: the marked ones, else all those not ignored."""
+        found = self.active()
+        return [i for i in found if (i.number, i.code) in self.marked] if self.marked else found
 
     def scope(self) -> list[int]:
-        """The marked papers, else the selected one."""
+        """The papers of the marked issues, else the selected one."""
         if self.marked:
-            return sorted(self.marked)
+            return sorted({number for number, _ in self.marked})
         issue = self.selected()
         return [issue.number] if issue else []
 
@@ -551,7 +589,8 @@ class Monitor(App):
         """Updates the mark column in place, keeping the cursor where it is."""
         table = self.query_one("#issues", DataTable)
         for key in table.rows:
-            mark = MARK if self.issues[int(key.value or 0)].number in self.marked else ""
+            i = self.issues[int(key.value or 0)]
+            mark = MARK if (i.number, i.code) in self.marked else ""
             table.update_cell(key, self.mark_column, mark)
         spcs = self.query_one("#spcs", DataTable)
         for key in spcs.rows:
@@ -563,7 +602,7 @@ class Monitor(App):
             if spc := self.selected_spc():
                 self.marked_spcs ^= {spc}
         elif issue := self.selected():
-            self.marked ^= {issue.number}
+            self.marked ^= {(issue.number, issue.code)}
         self.show_marks()
 
     def action_mark_all(self) -> None:
@@ -572,9 +611,9 @@ class Monitor(App):
             self.marked_spcs = set() if shown <= self.marked_spcs else self.marked_spcs | shown
             count, what = len(self.marked_spcs), "SPCs"
         else:
-            papers_shown = set(self.shown())
-            self.marked = set() if papers_shown <= self.marked else self.marked | papers_shown
-            count, what = len(self.marked), "papers"
+            rows = self.shown()
+            self.marked = set() if rows <= self.marked else self.marked | rows
+            count, what = len(self.marked), "issues"
         self.show_marks()
         what = what[:-1] if count == 1 else what
         self.notify(f"{count} {what} marked" if count else "Marks cleared")
