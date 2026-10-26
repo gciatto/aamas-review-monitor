@@ -198,7 +198,7 @@ class Monitor(App):
     def on_mount(self) -> None:
         issues = self.query_one("#issues", DataTable)
         self.mark_column = issues.add_column("", width=1)  # empty until something is marked
-        issues.add_columns("Status", "Paper", "SPC", "Issue", "Commented", "Emailed")
+        issues.add_columns("Status", "Paper", "Commented", "Emailed", "SPC", "Issue")
         self.query_one("#history", DataTable).add_columns("", "When", "Kind", "Via", "To")
         spcs = self.query_one("#spcs", DataTable)
         self.spc_mark_column = spcs.add_column("", width=1)
@@ -263,10 +263,10 @@ class Monitor(App):
             spcs = ", ".join(i.spcs) or "(no SPC)"
             mark = MARK if (i.number, i.code) in self.marked else ""
             if (i.number, i.code) in self.ignored:  # still listed, in gray
-                gray = [Text(str(c), GRAY) for c in (i.number, spcs, i.message)]
-                table.add_row(mark, IGNORED, *gray, *sent, key=str(n))
+                number, *gray = [Text(str(c), GRAY) for c in (i.number, spcs, i.message)]
+                table.add_row(mark, IGNORED, number, *sent, *gray, key=str(n))
             else:
-                table.add_row(mark, ICONS[i.severity], i.number, spcs, i.message, *sent, key=str(n))
+                table.add_row(mark, ICONS[i.severity], i.number, *sent, spcs, i.message, key=str(n))
         self.show_paper()
 
     def active(self) -> list[Issue]:

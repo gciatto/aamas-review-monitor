@@ -450,7 +450,7 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             table = app.query_one("#issues")
             rows = [table.get_row_at(r) for r in range(table.row_count)]
             commented = [r for r in rows if r[2] == 7 and r[1] != "🟢"]
-            assert commented and all(r[5] and not r[6] for r in commented)  # date, no email
+            assert commented and all(r[3] and not r[4] for r in commented)  # date, no email
             await pilot.press("n")  # only issues never sent: none of #7's
             assert all(table.get_row_at(r)[2] != 7 for r in range(table.row_count))
             await pilot.press("n")
@@ -557,7 +557,7 @@ def test_ignored_issues_stay_listed_in_gray_and_out_of_comments(tmp_path, monkey
         async with app.run_test(size=(140, 40)) as pilot:
             table = app.query_one("#issues")
             rows = [table.get_row_at(r) for r in range(table.row_count)]
-            row = next(n for n, r in enumerate(rows) if r[4] == "ratings [3, 6]")
+            row = next(n for n, r in enumerate(rows) if r[6] == "ratings [3, 6]")
             table.move_cursor(row=row)
             await pilot.press("x")
             assert (7, "disagreement") in app.ignored
@@ -599,7 +599,7 @@ def test_comments_list_only_the_marked_issues(tmp_path, monkeypatch):
     async def scenario():
         async with app.run_test(size=(140, 40)) as pilot:
             table = app.query_one("#issues")
-            (_, _, n1, _, first, *_), (_, _, n2, _, second, *_) = map(table.get_row_at, (0, 1))
+            (_, _, n1, *_, first), (_, _, n2, *_, second) = map(table.get_row_at, (0, 1))
             assert n1 == n2 == 7  # two issues of one paper
             await pilot.press("space", "c")
             app.screen.query_one("#spcs-read").value = False
