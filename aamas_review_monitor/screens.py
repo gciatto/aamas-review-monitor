@@ -2,6 +2,7 @@
 sign-in, confirmation and the email, comment and template forms."""
 
 import logging
+import string
 import subprocess
 import zipfile
 from collections.abc import Collection
@@ -284,12 +285,14 @@ class Login(ModalScreen[tuple[str, str] | None]):
 
 
 class Review(ModalScreen["list[outreach.Item] | None"]):
-    """Every message (or comment) about to go out, each editable; returns the edited items
-    only if the user types SEND."""
+    """Every message (or comment) about to go out, each editable, and their common subject (or
+    title) with placeholders, filled in for each; returns the edited items only if the user
+    types SEND."""
 
     DEFAULT_CSS = (
         "Review {" + DIALOG_CSS + " width: 95%; height: 90%; padding: 1 2; } }"
         " Review #review-header { height: auto; max-height: 6; }"
+        " Review #review-variables { height: auto; max-height: 5; color: $text-muted; }"
         " Review #review-list { width: 1fr; } Review #review-editor { width: 3fr; }"
         " Review #review-text { height: 1fr; }"
     )
@@ -309,6 +312,12 @@ class Review(ModalScreen["list[outreach.Item] | None"]):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield VerticalScroll(Static(Text("\n".join(self.header))), id="review-header")
+            yield Input(
+                self.items[0].pattern if self.items else "",
+                placeholder=f"{self.field} of all, with the placeholders below; Enter applies",
+                id="review-pattern",
+            )
+            yield VerticalScroll(Static(id="review-placeholders"), id="review-variables")
             with Horizontal():
                 yield OptionList(
                     *(
@@ -328,6 +337,8 @@ class Review(ModalScreen["list[outreach.Item] | None"]):
             yield Button("Send", id="confirm-send", variant="error")
 
     def on_mount(self) -> None:
+        self.query_one("#review-pattern").border_title = f"{self.field} of all: Enter applies"
+        self.query_one("#review-title").border_title = f"{self.field} of this one"
         self.show(0)
         self.query_one("#confirm", Input).focus()  # ready to type SEND, or Esc
 
@@ -344,6 +355,9 @@ class Review(ModalScreen["list[outreach.Item] | None"]):
         about.append(f"\n{item.warnings}" if item.warnings else "", "bold yellow")
         self.query_one("#review-about", Static).update(about)
         self.query_one("#review-title", Input).value = item.title
+        lines = outreach.variables(item.values) or ["No placeholders: the same for all"]
+        hint = f"Placeholders for the {self.field.lower()} of all:"
+        self.query_one("#review-placeholders", Static).update(Text("\n".join([hint, *lines])))
         self.query_one(TextArea).load_text(item.text)
 
     @on(OptionList.OptionHighlighted, "#review-list")
@@ -351,6 +365,17 @@ class Review(ModalScreen["list[outreach.Item] | None"]):
         if self.current is not None and event.option.id != str(self.current):
             self.keep()
             self.show(int(event.option.id or 0))
+
+    @on(Input.Submitted, "#review-pattern")
+    def apply_pattern(self, event: Input.Submitted) -> None:
+        self.keep()
+        pattern = string.Template(event.value)
+        self.items = [
+            i._replace(title=pattern.safe_substitute(i.values), pattern=event.value)
+            for i in self.items
+        ]
+        self.show(self.current or 0)
+        self.notify(f"{self.field} set on all {len(self.items)}")
 
     @on(Input.Submitted, "#confirm")
     @on(Button.Pressed, "#confirm-send")

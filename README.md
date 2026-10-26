@@ -326,7 +326,10 @@ never retried automatically, so a comment can't be posted twice.
 
 Nothing goes out unreviewed, and everything can be edited first. In the terminal UI, the
 review dialog lists every message or comment (⚠ marks repeats), with the selected one's
-subject (or title) and text editable beside it; typing `SEND` sends them all as edited. In the
+subject (or title) and text editable beside it; typing `SEND` sends them all as edited. A box
+above them holds the template's subject (or title) with its placeholders, such as `$paper` or
+`$deadline_reviews`, listed below it with their meaning and value: Enter there fills it in for
+every message or comment at once. Comment titles take the same placeholders. In the
 command line, `--edit` opens each one in `$VISUAL` or `$EDITOR` before the preview (the first
 line holds the subject); the draft file stays in the private data folder and is removed
 afterwards. Empty texts, and comments longer than OpenReview allows, are refused. The history

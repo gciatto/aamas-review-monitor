@@ -1,0 +1,10 @@
+paper: the paper the message or comment is about, e.g. #7
+url: that paper's forum on OpenReview
+papers: the papers it is about, e.g. #7, #9
+count: how many papers it is about
+deadline_reviews: the review deadline
+deadline_meta_reviews: the meta-review deadline
+deadline_acknowledgements: the deadline for acknowledging rebuttals
+days_reviews: days left until the review deadline
+days_meta_reviews: days left until the meta-review deadline
+days_acknowledgements: days left until the acknowledgement deadline

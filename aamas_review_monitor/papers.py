@@ -199,6 +199,8 @@ class Draft(NamedTuple):
     papers: tuple[int, ...] = ()  # the papers it is about (default: the one it goes through)
     template: str = ""  # the template it came from, if any
     issues: tuple[tuple[int, str], ...] = ()  # (number, code) of the issues it lists
+    pattern: str = ""  # the subject before placeholders were filled in, e.g. "$papers late"
+    values: dict[str, str] = {}  # the placeholders' values in this one, $issues aside
 
 
 class Comment(NamedTuple):
@@ -209,6 +211,8 @@ class Comment(NamedTuple):
     text: str
     spcs_read: bool  # the paper's SPCs can read it (PCs and SACs always can)
     issues: tuple[tuple[int, str], ...] = ()  # (number, code) of the issues it lists
+    pattern: str = ""  # the title before placeholders were filled in, e.g. "$papers late"
+    values: dict[str, str] = {}  # the placeholders' values in this one, $issues aside
 
 
 def record_history(file: Path | None, entry: dict) -> None:

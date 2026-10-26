@@ -432,10 +432,19 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             text = review.query_one("#review-text")
             assert "ratings [3, 6]" in text.text  # editable before posting
             text.load_text("Please check the reviews.")
+            hint = str(review.query_one("#review-placeholders").render())
+            assert "$paper" in hint and "(here: #7)" in hint
+            pattern = review.query_one("#review-pattern")
+            pattern.value = "Reviews of $paper"
+            pattern.focus()
+            await pilot.press("enter")
+            assert review.query_one("#review-title").value == "Reviews of #7"
+            review.query_one("#confirm").focus()
             await confirm(app, pilot, "SEND")
             await done(app, pilot, lambda: bool(app.sent))
 
             ((_, _, note),) = client.comments
+            assert note.content["title"]["value"] == "Reviews of #7"
             assert note.content["comment"]["value"] == "Please check the reviews."
             assert not any(r.endswith("/Area_Chairs") for r in note.readers)  # no SPCs
             await pilot.press("t", "t")  # Papers -> SPCs -> History

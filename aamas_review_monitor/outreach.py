@@ -17,7 +17,12 @@ from typing import NamedTuple
 from aamas_review_monitor.checks import GREEN, ICONS, Issue, legend
 from aamas_review_monitor.collector import person
 from aamas_review_monitor.papers import Comment, Draft, recipients
-from aamas_review_monitor.resources import DIR_TEMPLATES, FILE_COMMENT, FILE_COMMENT_LATE_REVIEWS
+from aamas_review_monitor.resources import (
+    DIR_TEMPLATES,
+    FILE_COMMENT,
+    FILE_COMMENT_LATE_REVIEWS,
+    FILE_VARIABLES,
+)
 
 AUDIENCES = ("spcs", "late-reviewers")
 COMMENT_CHARS_MAX = 5000  # OpenReview's Official_Comment limit
@@ -56,6 +61,18 @@ def parse(key: str, text: str) -> Template:
         key, fields["name"], fields["description"], fields["audience"], frozenset(codes),
         fields["subject"], body.strip() + "\n",
     )  # fmt: skip
+
+
+def _shown(fill: dict[str, str]) -> dict[str, str]:
+    """The placeholders a subject or title may use: all but the multi-line $issues."""
+    return {k: v for k, v in fill.items() if k != "issues"}
+
+
+def variables(values: dict[str, str]) -> list[str]:
+    """`$name  meaning (here: value)` for each placeholder given, meanings from the resources."""
+    lines = FILE_VARIABLES.read_text(encoding="utf-8").splitlines()
+    meanings = dict(line.split(":", 1) for line in lines if ":" in line)
+    return [f"${k}  {meanings.get(k, '').strip()} (here: {v})" for k, v in values.items()]
 
 
 def _codes(issues: list[Issue]) -> set[str]:
@@ -185,6 +202,8 @@ def compose(
                     tuple(papers),
                     template.key,
                     tuple((i.number, i.code) for i in theirs),
+                    template.subject,
+                    _shown(fill),
                 )
             )
     else:
@@ -223,6 +242,8 @@ def compose(
                     (number,),
                     template.key,
                     listed,
+                    template.subject,
+                    _shown(fill),
                 )
             )
     return drafts, unreachable
@@ -277,6 +298,8 @@ class Item(NamedTuple):
     warnings: str  # "⚠ Already sent ..." lines, or ""
     title: str  # subject, or comment title
     text: str  # body, or comment text
+    pattern: str = ""  # the title before placeholders were filled in
+    values: dict[str, str] = {}  # the placeholders' values in this one
 
 
 def review(
@@ -290,7 +313,14 @@ def review(
     (`sent`, the history)."""
     earlier = [repeats(d, sent) for d in drafts]
     items = [
-        Item(f"To {d.to}, via #{d.record['number']}", _before(e), d.subject, d.body)
+        Item(
+            f"To {d.to}, via #{d.record['number']}",
+            _before(e),
+            d.subject,
+            d.body,
+            d.pattern or d.subject,
+            d.values,
+        )  # fmt: skip
         for d, e in zip(drafts, earlier)
     ]
     skipped = [f"Not reachable: {line}" for line in unreachable]
@@ -332,14 +362,26 @@ def comments(
             skipped.append(f"#{number}: no open issues")
         else:
             fields, _, body = next(c for c in choices if not c[1] or _codes(theirs) <= c[1])
-            title = fields["title"]
+            url = theirs[0].url
+            values = {"paper": f"#{number}", "url": url, "count": "1", "papers": f"#{number}"}
+            title = string.Template(fields["title"]).safe_substitute(values)
             # explained if it fits OpenReview's limit, else the bare list, else nothing
             for explained in (_legend(config), None):
                 lines = _lines(theirs, lambda i: f"- {ICONS[i.severity]} {i.message}", explained)
                 text = string.Template(body).safe_substitute(issues=lines).strip() + "\n"
                 if len(text) <= COMMENT_CHARS_MAX:
                     listed = tuple((i.number, i.code) for i in theirs)
-                    found.append(Comment(by_number[number], title, text, spcs_read, listed))
+                    found.append(
+                        Comment(
+                            by_number[number],
+                            title,
+                            text,
+                            spcs_read,
+                            listed,
+                            fields["title"],
+                            values,
+                        )  # fmt: skip
+                    )
                     break
             else:
                 skipped.append(
@@ -363,7 +405,14 @@ def review_comments(
         for c in found
     ]
     items = [
-        Item(f"Comment on #{c.record['number']}", _before(e), c.title, c.text)
+        Item(
+            f"Comment on #{c.record['number']}",
+            _before(e),
+            c.title,
+            c.text,
+            c.pattern or c.title,
+            c.values,
+        )  # fmt: skip
         for c, e in zip(found, earlier)
     ]
     header = [
