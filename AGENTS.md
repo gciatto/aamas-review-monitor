@@ -29,7 +29,9 @@ tests/            pytest unit tests: test_core.py covers the shared services wit
                   test_tui.py drives the app, and waits for a job's visible effect (`done`),
                   never for a fixed time or a quiet spell
 docs/             README screenshots (Textual SVGs of synthetic data only: never real papers)
-scripts/          githooks.py: installs/removes local Git hooks (poe install-hooks)
+scripts/          githooks.py: installs/removes local Git hooks (poe install-hooks);
+                  rubrics_benchmark.py + aamas2026_areas.json: measures the area rubrics on
+                  published AAMAS 2026 papers (poe rubrics-benchmark; public data, network)
 .github/workflows/
   check.yml       static-checks + coverage, then tests on ubuntu/windows/macos x Python 3.10-3.13,
                   then deploy.yml

@@ -452,7 +452,16 @@ uv sync                    # environment and development tools
 uv run poe test            # tests (synthetic data, no network)
 uv run poe static-checks   # compile, ruff format/lint, mypy
 uv run poe install-hooks   # optional local Git hooks
+uv run poe rubrics-benchmark [--split dev|test] [--rubrics DIR] [--model M]
 ```
+
+`rubrics-benchmark` measures the area rubrics on 318 published AAMAS 2026 papers, labelled in
+`scripts/aamas2026_areas.json`: it downloads the public proceedings once (to
+`~/.cache/aamas-rubrics-benchmark`), scores titles, keywords and abstracts as the app does
+(rules on the PDFs too) with a local embedding endpoint, and prints how often the best area is
+the label, overall, per channel and per area. Tune rubrics on `dev`, report `test`; `--rubrics`
+takes a folder of rubric copies that replace the shipped ones. On the test split, the shipped
+rubrics get 77% (`nomic-embed-text`) and 76% (`bge-m3`).
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/), from which
 semantic-release derives versions. Releases are GitHub releases only: the wheel and sdist are
