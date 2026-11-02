@@ -235,3 +235,46 @@ def test_label_command_and_feedback_after_editing_a_rubric(monkeypatch, rubrics,
     assert "LEARN: own topics nearest it" in out and "Fixed: #2; broken: none" in out
     cli.main(["label", "2", "--undo"])
     assert capsys.readouterr().out == "#1  LEARN\n"
+
+
+def test_areas_of_some_papers_embed_only_them_and_the_labelled_ones(monkeypatch, rubrics, capsys):
+    endpoint = FakeEndpoint(monkeypatch)
+    resolves_to(monkeypatch, "127.0.0.1")
+    monkeypatch.setattr(core, "load_config", lambda: CONFIG)
+    third = record(3, "Bandits", "Regret of bandit algorithms.")
+    papers.save([*RECORDS, third], core.DIR_PAPERS, [])
+    core.DIR_SNAPSHOTS.mkdir(parents=True)
+    snapshot = {"taken_at": "2026-11-11T08:00:00", "papers": [paper(1), paper(2), paper(3)]}
+    (core.DIR_SNAPSHOTS / "2026-11-11T080000.json").write_text(json.dumps(snapshot))
+    core.label(3, "LEARN")
+    cli.main(["areas", "1"])
+    sent = {t for r in endpoint.requests for t in r["input"]}
+    assert any("Multiagent learning" in t for t in sent) and any("Bandits" in t for t in sent)
+    assert not any("Swarms" in t and "Robots in swarms" in t for t in sent)  # #2: not asked
+    rows = capsys.readouterr().out.splitlines()[2:]
+    assert [r.split()[0] for r in rows] == ["1"]
+
+
+def test_embedding_options_are_not_overridden_by_other_options(monkeypatch, rubrics):
+    endpoint = FakeEndpoint(monkeypatch)
+    cli.main(["--embeddings-url", "http://gpu.lab:8080/v1", "rubrics", "check"])
+    assert endpoint.requests[0]["url"] == "http://gpu.lab:8080/v1/embeddings"
+
+
+def test_a_broken_copy_can_still_be_repaired_or_replaced(monkeypatch, rubrics, capsys):
+    FakeEndpoint(monkeypatch)
+    (core.DIR_RUBRICS / "LEARN.yaml").write_text("area: [", encoding="utf-8")
+    with pytest.raises(SystemExit, match="Repair it with `rubrics edit CODE`"):
+        cli.main(["rubrics", "list"])
+
+    def repair(command, check):
+        open(command[-1], "w", encoding="utf-8").write(areas.dump(rubrics["LEARN"]))
+
+    monkeypatch.setattr(cli.subprocess, "run", repair)
+    cli.main(["rubrics", "edit", "LEARN"])
+    assert capsys.readouterr().out.startswith("Saved")
+    assert areas.load(core.DIR_RUBRICS)["LEARN"] == rubrics["LEARN"]
+    (core.DIR_RUBRICS / "ROBOT.yaml").write_text("area: [", encoding="utf-8")
+    monkeypatch.setattr(areas, "extract", lambda url: areas.parse(PAGE, url))
+    cli.main(["rubrics", "extract", "--force"])
+    assert "ROBOT" in areas.load(core.DIR_RUBRICS)

@@ -71,8 +71,10 @@ stay string matching against the lists, and never report a probability).
 
 The one exception, granted by the maintainer: area adherence (`areas.py`, `models.py`) may send
 paper data to embedding models, but only to endpoints whose host resolves inside the allowed IP
-ranges (`embeddings_networks`, loopback by default; `models.check_local` enforces it, so keep
-every paper-data call `private=True`). It measures fit to areas for the AC to sort by; it never
+ranges (`embeddings_networks`, loopback by default). `models.embed(..., private=True)` enforces
+it: a check before connecting, then on every connection the address actually reached (so DNS,
+proxies and redirects cannot route around it), no environment proxies, no redirects. Keep every
+paper-data call `private=True`. It measures fit to areas for the AC to sort by; it never
 scores quality or suggests decisions. Rubrics hold public text only. Generative LLMs stay out.
 
 ## Conventions

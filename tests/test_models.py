@@ -36,11 +36,21 @@ class FakeEndpoint:
             requests.Session, "post", lambda *args, **kwargs: self.post(*args, **kwargs)
         )
 
-    def post(self, session, url, json, timeout):
-        self.requests.append({"url": url, "headers": dict(session.headers)} | json)
+    def post(self, session, url, json, timeout, allow_redirects=True):
+        self.requests.append(
+            {
+                "url": url,
+                "headers": dict(session.headers),
+                "redirects": allow_redirects,
+                "proxies from the environment": session.trust_env,
+            }
+            | json
+        )
         data = [{"index": i, "embedding": vector(t)} for i, t in enumerate(json["input"])]
 
         class Response:
+            is_redirect = False
+
             def raise_for_status(self):
                 pass
 
@@ -142,3 +152,53 @@ def test_rubrics_check_embeds_the_public_topics_and_reports_confusion(monkeypatc
     assert len(endpoint.requests) == 1
     with pytest.raises(SystemExit, match="Embeddings: .* not embedded with n"):
         cli.main(["--embeddings-model", "n", "--cache-only", "rubrics", "check"])
+
+
+def test_every_connection_for_paper_data_must_reach_the_allowed_networks(monkeypatch):
+    from urllib3.connection import HTTPConnection, HTTPSConnection
+
+    reached = {"address": "127.0.0.1"}
+
+    class Socket:
+        def getpeername(self):
+            return (reached["address"], 11434)
+
+        def close(self):
+            pass
+
+    def connect(self):  # instead of opening a socket: one that reached `reached`
+        self.sock = Socket()
+
+    monkeypatch.setattr(HTTPConnection, "connect", connect)
+    monkeypatch.setattr(HTTPSConnection, "connect", connect)
+    s = models.settings(CONFIG)
+    pools = models.session(s, private=True).get_adapter("http://x").poolmanager
+    for scheme in ("http", "https"):
+        connection = pools.pool_classes_by_scheme[scheme].ConnectionCls("localhost")
+        connection.connect()  # loopback: allowed
+        reached["address"] = "93.184.216.34"  # e.g. DNS answered differently, or a proxy
+        with pytest.raises(models.NotLocal, match="connected to 93.184.216.34"):
+            connection.connect()
+        reached["address"] = "127.0.0.1"
+    public = models.session(s).get_adapter("http://x").poolmanager
+    assert public.pool_classes_by_scheme["http"] is not pools.pool_classes_by_scheme["http"]
+
+
+def test_paper_data_follows_no_redirect_and_no_proxy_from_the_environment(monkeypatch, tmp_path):
+    endpoint, s = FakeEndpoint(monkeypatch), models.settings(CONFIG)
+    resolves_to(monkeypatch, "127.0.0.1")
+    models.embed(s, ["public topic"], tmp_path, private=False)
+    models.embed(s, ["an abstract"], tmp_path, private=True)
+    public, private = endpoint.requests
+    assert public["redirects"] and public["proxies from the environment"]
+    assert not private["redirects"] and not private["proxies from the environment"]
+
+    def redirected(*args, **kwargs):
+        class Response:
+            is_redirect = True
+
+        return Response()
+
+    monkeypatch.setattr(requests.Session, "post", redirected)
+    with pytest.raises(PermissionError, match="redirects elsewhere"):
+        models.embed(s, ["another abstract"], tmp_path, private=True)

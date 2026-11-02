@@ -17,6 +17,8 @@ from urllib.parse import urlsplit
 import requests
 import yaml
 from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 from aamas_review_monitor.core import LoggedRetry
 
@@ -31,6 +33,16 @@ LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 class NotEmbedded(LookupError):
     """Texts missing from the cache when only the cache may be used."""
+
+
+class NotLocal(Exception):
+    """A connection for paper data reached an address outside the allowed networks. Not an
+    OSError, so that urllib3 lets it through instead of retrying."""
+
+
+def allowed(address: str, networks: tuple[str, ...]) -> bool:
+    ip = ipaddress.ip_address(address.split("%")[0])  # an IPv6 address may carry a zone
+    return any(ip in ipaddress.ip_network(n) for n in networks)
 
 
 class Settings(NamedTuple):
@@ -85,11 +97,8 @@ def check_local(url: str, networks: tuple[str, ...]) -> None:
         found = {str(info[4][0]) for info in socket.getaddrinfo(host, None)}
     except socket.gaierror as e:
         raise PermissionError(f"cannot resolve {host}: {e}") from None
-    allowed = [ipaddress.ip_network(n) for n in networks]
-    # ponytail: requests resolves the host again; a DNS answer changing in between would slip by
-    outside = sorted(
-        a for a in found if not any(ipaddress.ip_address(a.split("%")[0]) in n for n in allowed)
-    )
+    # a first check, for a clear error before connecting; `session` checks every connection
+    outside = sorted(a for a in found if not allowed(a, networks))
     if outside:
         raise PermissionError(
             f"{host} resolves to {', '.join(outside)}, outside the allowed networks "
@@ -104,9 +113,43 @@ def fingerprint(model: str, text: str) -> str:
     return hashlib.sha512(request.encode()).hexdigest()
 
 
-def session(s: Settings) -> requests.Session:
+def _local(networks: tuple[str, ...]) -> type[HTTPAdapter]:
+    """An adapter whose every connection checks the address it reached before anything is sent
+    on it: a DNS answer changing after `check_local`, a proxy or a redirect cannot take paper
+    data outside `networks`."""
+
+    def checked(base: Any) -> type:
+        def connect(self: Any) -> None:
+            base.connect(self)
+            address = str(self.sock.getpeername()[0])
+            if not allowed(address, networks):
+                self.close()
+                raise NotLocal(f"connected to {address}, outside {', '.join(networks)}")
+
+        return type(f"Local{base.__name__}", (base,), {"connect": connect})
+
+    pools = {
+        "http": type(
+            "LocalHTTPPool", (HTTPConnectionPool,), {"ConnectionCls": checked(HTTPConnection)}
+        ),
+        "https": type(
+            "LocalHTTPSPool", (HTTPSConnectionPool,), {"ConnectionCls": checked(HTTPSConnection)}
+        ),
+    }
+
+    class Adapter(HTTPAdapter):
+        def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
+            super().init_poolmanager(*args, **kwargs)
+            self.poolmanager.pool_classes_by_scheme = pools
+
+    return Adapter
+
+
+def session(s: Settings, private: bool = False) -> requests.Session:
     """Retries with exponential backoff and jitter on rate limits, server errors and connection
-    failures, honouring Retry-After (a repeated embedding request does no harm)."""
+    failures, honouring Retry-After (a repeated embedding request does no harm). `private`: for
+    paper data, every connection must reach the allowed networks, and no proxy from the
+    environment is used."""
     retry = LoggedRetry(
         total=s.retries,
         connect=s.retries,
@@ -119,8 +162,10 @@ def session(s: Settings) -> requests.Session:
         respect_retry_after_header=True,
     )
     result = requests.Session()
+    adapter: type[HTTPAdapter] = _local(s.networks) if private else HTTPAdapter
     for prefix in ("https://", "http://"):
-        result.mount(prefix, HTTPAdapter(max_retries=retry))
+        result.mount(prefix, adapter(max_retries=retry))
+    result.trust_env = not private  # no HTTP(S)_PROXY, .netrc or such for paper data
     if s.api_key:
         result.headers["Authorization"] = f"Bearer {s.api_key}"
     return result
@@ -145,14 +190,20 @@ def embed(
         if private:
             check_local(s.url, s.networks)
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        client = session(s)
+        client = session(s, private)
         for start in range(0, len(missing), BATCH):
             batch = missing[start : start + BATCH]
-            response = client.post(
-                f"{s.url.rstrip('/')}/embeddings",
-                json={"model": s.model, "input": batch},
-                timeout=300,
-            )
+            try:
+                response = client.post(
+                    f"{s.url.rstrip('/')}/embeddings",
+                    json={"model": s.model, "input": batch},
+                    timeout=300,
+                    allow_redirects=not private,  # a redirect could lead outside the networks
+                )
+            except NotLocal as e:
+                raise PermissionError(f"paper data only goes to local endpoints: {e}") from None
+            if response.is_redirect:
+                raise PermissionError(f"{s.url} redirects elsewhere: paper data not sent there")
             response.raise_for_status()
             for text, item in zip(batch, sorted(response.json()["data"], key=lambda d: d["index"])):
                 file = directory / f"{fingerprint(s.model, text)}.yaml"

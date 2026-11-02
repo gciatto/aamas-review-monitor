@@ -6,6 +6,7 @@ import functools
 import logging
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -190,7 +191,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "tui":
         from aamas_review_monitor.tui import Monitor
 
-        Monitor(config, embeddings_given(args)).run()
+        Monitor(config, embeddings_given(args), args.cache_only).run()
     elif args.command in ("report", "show", "issues"):
         state = core.current(config)
         if (latest := state.latest) is None:
@@ -364,10 +365,13 @@ def confirmed(preview: str, count: int, what: str) -> bool:
 
 
 def rubrics(args: argparse.Namespace, config: dict) -> None:
+    broken = None  # an unusable copy: `edit` can still repair it, `extract --force` replace it
     try:
         loaded = areas.load(core.DIR_RUBRICS)
     except ValueError as e:
-        sys.exit(str(e))
+        if args.action not in ("edit", "extract"):
+            sys.exit(f"{e}. Repair it with `rubrics edit CODE` or `rubrics extract --force`")
+        loaded, broken = {}, e
     if args.action == "extract":
         url = args.url or config["url_areas"]
         for rubric in areas.extract(url):
@@ -400,20 +404,28 @@ def rubrics(args: argparse.Namespace, config: dict) -> None:
             total = len(loaded[code]["topics"])
             print(f"{code:6} {counts[code]}/{total} own" + (f"; {others}" if others else ""))
         return
-    if args.code not in loaded:
-        sys.exit(f"Which area? One of {', '.join(loaded)}")
+    files = areas.files(core.DIR_RUBRICS)
+    if args.code not in files:
+        sys.exit(f"Which area? One of {', '.join(files)}")
     if args.action == "show":
         print(areas.dump(loaded[args.code]), end="")
         return
     file = core.DIR_RUBRICS / f"{args.code}.yaml"
-    if not file.is_file():
-        areas.save(loaded[args.code], core.DIR_RUBRICS)
+    if not file.is_file():  # a copy of the shipped one
+        core.DIR_RUBRICS.mkdir(parents=True, exist_ok=True)
+        shutil.copy(files[args.code], file)
     subprocess.run([*editor(), str(file)], check=True)
     try:
         after = loaded | {args.code: areas.read(file.read_text(encoding="utf-8"), args.code)}
     except ValueError as e:
         sys.exit(f"{file}: {e}. Fix it with `rubrics edit {args.code}`")
     print(f"Saved {file}")
+    if broken:  # nothing valid to compare with
+        try:
+            areas.load(core.DIR_RUBRICS)
+        except ValueError as e:
+            sys.exit(f"Still unusable: {e}")
+        return
     if after == loaded:
         return
     try:
@@ -436,8 +448,8 @@ def rubrics(args: argparse.Namespace, config: dict) -> None:
 
 def embeddings_given(args: argparse.Namespace) -> dict:
     """The --embeddings-* options given on the command line, by setting name."""
-    found = {k.removeprefix("embeddings_"): v for k, v in vars(args).items()}
-    return {k: v for k, v in found.items() if k in models.Settings._fields and v is not None}
+    given = {k: v for k, v in vars(args).items() if k.startswith("embeddings_") and v is not None}
+    return {k.removeprefix("embeddings_"): v for k, v in given.items()}
 
 
 def embedded(
@@ -466,13 +478,15 @@ def areas_table(args: argparse.Namespace, config: dict) -> None:
             f"Cannot include {', '.join(sorted(unknown))}: choose among {', '.join(areas.INCLUDE)}"
         )
     view = core.areas_view()
-    records, labels = load_records(), core.labels()  # all: labelled papers join their areas
+    records, labels = load_records(), core.labels()
+    # the papers asked for, plus the labelled ones: they join their areas' vectors
+    scored = [r for r in records if not args.numbers or r["number"] in {*args.numbers, *labels}]
     try:
         rubrics = areas.load(core.DIR_RUBRICS)
         s = models.settings(config, **embeddings_given(args))
         directories = (core.DIR_PAPERS, core.DIR_EMBEDDINGS)
         results, failures = areas.score(
-            records, rubrics, s, include, config, directories, args.cache_only, labels=labels
+            scored, rubrics, s, include, config, directories, args.cache_only, labels=labels
         )
     except (models.NotEmbedded, PermissionError, ValueError, OSError) as e:
         sys.exit(f"Area scores: {e}")

@@ -53,7 +53,8 @@ def problems(rule: Any) -> list[str]:
         found.append("none should be a list of terms")
     if "near" in rule and (kind != "all" or not isinstance(rule["near"], int) or rule["near"] < 1):
         found.append("near goes with all, as a number of words")
-    if "in" in rule and (not isinstance(rule["in"], list) or set(rule["in"]) - set(FIELDS)):
+    fields = rule.get("in", [])
+    if not isinstance(fields, list) or not all(isinstance(f, str) and f in FIELDS for f in fields):
         found.append(f"in should list some of {', '.join(FIELDS)}")
     weight = rule.get("weight", 1)
     if not isinstance(weight, (int, float)) or isinstance(weight, bool):

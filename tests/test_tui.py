@@ -292,7 +292,9 @@ def test_command_palette_and_footer_offer_each_tabs_actions(tmp_path, monkeypatc
             for tab, table in zip(tui.TAB_ACTIONS, tables):  # together, they offer every action
                 app.query_one(TabbedContent).active = tab
                 app.query_one(table).focus()  # as `t` does
-                await pilot.pause()
+                # opening Areas loads the cached scores in the background: the footer then
+                # offers only Interrupt, until the job ends
+                await done(app, pilot, lambda: app.area_results is not None or tab != "areas-tab")
                 titles = {c.title for c in app.get_system_commands(app.screen)}
                 offered |= titles
                 shown = {
@@ -716,6 +718,22 @@ def test_areas_tab_scores_sorts_hides_and_explains(monkeypatch):
             assert "LEARN" not in labels and labels[-1] == "ROBOT ▲1"
             assert core.areas_view() == {"hidden": ["LEARN"], "sort": [("ROBOT", False)]}
 
+            # a sync that changes #1's abstract: scores again from the cache, #1 unscored
+            def sync(config, client=None, progress=None):
+                (record,) = papers.load(core.DIR_PAPERS, [1])
+                record["content"]["abstract"]["value"] = "A revised abstract."
+                papers.save([record], core.DIR_PAPERS, [])
+                return core.DIR_SNAPSHOTS / "x.json", ["#1: revised"]
+
+            monkeypatch.setattr(core, "sync", sync)
+            monkeypatch.setattr(core, "resume", lambda config: object())
+            asked = len(endpoint.requests)
+            await pilot.press("s")
+            await done(
+                app, pilot, lambda: app.area_results is not None and 1 not in app.area_results
+            )
+            assert 2 in app.area_results and len(endpoint.requests) == asked  # cache only
+
     asyncio.run(scenario())
 
 
@@ -781,7 +799,7 @@ def test_labels_and_rubric_edits_report_what_they_change(monkeypatch):
             await pilot.press("ctrl+r")
             assert "Robots in swarms" in editor.text
             app.query_one("#rubrics").move_cursor(row=1)  # ROBOT: saving it stays on it
-            await pilot.pause()
+            await until(pilot, lambda: app.rubric_code == "ROBOT" and "code: ROBOT" in editor.text)
             editor.load_text(editor.text.replace("exemplars: []", "exemplars:\n- Drones"))
             await pilot.press("ctrl+s")
             await done(
@@ -793,5 +811,34 @@ def test_labels_and_rubric_edits_report_what_they_change(monkeypatch):
             editor.focus()
             await pilot.press("escape", "t")  # out of the editor, then to the next tab
             assert app.query_one("#tabs").active == "papers" and "code: ROBOT" in editor.text
+
+    asyncio.run(scenario())
+
+
+def test_cache_only_tui_never_asks_the_embedding_endpoint(monkeypatch):
+    from aamas_review_monitor import areas, papers
+    from tests.test_models import FakeEndpoint, resolves_to
+    from tests.test_scores import CONFIG as AREAS_CONFIG
+    from tests.test_scores import PAGE, RECORDS
+
+    endpoint = FakeEndpoint(monkeypatch)
+    resolves_to(monkeypatch, "127.0.0.1")
+    monkeypatch.setattr(areas, "DIR_RUBRICS_DEFAULT", core.DIR_DATA / "none")
+    for rubric in areas.parse(PAGE, "https://example.org/call"):
+        areas.save(rubric, core.DIR_RUBRICS)
+    papers.save(RECORDS, core.DIR_PAPERS, [])
+    core.DIR_SNAPSHOTS.mkdir(parents=True)
+    snapshot = {"taken_at": "2026-11-11T08:00:00", "papers": [paper(1), paper(2)]}
+    (core.DIR_SNAPSHOTS / "2026-11-11T080000.json").write_text(json.dumps(snapshot))
+
+    async def scenario():
+        app = Monitor(AREAS_CONFIG, cache_only=True)
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.press("t", "t", "t")
+            await done(app, pilot, lambda: app.area_results is not None)
+            await pilot.press("k")
+            await pilot.click("#marks-apply")
+            await done(app, pilot, lambda: app.area_results == {})
+            assert endpoint.requests == []
 
     asyncio.run(scenario())

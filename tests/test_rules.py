@@ -34,6 +34,9 @@ def test_rules_are_checked_when_rubrics_are_read():
         "weight should be a number (negative: evidence against the area)",
     ]
     assert "regular expression" in rules.problems({"count": "("})[0]
+    assert rules.problems({"any": ["x"], "in": [["title"], {"abstract": 1}]}) == [
+        "in should list some of title, keywords, abstract, text, references, reviews, meta-reviews"
+    ]
     assert rules.problems("MARL") == ["a rule should be a mapping, e.g. {any: [MARL], weight: 2}"]
     rubric = {
         "area": "A",

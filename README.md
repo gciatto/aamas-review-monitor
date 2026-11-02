@@ -213,8 +213,9 @@ besides the command line for a key), then from the config (`embeddings_*`). `--e
 picks a preset: `ollama` (`http://localhost:11434/v1`, `nomic-embed-text`, the default: `ollama pull nomic-embed-text`) or `openai`;
 `--embeddings-url` and `--embeddings-model` override it, for any OpenAI-compatible server.
 **Paper data only goes to endpoints that resolve inside `--embeddings-networks`** (IP ranges,
-loopback only by default, e.g. `127.0.0.0/8,10.0.0.0/8`); the areas' public topics may go
-anywhere. Embeddings are cached in `cache/embeddings/`, one YAML file per model and text named
+loopback only by default, e.g. `127.0.0.0/8,10.0.0.0/8`): every connection is checked for the
+address it actually reached before anything is sent, and such requests follow no redirects and
+use no proxies from the environment. The areas' public topics may go anywhere. Embeddings are cached in `cache/embeddings/`, one YAML file per model and text named
 after the request's SHA-512, so reruns are identical and free; `--cache-only` never asks the
 endpoint. Retries work as above (`--embeddings-retries`, `--embeddings-backoff`,
 `--embeddings-backoff-max`).

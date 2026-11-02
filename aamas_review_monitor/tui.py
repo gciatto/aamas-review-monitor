@@ -184,10 +184,13 @@ class Monitor(App):
         Binding("r", "reload", "Reload", show=False),
     ]
 
-    def __init__(self, config: dict, embeddings: dict | None = None) -> None:
+    def __init__(
+        self, config: dict, embeddings: dict | None = None, cache_only: bool = False
+    ) -> None:
         super().__init__()
         self.config = config
         self.embeddings_given = embeddings or {}  # --embeddings-* options
+        self.cache_only = cache_only  # --cache-only: never ask the embedding endpoint
         self.area_include = tuple(config["areas_include"])
         self.area_results: dict[int, dict] | None = None  # None: not loaded yet
         self.area_codes: list[str] = []
@@ -873,7 +876,12 @@ class Monitor(App):
 
     def action_sync(self) -> None:
         def done(result: tuple[Path, list[str]]) -> None:
+            # the papers' text may have changed: area scores again, from the cache (papers
+            # whose current text is not embedded yet stay unscored until k)
+            self.area_results = None
             self.action_reload()
+            if self.query_one(TabbedContent).active == "areas-tab":
+                self.score_areas(cache_only=True)
             self.notify("\n".join([*result[1], "Synced with OpenReview"]))
 
         self.online(
@@ -1009,7 +1017,8 @@ class Monitor(App):
 
     def score_areas(self, cache_only: bool) -> None:
         """Scores every cached paper; `cache_only` never asks the endpoint (papers not embedded
-        yet stay unscored). No OpenReview sign-in: everything is local."""
+        yet stay unscored), nor does --cache-only. No OpenReview sign-in: all is local."""
+        cache_only = cache_only or self.cache_only
         if (found := self.area_settings()) is None:
             return
         rubrics, s = found
@@ -1303,6 +1312,7 @@ class Monitor(App):
                 include,
                 self.config,
                 (core.DIR_PAPERS, core.DIR_EMBEDDINGS),
+                self.cache_only,
             )
 
         def done(result: tuple[list[str], dict[int, dict]]) -> None:
