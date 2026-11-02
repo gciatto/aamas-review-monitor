@@ -25,5 +25,78 @@ description: |-
   This area welcomes papers whose primary contribution advances game theory, economic paradigms, mechanism design, market design, social choice, or strategic decision-making for agents and multiagent systems. Relevant submissions include theoretical, computational, and applied work on cooperative and non-cooperative games, equilibrium computation, auctions, bargaining, negotiation, voting, allocation, matching, persuasion, information design, and economic models of AI agents.
 
   Papers should be submitted to GTEP when the strategic, economic, game-theoretic, or social-choice model is central to the contribution. Papers focused mainly on norms, institutions, ethics, or organizational governance should be submitted to COINE unless the strategic or economic model is central.
-exemplars: []
-rules: []
+exemplars:
+- Computing equilibria in normal-form or extensive-form games, with algorithms and computational complexity
+  results.
+- 'Mechanism design for auctions or facility location: strategyproofness, approximation ratios and revenue
+  guarantees.'
+- 'Fair division of indivisible goods: envy-freeness up to one good, maximin share guarantees and allocation
+  algorithms.'
+- 'Computational social choice: voting rules, axioms, manipulation, committee elections and participatory
+  budgeting.'
+- Stable matching markets, cooperative games and the core, and Bayesian persuasion or information design.
+rules:
+- any:
+  - Nash equilibrium
+  - Nash equilibria
+  - equilibria
+  - equilibrium
+  - mechanism design
+  - mechanism
+  - mechanisms
+  - auction
+  - auctions
+  - social choice
+  - voting
+  - voters
+  - voting rule
+  - voting rules
+  - election
+  - elections
+  - envy-free
+  - envy-freeness
+  - EF1
+  - EFX
+  - fair division
+  - fair allocation
+  - maximin share
+  - stable matching
+  - two-sided matching
+  - strategyproof
+  - strategyproofness
+  - incentive compatible
+  - incentive-compatible
+  - truthful
+  - price of anarchy
+  - Stackelberg
+  - cooperative game
+  - cooperative games
+  - Shapley value
+  - the core
+  - hedonic game
+  - hedonic games
+  - participatory budgeting
+  - Bayesian persuasion
+  - information design
+  - bargaining
+  - tournament
+  - tournaments
+  - welfare
+  - game-theoretic
+  - game theory
+  in:
+  - title
+  - keywords
+  - abstract
+  weight: 3
+- cites:
+  - Economics and Computation
+  - Games and Economic Behavior
+  - Social Choice and Welfare
+  - Econometrica
+  - Algorithmic Game Theory
+  - Mathematics of Operations Research
+  - Theoretical Economics
+  - Web and Internet Economics
+  - Journal of Economic Theory
+  weight: 1

@@ -29,5 +29,58 @@ description: |-
   Submissions should clearly explain the application context, the role of agents, the novelty of the application, and the evidence of benefit, feasibility, adoption, or measurable impact. Collaborations with relevant stakeholders are strongly encouraged, especially where they demonstrate that the proposed approach addresses a real need and can be used, evaluated, or deployed in practice.
 
   Papers should be submitted to IASI when the primary contribution is an innovative application, deployment, realistic validation, stakeholder-driven design, or demonstrated societal impact of agent-based or agentic technologies. Papers whose primary contribution is a new algorithm, architecture, learning method, engineering tool, or simulation method should be submitted to the corresponding technical area unless the application or impact contribution is central.
-exemplars: []
-rules: []
+exemplars:
+- A deployed agent-based system used by a hospital, city or company, with an evaluation of its measured
+  impact over months of operation.
+- An application of multi-agent techniques to energy grids, transportation or disaster response, developed
+  with stakeholders and validated on real data.
+- Lessons learned from the real-world deployment of an AI agent for social good, including adoption challenges
+  and ethical considerations.
+- A field study of an agentic assistant in education or healthcare, conducted with domain experts.
+rules:
+- any:
+  - deployed
+  - deployment
+  - field study
+  - field trial
+  - pilot study
+  - stakeholders
+  - stakeholder
+  - social good
+  - lessons learned
+  - in practice
+  - real-world deployment
+  - practitioners
+  - domain experts
+  in: &id001
+  - title
+  - keywords
+  - abstract
+  weight: 3
+- any:
+  - healthcare
+  - hospital
+  - hospitals
+  - patients
+  - energy
+  - smart grid
+  - power grid
+  - electricity
+  - transportation
+  - ride-hailing
+  - wildlife
+  - conservation
+  - agriculture
+  - disaster
+  - emergency
+  - public health
+  - education
+  - students
+  - finance
+  - supply chain
+  - logistics
+  - climate
+  - sustainability
+  - case study
+  in: *id001
+  weight: 1

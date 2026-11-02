@@ -35,5 +35,57 @@ description: |-
   Papers should be submitted to GAAI when the central technical contribution concerns agents whose capabilities, architecture, reasoning, interaction, learning, evaluation, or deployment substantially rely on generative AI models. Papers whose main contribution is a general learning, planning, engineering, governance, or human-interaction method should instead be submitted to the corresponding AAMAS area, unless the generative-agent aspect is central.
 
   Submissions where the core contribution is not specifically about agents or multiagent systems are out of scope. Advances in language models, prompt engineering, generic tool use, or arbitrary generative tasks are outside the scope of this area unless they make a clear contribution to autonomous agents or multiagent systems.
-exemplars: []
-rules: []
+exemplars:
+- An LLM-based agent architecture with long-term memory, reflection and tool use, evaluated on web navigation
+  and software engineering benchmarks.
+- A multi-agent framework in which large language model agents debate, negotiate or coordinate through
+  natural-language messages to solve tasks.
+- A benchmark and evaluation methodology for agentic AI systems measuring planning, tool calling and recovery
+  from failures.
+- Safety, alignment and verification of autonomous LLM agents, including guardrails and red-teaming of
+  agent workflows.
+- Vision-language models as embodied agents that ground instructions in perception and act in interactive
+  environments.
+rules:
+- any:
+  - large language model
+  - large language models
+  - LLM
+  - LLMs
+  - language model agents
+  - LLM-based
+  - LLM agents
+  - LLM agent
+  - generative AI
+  - generative agents
+  - agentic AI
+  - agentic
+  - GPT-4
+  - GPT-4o
+  - foundation model
+  - foundation models
+  - vision-language model
+  - vision-language models
+  - VLM
+  - VLMs
+  - prompting
+  - prompt
+  - chain-of-thought
+  - tool use
+  - tool calling
+  - retrieval-augmented
+  - in-context learning
+  in:
+  - title
+  - keywords
+  - abstract
+  weight: 3
+- cites:
+  - arXiv preprint
+  - Association for Computational Linguistics
+  - ACL
+  - EMNLP
+  - NAACL
+  - COLM
+  - Language Modeling
+  weight: 1

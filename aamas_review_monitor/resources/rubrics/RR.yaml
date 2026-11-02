@@ -22,5 +22,67 @@ description: |-
   Knowledge representation is interpreted broadly, encompassing formal approaches such as epistemic, strategic, and description logics, as well as data-driven techniques such as representation learning, when they support reasoning in agent or multiagent systems. Relevant reasoning paradigms include automated reasoning, theorem proving, verification-based approaches, probabilistic inference, neurosymbolic methods, and reasoning methods that support trustworthiness, accountability, transparency, fairness, explainability, or responsible AI.
 
   Papers should be submitted to RR when the primary contribution is a representation or reasoning framework, method, analysis, or formalism for agents or multiagent systems. Papers whose primary contribution is planning, scheduling, or optimization should be submitted to SOPS, unless the representation or reasoning formalism is central.
-exemplars: []
-rules: []
+exemplars:
+- A modal or epistemic logic for reasoning about agents' knowledge and beliefs, with axiomatisation, decidability
+  and model-checking complexity.
+- Strategy logics such as alternating-time temporal logic for verifying what coalitions of agents can
+  enforce.
+- 'Abstract argumentation frameworks: semantics, extensions and the computational complexity of acceptance
+  problems.'
+- Belief revision and update in multi-agent settings, and reasoning about actions and change.
+- Neurosymbolic agents that combine learned perception with logical reasoning or logical constraints.
+rules:
+- any:
+  - logic
+  - logics
+  - epistemic
+  - modal logic
+  - temporal logic
+  - LTL
+  - CTL
+  - ATL
+  - strategy logic
+  - model checking
+  - model-checking
+  - satisfiability
+  - axiomatization
+  - axiomatisation
+  - decidability
+  - decidable
+  - argumentation
+  - argumentation framework
+  - argumentation frameworks
+  - belief revision
+  - ontology
+  - ontologies
+  - description logic
+  - description logics
+  - knowledge representation
+  - neurosymbolic
+  - neuro-symbolic
+  - answer set programming
+  - situation calculus
+  - formal semantics
+  - explanation
+  - explanations
+  - explainability
+  in:
+  - title
+  - keywords
+  - abstract
+  weight: 3
+- cites:
+  - Principles of Knowledge Representation and Reasoning
+  - KR
+  - Journal of Logic and Computation
+  - JELIA
+  - Logic in Computer Science
+  - LICS
+  - Journal of Philosophical Logic
+  - Computer Aided Verification
+  - CONCUR
+  - Theoretical Aspects of Rationality and Knowledge
+  - TARK
+  - Computational Models of Argument
+  - COMMA
+  weight: 1

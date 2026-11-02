@@ -227,6 +227,15 @@ cosine similarities with the area's topics, description and exemplars; a softmax
 takes more). `areas_include` sets what is embedded by default. Every result names the model, the
 data included and the rubrics' version.
 
+The shipped rubrics keep each area's topics and description as the call states them, and add
+exemplars (descriptions of typical papers) and rules (signature terms, acronyms, cited venues).
+On 318 published AAMAS 2026 papers (same 11 areas; areas labelled independently by two
+annotators who agreed on 95% of the papers, and with every author who put the code in their
+keywords), the best area matched the label for 77% of the 157 held-out papers (top 3: 97%),
+against 62% (87%) with the call's text alone, using `nomic-embed-text` on titles, keywords and
+abstracts. Small areas (EMAS, HAI, IASI) had too few papers to measure; your labels and edits
+are how the rubrics improve for your own batch.
+
 Rubric **rules** add evidence by plain string matching on the paper's local text (never sent
 anywhere; the PDF's text if downloaded), for what embeddings miss or get wrong:
 

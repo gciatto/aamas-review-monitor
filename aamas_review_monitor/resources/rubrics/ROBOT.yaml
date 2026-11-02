@@ -27,5 +27,55 @@ description: |-
   Robots are embodied and situated agents that operate in the physical world. Research on autonomous agents and multiagent systems shares many challenges and synergies with intelligent robotics, especially where robotic systems must reason, learn, plan, coordinate, adapt, or act autonomously in realistic settings.
 
   Submissions involving perception, vision, mapping, localization, manipulation, or control are welcome when these components are integrated into, or make a clear contribution to, autonomous robots or multi-robot systems.
-exemplars: []
-rules: []
+exemplars:
+- A multi-robot coordination system for exploration or coverage, validated on physical robots and in simulation.
+- 'Swarm robotics: decentralised controllers producing collective behaviours such as aggregation or flocking.'
+- Robot task and motion planning with execution monitoring and failure recovery for long-term autonomy.
+- Learning manipulation or navigation policies for robots, transferred from simulation to real hardware.
+- Teams of drones or autonomous vehicles performing coordinated missions under communication constraints.
+rules:
+- any:
+  - robot
+  - robots
+  - robotic
+  - robotics
+  - multi-robot
+  - swarm
+  - swarms
+  - drone
+  - drones
+  - UAV
+  - UAVs
+  - quadrotor
+  - quadrotors
+  - manipulation
+  - manipulator
+  - navigation
+  - localization
+  - localisation
+  - SLAM
+  - autonomous vehicles
+  - autonomous driving
+  - sim-to-real
+  - legged
+  - mobile robot
+  - mobile robots
+  - ROS
+  - embodied
+  in:
+  - title
+  - keywords
+  - abstract
+  weight: 3
+- cites:
+  - Robotics and Automation
+  - ICRA
+  - Intelligent Robots and Systems
+  - IROS
+  - 'Robotics: Science and Systems'
+  - Robot Learning
+  - CoRL
+  - Robotics and Automation Letters
+  - Swarm Intelligence
+  - Autonomous Robots
+  weight: 1

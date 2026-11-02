@@ -31,5 +31,60 @@ description: |-
   Papers integrating symbolic reasoning, learning, LLM-based components, or neurosymbolic methods are welcome when the focus is on engineering challenges and solutions. The area also welcomes contributions on engineering agent and multiagent systems whose behaviour, decisions, interactions, and failures are understandable to human users. This includes methods and tools for designing transparency into agent architectures, tracing and auditing agent behaviour, generating explanations of individual or collective decisions, monitoring compliance with requirements and norms, and supporting accountability in deployed systems.
 
   Papers should be submitted to EMAS when the primary contribution concerns methods, tools, languages, platforms, infrastructures, or processes for engineering, deploying, testing, validating, maintaining, or analyzing agent and multiagent systems. Papers in which LLMs or other AI technologies perform the primary task while MAS engineering plays only a background role should be submitted to another area.
-exemplars: []
-rules: []
+exemplars:
+- An agent-oriented programming language or BDI platform with formal semantics and an interpreter, evaluated
+  on case studies.
+- A methodology and toolchain for engineering, testing and debugging multi-agent systems.
+- Runtime verification and monitoring of deployed multi-agent systems against formal specifications.
+- A framework and protocol for interoperable agents communicating over the web, with an open-source implementation.
+- 'Engineering LLM-based multi-agent systems: architectures, design patterns and reproducible evaluation
+  infrastructure.'
+rules:
+- any:
+  - BDI
+  - belief-desire-intention
+  - agent programming
+  - agent-oriented programming
+  - agent-oriented
+  - agent programming language
+  - agent programming languages
+  - AgentSpeak
+  - Jason
+  - JaCaMo
+  - 2APL
+  - multi-agent oriented programming
+  - software engineering
+  - runtime verification
+  - debugging
+  - testing
+  - engineering multi-agent systems
+  - engineering multiagent systems
+  - communication protocol
+  - interaction protocol
+  - interaction protocols
+  in: &id001
+  - title
+  - keywords
+  - abstract
+  weight: 3
+- any:
+  - framework
+  - platform
+  - toolkit
+  - middleware
+  - open-source
+  - open source
+  - interoperability
+  - specification
+  - architecture
+  - implementation
+  in: *id001
+  weight: 1
+- cites:
+  - Engineering Multi-Agent Systems
+  - ProMAS
+  - Programming Multi-Agent Systems
+  - Software Engineering
+  - ICSE
+  - Agent-Oriented Software Engineering
+  weight: 1
