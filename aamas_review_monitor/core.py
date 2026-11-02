@@ -34,6 +34,7 @@ FILE_HISTORY = DIR_DATA / "history.jsonl"  # what the app sent: emails and comme
 FILE_IGNORED = DIR_DATA / "ignored.json"  # issues the user chose to ignore: [number, code]
 DIR_RUBRICS = DIR_DATA / "rubrics"  # the AC's copies of the area rubrics
 DIR_EMBEDDINGS = DIR_DATA / "cache" / "embeddings"  # one YAML per model and text
+FILE_AREAS_VIEW = DIR_DATA / "areas-view.json"  # areas hidden from the view, its sort order
 
 
 def load_config() -> dict:
@@ -240,6 +241,19 @@ def ignore(keys: set[tuple[int, str]], undo: bool = False) -> set[tuple[int, str
     FILE_IGNORED.touch(mode=0o600)
     FILE_IGNORED.write_text(json.dumps(sorted(found)), encoding="utf-8")
     return found
+
+
+def areas_view() -> dict:
+    """The area view's settings: `hidden` area codes, `sort` as [column, descending] pairs."""
+    saved = (
+        json.loads(FILE_AREAS_VIEW.read_text(encoding="utf-8")) if FILE_AREAS_VIEW.is_file() else {}
+    )
+    return {"hidden": saved.get("hidden", []), "sort": [tuple(s) for s in saved.get("sort", [])]}
+
+
+def save_areas_view(view: dict) -> None:
+    DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+    FILE_AREAS_VIEW.write_text(json.dumps(view), encoding="utf-8")
 
 
 def records(*numbers: int) -> list[dict]:

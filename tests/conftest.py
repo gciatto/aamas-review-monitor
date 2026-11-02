@@ -26,3 +26,4 @@ def private_data(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(core, "FILE_IGNORED", data / "ignored.json")
     monkeypatch.setattr(core, "DIR_RUBRICS", data / "rubrics")
     monkeypatch.setattr(core, "DIR_EMBEDDINGS", data / "cache" / "embeddings")
+    monkeypatch.setattr(core, "FILE_AREAS_VIEW", data / "areas-view.json")

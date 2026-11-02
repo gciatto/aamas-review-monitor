@@ -455,6 +455,8 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
                 "PCs, SACs",
             ]
             assert "Please check the reviews." in str(app.query_one("#history-entry").render())
+            await pilot.press("t")  # Areas: loads the cached scores (none here)
+            await done(app, pilot, lambda: app.area_results is not None)
             await pilot.press("t")  # back to Papers
             table = app.query_one("#issues")
             rows = [table.get_row_at(r) for r in range(table.row_count)]
@@ -638,5 +640,58 @@ def test_mark_dialog_marks_the_issues_matching_every_chosen_group(tmp_path, monk
             await pilot.press("plus")
             await pilot.click("#marks-none")
             assert app.marked == set()
+
+    asyncio.run(scenario())
+
+
+def test_areas_tab_scores_sorts_hides_and_explains(monkeypatch):
+    from textual.widgets import SelectionList
+
+    from aamas_review_monitor import areas, papers
+    from tests.test_models import FakeEndpoint, resolves_to
+    from tests.test_scores import CONFIG as AREAS_CONFIG
+    from tests.test_scores import PAGE, RECORDS
+
+    endpoint = FakeEndpoint(monkeypatch)
+    resolves_to(monkeypatch, "127.0.0.1")
+    monkeypatch.setattr(areas, "DIR_RUBRICS_DEFAULT", core.DIR_DATA / "none")
+    for rubric in areas.parse(PAGE, "https://example.org/call"):
+        areas.save(rubric, core.DIR_RUBRICS)
+    papers.save(RECORDS, core.DIR_PAPERS, [])
+    core.DIR_SNAPSHOTS.mkdir(parents=True)
+    snapshot = {"taken_at": "2026-11-11T08:00:00", "papers": [paper(1), paper(2, reviews=1)]}
+    (core.DIR_SNAPSHOTS / "2026-11-11T080000.json").write_text(json.dumps(snapshot))
+
+    async def scenario():
+        app = Monitor(AREAS_CONFIG)
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.press("t", "t", "t")  # Areas: nothing embedded yet, nothing asked
+            await done(app, pilot, lambda: app.area_results is not None)
+            table = app.query_one("#areas")
+            assert table.row_count == 2 and endpoint.requests == []
+            assert table.get_row_at(0)[1].plain.strip() == "—"
+            await pilot.press("k")
+            choices = app.screen.query_one(SelectionList)
+            assert choices.selected == ["title", "keywords", "abstract"]
+            choices.select("reviews")
+            await pilot.click("#marks-apply")
+            await done(app, pilot, lambda: bool(app.area_results))
+            assert app.area_include == ("title", "keywords", "abstract", "reviews")
+            assert "This is about robots and swarms." in endpoint.requests[-1]["input"]
+            app.sort_areas("ROBOT")
+            assert [table.get_row_at(r)[0] for r in range(2)] == ["2", "1"]
+            labels = [str(c.label) for c in table.columns.values()]
+            assert labels[:3] == ["#", "LEARN", "ROBOT ▼1"] and labels[-1] == "Title"
+            app.sort_areas("ROBOT")  # again: ascending
+            assert [table.get_row_at(r)[0] for r in range(2)] == ["1", "2"]
+            detail = str(app.query_one("#area-detail").render())
+            assert "#1  Multiagent learning" in detail and "LEARN" in detail
+            assert "Multiagent learning" in detail.split("LEARN", 1)[1]  # the nearest topic
+            await pilot.press("h")
+            app.screen.query_one(SelectionList).deselect("LEARN")
+            await pilot.click("#marks-apply")
+            labels = [str(c.label) for c in table.columns.values()]
+            assert "LEARN" not in labels and labels[1] == "ROBOT ▲1"
+            assert core.areas_view() == {"hidden": ["LEARN"], "sort": [("ROBOT", False)]}
 
     asyncio.run(scenario())

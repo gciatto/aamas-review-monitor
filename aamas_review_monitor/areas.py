@@ -6,9 +6,12 @@ from __future__ import annotations
 import hashlib
 import heapq
 import json
+import math
 import operator
 import re
+import statistics
 from collections import Counter
+from collections.abc import Callable
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -16,6 +19,8 @@ from typing import Any
 import requests
 import yaml
 
+from aamas_review_monitor import models, papers
+from aamas_review_monitor.collector import replies
 from aamas_review_monitor.resources import DIR_RUBRICS_DEFAULT
 
 KEYS = ("area", "code", "source", "topics", "description", "exemplars", "rules")
@@ -231,3 +236,158 @@ def confusion(rubrics: dict[str, dict], vectors: dict[str, list[list[float]]], k
             }
             found[code][nearest(scores)] += 1
     return found
+
+
+INCLUDE = ("title", "keywords", "abstract", "text", "reviews", "meta-reviews")
+WORDS_CHUNK = 300  # ponytail: words, not tokens; well within the models' contexts
+
+
+def _value(content: dict, key: str) -> str:
+    value = content.get(key, {}).get("value") if isinstance(content.get(key), dict) else None
+    return ", ".join(map(str, value)) if isinstance(value, list) else str(value or "")
+
+
+def _chunks(text: str) -> list[str]:
+    words = text.split()
+    return [" ".join(words[i : i + WORDS_CHUNK]) for i in range(0, len(words), WORDS_CHUNK)]
+
+
+def parts(record: dict, include: tuple[str, ...], config: dict, directory: Path) -> list[list[str]]:
+    """What of a paper gets embedded, as parts of chunks: title, keywords and abstract together,
+    then the PDF's text (if downloaded; FileNotFoundError without pdftotext), the reviews, the
+    meta-reviews. Each part counts the same in the paper's vector, however long."""
+    head = [_value(record["content"], k) for k in INCLUDE[:3] if k in include]
+    found = [_chunks("\n".join(head))]
+    pdf = papers.attachment(record, config["field_pdf"], directory)
+    if "text" in include and pdf is not None and pdf.is_file():
+        found.append(_chunks("\n".join(papers.pdf_pages(pdf))))
+    for kind, name in (("review", "reviews"), ("meta_review", "meta-reviews")):
+        if name in include:
+            found.append(
+                _chunks(
+                    "\n".join(
+                        v for r in replies(record, kind) for _, v in papers.fields(r["content"])
+                    )
+                )
+            )
+    return [p for p in found if p]
+
+
+def _mean(vectors: list[list[float]]) -> list[float]:
+    return [sum(column) / len(vectors) for column in zip(*vectors)]
+
+
+def shares(similarities: dict[str, float], temperature: float) -> dict[str, float]:
+    """Each area's share of the paper (a softmax of the similarities: they sum to 1). A lower
+    temperature makes the nearest area take more."""
+    top = max(similarities.values())
+    weights = {c: math.exp((s - top) / temperature) for c, s in similarities.items()}
+    total = sum(weights.values())
+    return {c: round(w / total, 4) for c, w in weights.items()}
+
+
+def fingerprint(rubrics: dict[str, dict]) -> str:
+    """Names the rubrics' version in results."""
+    return hashlib.sha256("".join(map(dump, rubrics.values())).encode()).hexdigest()[:12]
+
+
+def score(
+    records: list[dict],
+    rubrics: dict[str, dict],
+    s: models.Settings,
+    include: tuple[str, ...],
+    config: dict,
+    directories: tuple[Path, Path],
+    cache_only: bool = False,
+    progress: Callable[[int, int], None] | None = None,
+) -> tuple[dict[int, dict], list[str]]:
+    """Area scores of each paper: similarity (mean of the `areas_top_k` nearest of the area's
+    vectors), share, and the nearest topics as evidence; plus why some papers have none. The
+    papers' text only goes to local endpoints. `directories`: the papers', the embeddings'."""
+    folder, cache = directories
+    k, temperature = config["areas_top_k"], config["areas_temperature"]
+    area_texts = {c: texts(r) for c, r in rubrics.items()}
+    flat = [t for ts in area_texts.values() for t in ts]
+    vectors = iter(models.embed(s, flat, cache, private=False, cache_only=cache_only))
+    by_area = {c: [next(vectors) for _ in ts] for c, ts in area_texts.items()}
+    results, failures = {}, []
+    for count, record in enumerate(records, 1):
+        if progress:
+            progress(count - 1, len(records))
+        try:
+            chunks = parts(record, include, config, folder)
+            if not chunks:
+                raise LookupError(f"nothing to embed among {', '.join(include)}")
+            found = iter(models.embed(s, sum(chunks, []), cache, True, cache_only))
+            vector = models._unit(_mean([_mean([next(found) for _ in p]) for p in chunks]))
+        except (LookupError, FileNotFoundError) as e:
+            failures.append(f"#{record['number']}: {e}")
+            continue
+        similarities, nearest_ = {}, {}
+        for code, vs in by_area.items():
+            similarities[code] = similarity(vector, vs, k)
+            near = heapq.nlargest(
+                3, zip((round(sum(map(operator.mul, vector, v)), 4) for v in vs), area_texts[code])
+            )
+            nearest_[code] = [[cos, text] for cos, text in near]
+        results[record["number"]] = {
+            "similarities": similarities,
+            "shares": shares(similarities, temperature),
+            "nearest": nearest_,
+        }
+    if progress:
+        progress(len(records), len(records))
+    return results, failures
+
+
+def metrics(paper: dict) -> dict:
+    """The review figures of a snapshot's paper, for the view."""
+    ratings = [r["rating"] for r in paper["reviews"] if isinstance(r.get("rating"), (int, float))]
+    confidences = [
+        r["confidence"] for r in paper["reviews"] if isinstance(r.get("confidence"), (int, float))
+    ]
+    meta = paper.get("meta") or {}
+    recommendation = " / ".join(str(meta[k]) for k in ("proceedings", "findings") if meta.get(k))
+    return {
+        "reviews": len(paper["reviews"]),
+        "reviewers": len(paper.get("reviewers", [])),
+        "rating": round(float(statistics.mean(ratings)), 2) if ratings else None,
+        "spread": round(float(statistics.pstdev(ratings)), 2) if ratings else None,
+        "confidence": round(float(statistics.mean(confidences)), 2) if confidences else None,
+        "meta": recommendation or ("yes" if paper.get("meta_review") else None),
+    }
+
+
+def rows(snapshot: dict, records: dict[int, dict], results: dict[int, dict]) -> list[dict]:
+    """One row per active paper: number, title, each area's share, best area and its margin
+    over the second, then the review figures. Missing values are None."""
+    found = []
+    for paper in snapshot["papers"]:
+        if paper.get("status", "active") != "active":
+            continue
+        number, result = paper["number"], results.get(paper["number"])
+        record = records.get(number)
+        row = {"number": number, "title": _value(record["content"], "title") if record else None}
+        if result:
+            ranked = sorted(result["shares"].items(), key=lambda cs: (-cs[1], cs[0]))
+            row |= result["shares"] | {"best": ranked[0][0]}
+            row["margin"] = round(ranked[0][1] - ranked[1][1], 4) if len(ranked) > 1 else None
+        found.append(row | metrics(paper))
+    return found
+
+
+def ordered(found: list[dict], spec: list[tuple[str, bool]]) -> list[dict]:
+    """Rows sorted by each (column, descending) of `spec`, the first deciding most; rows
+    missing a value go last."""
+    for column, descending in reversed(spec):
+        known = [r for r in found if r.get(column) is not None]
+        unknown = [r for r in found if r.get(column) is None]
+        found = sorted(known, key=lambda r: r[column], reverse=descending) + unknown
+    return found
+
+
+def sort_spec(text: str) -> list[tuple[str, bool]]:
+    """ "LEARN,-rating" -> [("LEARN", False), ("rating", True)]: a minus sorts descending."""
+    return [
+        (c.strip().lstrip("-"), c.strip().startswith("-")) for c in text.split(",") if c.strip()
+    ]

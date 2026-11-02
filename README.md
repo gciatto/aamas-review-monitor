@@ -195,6 +195,7 @@ Paper lists (`N ...`) default to all your papers.
 | `ignore [N CODE ...] [--undo]` | Ignore issues of a paper (codes are in brackets in `issues N`), or count them again; without arguments, list the ignored ones |
 | `rubrics list` / `show CODE` / `edit CODE` | The area rubrics (one YAML file per area of the call: topics, description, exemplars, rules): list them, print one, or edit your copy in `$EDITOR` (checked on save) |
 | `rubrics check` | Validate the rubrics and embed their topics: where each area's topics land when left out of it, i.e. which areas the rubrics fail to separate |
+| `areas [N ...] [--include DATA] [--show CODES] [--sort=COLUMNS] [--csv FILE]` | Each paper's share of each area (%, summing to 100), its best area and margin over the second, reviews done/assigned, mean rating ± spread, mean confidence, meta-review recommendation. Embeds what is missing (paper data only to local endpoints). `--include` picks among `title,keywords,abstract,text,reviews,meta-reviews` (`text`: downloaded PDFs); `--sort=LEARN,-rating` sorts on several columns, a minus for descending; `--show` overrides the areas hidden in the TUI |
 | `rubrics extract [--url URL] [--force]` | Extract the rubrics from the call's public page (`url_areas`) into your copies, keeping those you have (`--force` replaces them) |
 
 Options that come before the command apply to every OpenReview request. `--rate` caps how
@@ -217,9 +218,17 @@ after the request's SHA-512, so reruns are identical and free; `--cache-only` ne
 endpoint. Retries work as above (`--embeddings-retries`, `--embeddings-backoff`,
 `--embeddings-backoff-max`).
 
+Area scores: a paper's vector is the mean of its parts (title, keywords and abstract together;
+PDF text; reviews; meta-reviews), each embedded in chunks of 300 words, so a long part counts
+no more than a short one. Its similarity to an area is the mean of its `areas_top_k` highest
+cosine similarities with the area's topics, description and exemplars; a softmax at
+`areas_temperature` turns the similarities into shares summing to 100% (lower: the nearest area
+takes more). `areas_include` sets what is embedded by default. Every result names the model, the
+data included and the rubrics' version.
+
 ## Terminal UI
 
-`tui` has three tabs (`t` switches between them):
+`tui` has four tabs (`t` switches between them):
 
 - **Papers:** every paper, with one row per issue and a 🟢 row for each paper without issues.
   The Commented and Emailed columns give the date of the last comment or templated email
@@ -229,6 +238,12 @@ endpoint. Retries work as above (`--embeddings-retries`, `--embeddings-backoff`,
   SPC's issues paper by paper, plus what was sent to them.
 - **History:** every email and comment sent from the app, newest first, with the full text of
   the selected one.
+- **Areas:** each paper's share of each area (%, as a heatmap), its best area and margin, and its
+  review figures: reviews done/assigned, mean rating ± spread, mean confidence, meta-review
+  recommendation. Click headers to sort: the clicked column decides first (again: reverses it),
+  the two before it break ties. Beside the table, the selected paper's three best areas with
+  their nearest topics, as evidence. Opening the tab shows cached scores only; `k` embeds the
+  rest. The software measures fit to areas; it never scores quality or suggests decisions.
 
 The line above the tabs says where the process stands ("Reviewing: reviews due 13 Nov, in 25
 days") and how old the snapshot is, in yellow once it is past `snapshot_stale_hours`.
@@ -260,7 +275,9 @@ in the command palette (`ctrl+p`):
 | `m` | Templated email to the SPCs (SPCs tab) or to the papers' people, reviewed and editable before you type `SEND` |
 | `c` | Comment on each paper's forum with its issues (SPCs as readers optional), reviewed and editable before you type `SEND` |
 | `e` | Free-form email to reviewers, late reviewers or SPCs, reviewed and editable before you type `SEND` |
-| `t` | Switch between the Papers, SPCs and History tabs |
+| `k` | Score the papers' areas, choosing what to embed (title, keywords, abstract, PDF text, reviews, meta-reviews); paper data only goes to local endpoints |
+| `h` | Choose the areas the Areas tab shows (kept with the sort order in `areas-view.json`) |
+| `t` | Switch between the Papers, SPCs, History and Areas tabs |
 | `s` | Sync with OpenReview |
 | `l` | Legend of all checks; type to filter them, Esc closes |
 | `r` / `q` | Reload / quit |

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import functools
 import logging
 import os
@@ -12,7 +13,7 @@ import webbrowser
 from datetime import date
 from pathlib import Path
 
-from aamas_review_monitor import areas, core, documents, outreach, papers
+from aamas_review_monitor import areas, core, documents, models, outreach, papers
 from aamas_review_monitor.checks import (
     Issue,
     check,
@@ -133,11 +134,24 @@ def main(argv: list[str] | None = None) -> None:
     rubrics_cmd.add_argument(
         "--force", action="store_true", help="extract: replace your edited copies too"
     )
+    areas_cmd = commands.add_parser(
+        "areas", help="each paper's share of each area, with its reviews (embeds what is missing)"
+    )
+    areas_cmd.add_argument(
+        "--include", help=f"what to embed, of {','.join(areas.INCLUDE)} (config: areas_include)"
+    )
+    areas_cmd.add_argument("--show", help="only these areas, e.g. LEARN,GTEP (default: not hidden)")
+    areas_cmd.add_argument(
+        "--sort",
+        help="columns, the first deciding most, minus for descending: --sort=LEARN,-rating",
+    )
+    areas_cmd.add_argument("--csv", type=Path, help="also write every column to this CSV file")
     for cmd in (email_cmd, outreach_cmd, comment_cmd):
         cmd.add_argument(
             "--edit", action="store_true", help="edit each message in $EDITOR before the preview"
         )
-    for cmd in (download_cmd, email_cmd, inspect_cmd, outreach_cmd, comment_cmd, history_cmd):
+    numbered_cmds = (download_cmd, email_cmd, inspect_cmd, outreach_cmd, comment_cmd, history_cmd)
+    for cmd in (*numbered_cmds, areas_cmd):
         cmd.add_argument("numbers", type=int, nargs="*", help="papers (default: all)")
     args = parser.parse_args(argv)
     # Only the application configures logging; importing the package leaves it alone. The TUI
@@ -170,7 +184,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "tui":
         from aamas_review_monitor.tui import Monitor
 
-        Monitor(config).run()
+        Monitor(config, embeddings_given(args)).run()
     elif args.command in ("report", "show", "issues"):
         state = core.current(config)
         if (latest := state.latest) is None:
@@ -319,6 +333,8 @@ def main(argv: list[str] | None = None) -> None:
         )
     elif args.command == "rubrics":
         rubrics(args, config)
+    elif args.command == "areas":
+        areas_table(args, config)
     elif args.command == "email":
         body = args.body.read_text(encoding="utf-8")
         drafts, unreachable = outreach.direct(
@@ -387,19 +403,86 @@ def rubrics(args: argparse.Namespace, config: dict) -> None:
     print(f"Saved {file}")
 
 
+def embeddings_given(args: argparse.Namespace) -> dict:
+    """The --embeddings-* options given on the command line, by setting name."""
+    found = {k.removeprefix("embeddings_"): v for k, v in vars(args).items()}
+    return {k: v for k, v in found.items() if k in models.Settings._fields and v is not None}
+
+
 def embedded(
     args: argparse.Namespace, config: dict, texts: list[str], private: bool
 ) -> list[list[float]]:
     """Embeddings with the settings from the command line, environment and config."""
-    from aamas_review_monitor import models
-
-    given = {
-        k.removeprefix("embeddings_"): v
-        for k, v in vars(args).items()
-        if k.startswith("embeddings_")
-    }
-    s = models.settings(config, **given)
+    s = models.settings(config, **embeddings_given(args))
     return models.embed(s, texts, core.DIR_EMBEDDINGS, private, args.cache_only)
+
+
+def cell(value: object, width: int, digits: int = 1) -> str:
+    text = (
+        "—" if value is None else f"{value:.{digits}f}" if isinstance(value, float) else str(value)
+    )
+    return f"{text:>{width}}"
+
+
+def areas_table(args: argparse.Namespace, config: dict) -> None:
+    """Each paper's share of each area (%), best area and margin, and review figures."""
+    latest = core.load_snapshots()[0]
+    if latest is None:
+        sys.exit(f"No snapshots in {core.DIR_SNAPSHOTS}: run `sync` first")
+    include = tuple(args.include.split(",")) if args.include else tuple(config["areas_include"])
+    if unknown := set(include) - set(areas.INCLUDE):
+        sys.exit(
+            f"Cannot include {', '.join(sorted(unknown))}: choose among {', '.join(areas.INCLUDE)}"
+        )
+    view = core.areas_view()
+    records = load_records(*args.numbers)
+    try:
+        rubrics = areas.load(core.DIR_RUBRICS)
+        s = models.settings(config, **embeddings_given(args))
+        directories = (core.DIR_PAPERS, core.DIR_EMBEDDINGS)
+        results, failures = areas.score(
+            records, rubrics, s, include, config, directories, args.cache_only
+        )
+    except (LookupError, PermissionError, ValueError, OSError) as e:
+        sys.exit(f"Area scores: {e}")
+    shown = args.show.split(",") if args.show else [c for c in rubrics if c not in view["hidden"]]
+    numbers = {r["number"] for r in records}
+    found = [
+        r
+        for r in areas.rows(latest, {r["number"]: r for r in records}, results)
+        if r["number"] in numbers
+    ]
+    found = areas.ordered(found, areas.sort_spec(args.sort) if args.sort else view["sort"])
+    print(
+        f"{s.model}, {'+'.join(include)}; rubrics {areas.fingerprint(rubrics)}; nearest "
+        f"{config['areas_top_k']}, temperature {config['areas_temperature']}; shares in %"
+    )
+    head = ["#"] + shown + ["best", "margin", "reviews", "rating", "±", "conf.", "meta", "title"]
+    widths = [5] + [max(len(c), 3) for c in shown] + [6, 6, 7, 6, 4, 5, 12, 0]
+    print(" ".join(f"{h:>{w}}" for h, w in zip(head, widths)).rstrip())
+    for r in found:
+        values = [cell(r["number"], 5)] + [
+            cell(round(r[c] * 100) if c in r else None, w) for c, w in zip(shown, widths[1:])
+        ]
+        values += [
+            cell(r.get("best"), 6),
+            cell(round(r["margin"] * 100) if r.get("margin") is not None else None, 6),
+            cell(f"{r['reviews']}/{r['reviewers']}", 7),
+            cell(r["rating"], 6),
+            cell(r["spread"], 4),
+            cell(r["confidence"], 5),
+            f"{(r['meta'] or '—')[:12]:>12}",
+            (r["title"] or "")[:60],
+        ]
+        print(" ".join(values))
+    if failures:
+        print("\n".join(f"Not scored: {f}" for f in failures))
+    if args.csv:
+        columns = ["number", "title", *rubrics, "best", "margin", *areas.metrics({"reviews": []})]
+        with args.csv.open("w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, columns, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(found)
 
 
 def editor() -> list[str]:

@@ -487,9 +487,9 @@ class Templates(ModalScreen["outreach.Template | None"]):
 
 
 class Marks(ModalScreen["set[str] | None"]):
-    """Picks which shown issues to mark: options are `group:value`; an issue is marked if, in
-    every group with a chosen option, it matches one of them. Returns the options, or none to
-    clear the marks."""
+    """Picks options: by default which shown issues to mark (options are `group:value`; an issue
+    is marked if, in every group with a chosen option, it matches one of them). Returns the
+    chosen options, an empty set for `none` (clear the marks), None if cancelled."""
 
     DEFAULT_CSS = (
         "Marks {" + DIALOG_CSS + " width: 90; height: auto; padding: 1 2; } }"
@@ -498,17 +498,25 @@ class Marks(ModalScreen["set[str] | None"]):
     )
     BINDINGS = [("escape", "dismiss", "Cancel")]
 
-    def __init__(self, options: list[tuple[str, str]]) -> None:
+    def __init__(
+        self,
+        options: list[tuple[str, str]] | list[tuple[str, str, bool]],
+        title: str = "Mark the shown issues matching any chosen option of each group",
+        apply: str = "Mark",
+        none: str | None = "None",
+    ) -> None:
         super().__init__()
-        self.options = options  # (label, "group:value")
+        self.options = options  # (label, value[, chosen at first])
+        self.heading, self.apply_label, self.none_label = title, apply, none
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Static("Mark the shown issues matching any chosen option of each group")
+            yield Static(self.heading)
             yield SelectionList[str](*self.options, id="marks")
             with Horizontal(classes="buttons"):
-                yield Button("Mark", id="marks-apply", variant="primary")
-                yield Button("None", id="marks-none")
+                yield Button(self.apply_label, id="marks-apply", variant="primary")
+                if self.none_label:
+                    yield Button(self.none_label, id="marks-none")
 
     @on(Button.Pressed, "#marks-apply")
     def apply(self) -> None:
