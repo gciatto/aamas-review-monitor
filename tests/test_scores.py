@@ -145,7 +145,9 @@ def test_areas_command_prints_the_table_and_writes_csv(monkeypatch, rubrics, tmp
     cli.main(["areas", "--sort=-ROBOT", "--csv", str(out_csv)])
     out = capsys.readouterr().out.splitlines()
     assert out[0].startswith("bge-m3, title+keywords+abstract; rubrics ")
-    assert out[1].split() == ["#", "LEARN", "ROBOT", "best", "margin", "reviews", "rating", "±"] + [
+    assert out[1].split() == ["#", "LEARN", "ROBOT", "best", "margin", "label", "reviews"] + [
+        "rating",
+        "±",
         "conf.",
         "meta",
         "title",
@@ -160,3 +162,76 @@ def test_areas_command_prints_the_table_and_writes_csv(monkeypatch, rubrics, tmp
     assert "LEARN" not in out[1] and len(out) == 3
     with pytest.raises(SystemExit, match="Cannot include pdf"):
         cli.main(["areas", "--include", "title,pdf"])
+
+
+def test_labelled_papers_join_their_area_but_never_score_themselves(monkeypatch, rubrics):
+    FakeEndpoint(monkeypatch)
+    resolves_to(monkeypatch, "127.0.0.1")
+    s, directories = models.settings(CONFIG), (core.DIR_PAPERS, core.DIR_EMBEDDINGS)
+    labels = {1: "ROBOT", 2: "ROBOT"}
+    results, _ = areas.score(
+        RECORDS, rubrics, s, ("title", "abstract"), CONFIG, directories, labels=labels
+    )
+    first = [text for _, text in results[1]["nearest"]["ROBOT"]]
+    assert "#2 (labelled ROBOT)" in first and "#1 (labelled ROBOT)" not in first
+    assert areas.accuracy(results, labels) == ({2}, {1, 2}, 2)
+    assert areas.agreement(results, labels) == "labels: best area 1/2, top 3 2/2"
+    assert areas.agreement(results, {9: "LEARN"}) == "no labelled papers scored yet"
+
+
+def test_feedback_says_what_an_edit_fixed_and_broke(monkeypatch, rubrics):
+    FakeEndpoint(monkeypatch)
+    resolves_to(monkeypatch, "127.0.0.1")
+    s, directories = models.settings(CONFIG), (core.DIR_PAPERS, core.DIR_EMBEDDINGS)
+    include = ("title", "abstract")
+    areas.score(RECORDS, rubrics, s, include, CONFIG, directories)  # papers embedded once
+    labels = {1: "LEARN", 2: "LEARN"}
+    learn = rubrics["LEARN"] | {"topics": [*rubrics["LEARN"]["topics"], "Robots in swarms"]}
+    after = rubrics | {"LEARN": learn}
+    lines, results = areas.revise(
+        rubrics, after, RECORDS, labels, s, include, CONFIG, directories, cache_only=False
+    )
+    assert lines == [
+        "LEARN: own topics nearest it 2/2 -> 2/3",
+        "Labelled papers, best area: 1/2 -> 2/2; top 3: 2/2 -> 2/2",
+        "Fixed: #2; broken: none",
+    ]
+    assert areas.ranking(results[2])[0] == "LEARN"
+    lines, _ = areas.revise(after, rubrics, RECORDS, labels, s, include, CONFIG, directories)
+    assert lines[-1] == "Fixed: none; broken: #2"
+    lines, _ = areas.revise(rubrics, after, RECORDS, {}, s, include, CONFIG, directories)
+    assert lines[-1].startswith("No labelled papers")
+
+
+def test_label_command_and_feedback_after_editing_a_rubric(monkeypatch, rubrics, capsys):
+    FakeEndpoint(monkeypatch)
+    resolves_to(monkeypatch, "127.0.0.1")
+    monkeypatch.setattr(core, "load_config", lambda: CONFIG | {"areas_include": ["title"]})
+    papers.save(RECORDS, core.DIR_PAPERS, [])
+    cli.main(["label"])
+    assert capsys.readouterr().out == "No paper is labelled\n"
+    cli.main(["label", "2", "LEARN"])
+    cli.main(["label", "1", "LEARN"])
+    assert capsys.readouterr().out.endswith("#1  LEARN\n#2  LEARN\n")
+    with pytest.raises(SystemExit, match="Which area"):
+        cli.main(["label", "1", "NOPE"])
+    areas.score(  # the papers' titles embedded, as by `areas`
+        RECORDS,
+        rubrics,
+        models.settings(CONFIG),
+        ("title",),
+        CONFIG,
+        (core.DIR_PAPERS, core.DIR_EMBEDDINGS),
+    )
+
+    def editor(command, check):
+        file = command[-1]
+        text = open(file, encoding="utf-8").read()
+        open(file, "w", encoding="utf-8").write(text.replace("- Multiagent learning", "- Swarms"))
+
+    monkeypatch.setattr(cli.subprocess, "run", editor)
+    cli.main(["rubrics", "edit", "LEARN"])
+    out = capsys.readouterr().out
+    assert "LEARN: own topics nearest it" in out and "Fixed: #2; broken: none" in out
+    cli.main(["label", "2", "--undo"])
+    assert capsys.readouterr().out == "#1  LEARN\n"

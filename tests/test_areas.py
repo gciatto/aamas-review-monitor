@@ -65,6 +65,9 @@ def test_the_acs_copy_replaces_the_shipped_rubric(tmp_path):
 
 
 def test_rubrics_command_extracts_lists_shows_and_edits(monkeypatch, capsys):
+    from tests.test_models import FakeEndpoint
+
+    FakeEndpoint(monkeypatch)  # editing reports what the edit changed: topics get embedded
     monkeypatch.setattr(areas, "extract", lambda url: areas.parse(PAGE, url))
     cli.main(["rubrics", "extract"])
     assert "LEARN  saved" in capsys.readouterr().out

@@ -291,6 +291,16 @@ def fingerprint(rubrics: dict[str, dict]) -> str:
     return hashlib.sha256("".join(map(dump, rubrics.values())).encode()).hexdigest()[:12]
 
 
+def area_vectors(
+    rubrics: dict[str, dict], s: models.Settings, cache: Path, cache_only: bool = False
+) -> dict[str, list[list[float]]]:
+    """The vectors of each area's texts (public: they may go to any endpoint)."""
+    area_texts = {c: texts(r) for c, r in rubrics.items()}
+    flat = [t for ts in area_texts.values() for t in ts]
+    vectors = iter(models.embed(s, flat, cache, private=False, cache_only=cache_only))
+    return {c: [next(vectors) for _ in ts] for c, ts in area_texts.items()}
+
+
 def score(
     records: list[dict],
     rubrics: dict[str, dict],
@@ -300,17 +310,16 @@ def score(
     directories: tuple[Path, Path],
     cache_only: bool = False,
     progress: Callable[[int, int], None] | None = None,
+    labels: dict[int, str] | None = None,
 ) -> tuple[dict[int, dict], list[str]]:
     """Area scores of each paper: similarity (mean of the `areas_top_k` nearest of the area's
-    vectors), share, and the nearest topics as evidence; plus why some papers have none. The
-    papers' text only goes to local endpoints. `directories`: the papers', the embeddings'."""
+    vectors), share, and the nearest texts as evidence; plus why some papers have none. Papers
+    the AC labelled join their area's vectors, except when scoring themselves. The papers' text
+    only goes to local endpoints. `directories`: the papers', the embeddings'."""
     folder, cache = directories
     k, temperature = config["areas_top_k"], config["areas_temperature"]
-    area_texts = {c: texts(r) for c, r in rubrics.items()}
-    flat = [t for ts in area_texts.values() for t in ts]
-    vectors = iter(models.embed(s, flat, cache, private=False, cache_only=cache_only))
-    by_area = {c: [next(vectors) for _ in ts] for c, ts in area_texts.items()}
-    results, failures = {}, []
+    by_area = area_vectors(rubrics, s, cache, cache_only)
+    vectors, failures = {}, []
     for count, record in enumerate(records, 1):
         if progress:
             progress(count - 1, len(records))
@@ -319,18 +328,28 @@ def score(
             if not chunks:
                 raise LookupError(f"nothing to embed among {', '.join(include)}")
             found = iter(models.embed(s, sum(chunks, []), cache, True, cache_only))
-            vector = models._unit(_mean([_mean([next(found) for _ in p]) for p in chunks]))
+            vectors[record["number"]] = models._unit(
+                _mean([_mean([next(found) for _ in p]) for p in chunks])
+            )
         except (LookupError, FileNotFoundError) as e:
             failures.append(f"#{record['number']}: {e}")
-            continue
+    labelled = {
+        code: [(n, v) for n, v in vectors.items() if (labels or {}).get(n) == code]
+        for code in rubrics
+    }
+    results = {}
+    for number, vector in vectors.items():
         similarities, nearest_ = {}, {}
-        for code, vs in by_area.items():
+        for code, rubric in rubrics.items():
+            others = [(m, v) for m, v in labelled[code] if m != number]
+            vs = by_area[code] + [v for _, v in others]
+            described = texts(rubric) + [f"#{m} (labelled {code})" for m, _ in others]
             similarities[code] = similarity(vector, vs, k)
-            near = heapq.nlargest(
-                3, zip((round(sum(map(operator.mul, vector, v)), 4) for v in vs), area_texts[code])
-            )
-            nearest_[code] = [[cos, text] for cos, text in near]
-        results[record["number"]] = {
+            cosines = (round(sum(map(operator.mul, vector, v)), 4) for v in vs)
+            nearest_[code] = [
+                [cos, text] for cos, text in heapq.nlargest(3, zip(cosines, described))
+            ]
+        results[number] = {
             "similarities": similarities,
             "shares": shares(similarities, temperature),
             "nearest": nearest_,
@@ -338,6 +357,87 @@ def score(
     if progress:
         progress(len(records), len(records))
     return results, failures
+
+
+def ranking(result: dict) -> list[str]:
+    """Area codes from the best; ties go to the first code alphabetically."""
+    return [c for c, _ in sorted(result["shares"].items(), key=lambda cs: (-cs[1], cs[0]))]
+
+
+def accuracy(results: dict[int, dict], labels: dict[int, str]) -> tuple[set[int], set[int], int]:
+    """Of the labelled papers that have scores: those whose label is the best area, those
+    whose label is among the best three, and how many there are."""
+    scored = {n: ranking(results[n]) for n in labels if n in results}
+    top1 = {n for n, r in scored.items() if r[0] == labels[n]}
+    top3 = {n for n, r in scored.items() if labels[n] in r[:3]}
+    return top1, top3, len(scored)
+
+
+def agreement(results: dict[int, dict], labels: dict[int, str]) -> str:
+    """How far the scores agree with the AC's labels, in one line."""
+    top1, top3, total = accuracy(results, labels)
+    if not total:
+        return "no labelled papers scored yet"
+    return f"labels: best area {len(top1)}/{total}, top 3 {len(top3)}/{total}"
+
+
+def _papers(numbers: set[int]) -> str:
+    return " ".join(f"#{n}" for n in sorted(numbers)) or "none"
+
+
+def feedback(
+    before: dict[str, dict],
+    after: dict[str, dict],
+    vectors: tuple[dict, dict],
+    results: tuple[dict[int, dict], dict[int, dict]],
+    labels: dict[int, str],
+    k: int,
+) -> list[str]:
+    """What an edit of the rubrics changed: how many topics of each edited area land in it when
+    left out, and how many labelled papers get their label as best area (which it fixed, which
+    it broke). `vectors`, `results`: before and after the edit."""
+    lines = []
+    left_out = [confusion(rubrics, v, k) for rubrics, v in zip((before, after), vectors)]
+    for code in [c for c in after if before.get(c) != after[c]]:
+        old, new = (found.get(code, Counter()) for found in left_out)
+        total = (len(before[code]["topics"]) if code in before else 0, len(after[code]["topics"]))
+        lines.append(
+            f"{code}: own topics nearest it {old[code]}/{total[0]} -> {new[code]}/{total[1]}"
+        )
+    (old1, old3, n0), (new1, new3, n1) = (accuracy(r, labels) for r in results)
+    if not n1:
+        return lines + ["No labelled papers: label some in the Areas tab to see what edits do"]
+    lines.append(
+        f"Labelled papers, best area: {len(old1)}/{n0} -> {len(new1)}/{n1}; "
+        f"top 3: {len(old3)}/{n0} -> {len(new3)}/{n1}"
+    )
+    lines.append(f"Fixed: {_papers(new1 - old1)}; broken: {_papers(old1 - new1)}")
+    return lines
+
+
+def revise(
+    before: dict[str, dict],
+    after: dict[str, dict],
+    records: list[dict],
+    labels: dict[int, str],
+    s: models.Settings,
+    include: tuple[str, ...],
+    config: dict,
+    directories: tuple[Path, Path],
+    cache_only: bool = False,
+) -> tuple[list[str], dict[int, dict]]:
+    """Feedback on an edit of the rubrics (see `feedback`), and the scores after it. The areas'
+    texts are embedded if needed; papers are scored from the cache only, so it stays quick."""
+    cache = directories[1]
+    vectors = (
+        area_vectors(before, s, cache, cache_only),
+        area_vectors(after, s, cache, cache_only),
+    )
+    old, new = (
+        score(records, r, s, include, config, directories, True, labels=labels)[0]
+        for r in (before, after)
+    )
+    return feedback(before, after, vectors, (old, new), labels, config["areas_top_k"]), new
 
 
 def metrics(paper: dict) -> dict:
@@ -358,9 +458,14 @@ def metrics(paper: dict) -> dict:
     }
 
 
-def rows(snapshot: dict, records: dict[int, dict], results: dict[int, dict]) -> list[dict]:
+def rows(
+    snapshot: dict,
+    records: dict[int, dict],
+    results: dict[int, dict],
+    labels: dict[int, str] | None = None,
+) -> list[dict]:
     """One row per active paper: number, title, each area's share, best area and its margin
-    over the second, then the review figures. Missing values are None."""
+    over the second, the AC's label, then the review figures. Missing values are None."""
     found = []
     for paper in snapshot["papers"]:
         if paper.get("status", "active") != "active":
@@ -368,10 +473,12 @@ def rows(snapshot: dict, records: dict[int, dict], results: dict[int, dict]) -> 
         number, result = paper["number"], results.get(paper["number"])
         record = records.get(number)
         row = {"number": number, "title": _value(record["content"], "title") if record else None}
+        row["label"] = (labels or {}).get(number)
         if result:
-            ranked = sorted(result["shares"].items(), key=lambda cs: (-cs[1], cs[0]))
-            row |= result["shares"] | {"best": ranked[0][0]}
-            row["margin"] = round(ranked[0][1] - ranked[1][1], 4) if len(ranked) > 1 else None
+            best = ranking(result)
+            row |= result["shares"] | {"best": best[0]}
+            shares_ = result["shares"]
+            row["margin"] = round(shares_[best[0]] - shares_[best[1]], 4) if len(best) > 1 else None
         found.append(row | metrics(paper))
     return found
 

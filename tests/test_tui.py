@@ -457,7 +457,7 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             assert "Please check the reviews." in str(app.query_one("#history-entry").render())
             await pilot.press("t")  # Areas: loads the cached scores (none here)
             await done(app, pilot, lambda: app.area_results is not None)
-            await pilot.press("t")  # back to Papers
+            await pilot.press("t", "t")  # Rubrics, then back to Papers
             table = app.query_one("#issues")
             rows = [table.get_row_at(r) for r in range(table.row_count)]
             commented = [r for r in rows if r[2] == 7 and r[1] != "🟢"]
@@ -693,5 +693,70 @@ def test_areas_tab_scores_sorts_hides_and_explains(monkeypatch):
             labels = [str(c.label) for c in table.columns.values()]
             assert "LEARN" not in labels and labels[1] == "ROBOT ▲1"
             assert core.areas_view() == {"hidden": ["LEARN"], "sort": [("ROBOT", False)]}
+
+    asyncio.run(scenario())
+
+
+def test_labels_and_rubric_edits_report_what_they_change(monkeypatch):
+    from textual.widgets import OptionList, TextArea
+
+    from aamas_review_monitor import areas, papers
+    from tests.test_models import FakeEndpoint, resolves_to
+    from tests.test_scores import CONFIG as AREAS_CONFIG
+    from tests.test_scores import PAGE, RECORDS
+
+    FakeEndpoint(monkeypatch)
+    resolves_to(monkeypatch, "127.0.0.1")
+    monkeypatch.setattr(areas, "DIR_RUBRICS_DEFAULT", core.DIR_DATA / "none")
+    for rubric in areas.parse(PAGE, "https://example.org/call"):
+        areas.save(rubric, core.DIR_RUBRICS)
+    papers.save(RECORDS, core.DIR_PAPERS, [])
+    core.DIR_SNAPSHOTS.mkdir(parents=True)
+    snapshot = {"taken_at": "2026-11-11T08:00:00", "papers": [paper(1), paper(2)]}
+    (core.DIR_SNAPSHOTS / "2026-11-11T080000.json").write_text(json.dumps(snapshot))
+    config = AREAS_CONFIG | {"areas_include": ["title", "abstract"]}
+
+    async def scenario():
+        app = Monitor(config)
+        async with app.run_test(size=(160, 40)) as pilot:
+            await pilot.press("t", "t", "t")
+            await done(app, pilot, lambda: app.area_results is not None)
+            await pilot.press("k")
+            await pilot.click("#marks-apply")
+            await done(app, pilot, lambda: bool(app.area_results))
+            app.sort_areas("number")
+            table = app.query_one("#areas")
+            await pilot.press("y")  # #1: its best area, LEARN
+            await done(app, pilot, lambda: app.labels == {1: "LEARN"})
+            assert table.get_row_at(0)[5].plain == "LEARN"  # #, LEARN, ROBOT, Best, Margin, Label
+            await pilot.press("down", "b")  # #2: pick LEARN, its second area
+            options = app.screen.query_one(OptionList)
+            assert options.get_option_at_index(0).id == "ROBOT"
+            options.highlighted = 1
+            await pilot.press("enter")
+            await done(app, pilot, lambda: app.labels == {1: "LEARN", 2: "LEARN"})
+            assert "labels: best area 1/2" in str(app.query_one("#area-detail").render())
+
+            await pilot.press("t")  # Rubrics: LEARN in the editor
+            editor = app.query_one("#rubric-editor", TextArea)
+            assert app.rubric_code == "LEARN" and "Multiagent learning" in editor.text
+            editor.load_text(editor.text.replace("- Multiagent learning", "- area: ["))
+            await pilot.press("ctrl+s")
+            assert "not saved" in str(app.query_one("#rubric-note").render())
+            editor.load_text(
+                areas.dump(app.rubrics["LEARN"]).replace(
+                    "- Multiagent learning", "- Multiagent learning\n- Robots in swarms"
+                )
+            )
+            assert "LEARN" in app.rubric_drafts
+            await pilot.press("ctrl+s")
+            await done(app, pilot, lambda: "changed" in str(app.query_one("#rubric-note").render()))
+            note = str(app.query_one("#rubric-note").render())
+            assert "Fixed: #2; broken: none" in note and app.rubric_drafts == {}
+            assert areas.load(core.DIR_RUBRICS)["LEARN"]["topics"][-1] == "Robots in swarms"
+            assert app.query_one("#rubrics").get_row_at(0)[5] == "yours, edited"
+            editor.load_text("anything")
+            await pilot.press("ctrl+r")
+            assert "Robots in swarms" in editor.text
 
     asyncio.run(scenario())

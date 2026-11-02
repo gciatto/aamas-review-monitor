@@ -193,9 +193,10 @@ Paper lists (`N ...`) default to all your papers.
 | `comment [N ...] [--spcs] [--text FILE] [--edit]` | Post each paper's open issues (or the file's text) as a comment on its forum, readable by PCs and SACs (and SPCs with `--spcs`), after you type `SEND` (`--edit`: edit each first) |
 | `history [N ...] [--full]` | Emails and comments sent from the app, newest first, optionally only about some papers |
 | `ignore [N CODE ...] [--undo]` | Ignore issues of a paper (codes are in brackets in `issues N`), or count them again; without arguments, list the ignored ones |
-| `rubrics list` / `show CODE` / `edit CODE` | The area rubrics (one YAML file per area of the call: topics, description, exemplars, rules): list them, print one, or edit your copy in `$EDITOR` (checked on save) |
+| `rubrics list` / `show CODE` / `edit CODE` | The area rubrics (one YAML file per area of the call: topics, description, exemplars, rules): list them, print one, or edit your copy in `$EDITOR` (checked on save; then what the edit changed, as in the Rubrics tab) |
 | `rubrics check` | Validate the rubrics and embed their topics: where each area's topics land when left out of it, i.e. which areas the rubrics fail to separate |
 | `areas [N ...] [--include DATA] [--show CODES] [--sort=COLUMNS] [--csv FILE]` | Each paper's share of each area (%, summing to 100), its best area and margin over the second, reviews done/assigned, mean rating ± spread, mean confidence, meta-review recommendation. Embeds what is missing (paper data only to local endpoints). `--include` picks among `title,keywords,abstract,text,reviews,meta-reviews` (`text`: downloaded PDFs); `--sort=LEARN,-rating` sorts on several columns, a minus for descending; `--show` overrides the areas hidden in the TUI |
+| `label [N CODE] [--undo]` | Label a paper with the area you judge right, or remove its label; without arguments, list the labels |
 | `rubrics extract [--url URL] [--force]` | Extract the rubrics from the call's public page (`url_areas`) into your copies, keeping those you have (`--force` replaces them) |
 
 Options that come before the command apply to every OpenReview request. `--rate` caps how
@@ -228,7 +229,7 @@ data included and the rubrics' version.
 
 ## Terminal UI
 
-`tui` has four tabs (`t` switches between them):
+`tui` has five tabs (`t` switches between them):
 
 - **Papers:** every paper, with one row per issue and a 🟢 row for each paper without issues.
   The Commented and Emailed columns give the date of the last comment or templated email
@@ -244,6 +245,17 @@ data included and the rubrics' version.
   the two before it break ties. Beside the table, the selected paper's three best areas with
   their nearest topics, as evidence. Opening the tab shows cached scores only; `k` embeds the
   rest. The software measures fit to areas; it never scores quality or suggests decisions.
+  `b` labels the selected paper with the area you judge right, `y` confirms its best area.
+- **Rubrics:** the area rubrics, one YAML editor each. `ctrl+s` checks and saves your copy, then
+  shows what the edit changed: how many of the area's topics are nearest to it when left out,
+  and how many labelled papers get their label as best area, before and after, naming the
+  papers it fixed and broke. `ctrl+r` drops unsaved edits; edits of other areas are kept while
+  you switch between them.
+
+**Labels are how the scores get better.** A labelled paper joins its area's vectors (never
+when it is itself scored), and every rubric edit is measured against the labels, so you can
+see whether a new topic, exemplar or rule helps on your own papers. Labels live in
+`labels.json`; the agreement with them is in every result's header.
 
 The line above the tabs says where the process stands ("Reviewing: reviews due 13 Nov, in 25
 days") and how old the snapshot is, in yellow once it is past `snapshot_stale_hours`.
@@ -277,7 +289,9 @@ in the command palette (`ctrl+p`):
 | `e` | Free-form email to reviewers, late reviewers or SPCs, reviewed and editable before you type `SEND` |
 | `k` | Score the papers' areas, choosing what to embed (title, keywords, abstract, PDF text, reviews, meta-reviews); paper data only goes to local endpoints |
 | `h` | Choose the areas the Areas tab shows (kept with the sort order in `areas-view.json`) |
-| `t` | Switch between the Papers, SPCs, History and Areas tabs |
+| `b` / `y` | Label the selected paper's area: pick it (best first, with shares) / confirm its best area (Areas tab) |
+| `ctrl+s` / `ctrl+r` | Save the edited rubric and show what it changed / drop the unsaved edits (Rubrics tab) |
+| `t` | Switch between the Papers, SPCs, History, Areas and Rubrics tabs |
 | `s` | Sync with OpenReview |
 | `l` | Legend of all checks; type to filter them, Esc closes |
 | `r` / `q` | Reload / quit |
@@ -392,7 +406,8 @@ elsewhere.
   MinHash fingerprints of reviews (comparable, but the text can't be recovered from them), and
   which entries of the marker lists a review matches.
 - Paper content, reviews, PDFs, extracted text and document check results are cached in
-  `~/.aamas-review-monitor/papers/`, what the app sent in `history.jsonl` next to it, the issues you ignore in `ignored.json`, and your copies of the area rubrics in `rubrics/`.
+  `~/.aamas-review-monitor/papers/`, what the app sent in `history.jsonl` next to it, the issues you ignore in `ignored.json`, your copies of the area rubrics in `rubrics/`, your
+  area labels in `labels.json`, and the embeddings (with the text embedded) in `cache/embeddings/`.
 - **Run it in your own terminal, not through an AI coding assistant.** Its output and its cache
   hold submissions, reviews and the identities of reviewers and SPCs.
 - The project is developed and tested only on synthetic data. The screenshots above are

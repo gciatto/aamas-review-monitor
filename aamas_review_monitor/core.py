@@ -35,6 +35,7 @@ FILE_IGNORED = DIR_DATA / "ignored.json"  # issues the user chose to ignore: [nu
 DIR_RUBRICS = DIR_DATA / "rubrics"  # the AC's copies of the area rubrics
 DIR_EMBEDDINGS = DIR_DATA / "cache" / "embeddings"  # one YAML per model and text
 FILE_AREAS_VIEW = DIR_DATA / "areas-view.json"  # areas hidden from the view, its sort order
+FILE_LABELS = DIR_DATA / "labels.json"  # the area the AC gives each paper: {number: code}
 
 
 def load_config() -> dict:
@@ -254,6 +255,21 @@ def areas_view() -> dict:
 def save_areas_view(view: dict) -> None:
     DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
     FILE_AREAS_VIEW.write_text(json.dumps(view), encoding="utf-8")
+
+
+def labels() -> dict[int, str]:
+    """The area the AC gave each paper they labelled."""
+    if not FILE_LABELS.is_file():
+        return {}
+    return {int(n): c for n, c in json.loads(FILE_LABELS.read_text(encoding="utf-8")).items()}
+
+
+def label(number: int, code: str | None) -> dict[int, str]:
+    """Labels a paper with an area (None: removes its label); returns all labels."""
+    found = {n: c for n, c in sorted((labels() | {number: code}).items()) if c}
+    DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+    FILE_LABELS.write_text(json.dumps(found, indent=1), encoding="utf-8")
+    return found
 
 
 def records(*numbers: int) -> list[dict]:

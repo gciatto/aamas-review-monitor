@@ -146,6 +146,12 @@ def main(argv: list[str] | None = None) -> None:
         help="columns, the first deciding most, minus for descending: --sort=LEARN,-rating",
     )
     areas_cmd.add_argument("--csv", type=Path, help="also write every column to this CSV file")
+    label_cmd = commands.add_parser(
+        "label", help="give a paper the area you judge right (no arguments: list the labels)"
+    )
+    label_cmd.add_argument("number", type=int, nargs="?")
+    label_cmd.add_argument("code", nargs="?", help="area code, e.g. LEARN")
+    label_cmd.add_argument("--undo", action="store_true", help="remove the paper's label")
     for cmd in (email_cmd, outreach_cmd, comment_cmd):
         cmd.add_argument(
             "--edit", action="store_true", help="edit each message in $EDITOR before the preview"
@@ -335,6 +341,13 @@ def main(argv: list[str] | None = None) -> None:
         rubrics(args, config)
     elif args.command == "areas":
         areas_table(args, config)
+    elif args.command == "label":
+        if args.number is not None:
+            codes = list(areas.files(core.DIR_RUBRICS))
+            if not args.undo and args.code not in codes:
+                sys.exit(f"Which area? One of {', '.join(codes)}")
+            core.label(args.number, None if args.undo else args.code)
+        print("\n".join(f"#{n}  {c}" for n, c in core.labels().items()) or "No paper is labelled")
     elif args.command == "email":
         body = args.body.read_text(encoding="utf-8")
         drafts, unreachable = outreach.direct(
@@ -397,10 +410,28 @@ def rubrics(args: argparse.Namespace, config: dict) -> None:
         areas.save(loaded[args.code], core.DIR_RUBRICS)
     subprocess.run([*editor(), str(file)], check=True)
     try:
-        areas.read(file.read_text(encoding="utf-8"), args.code)
+        after = loaded | {args.code: areas.read(file.read_text(encoding="utf-8"), args.code)}
     except ValueError as e:
         sys.exit(f"{file}: {e}. Fix it with `rubrics edit {args.code}`")
     print(f"Saved {file}")
+    if after == loaded:
+        return
+    try:
+        s = models.settings(config, **embeddings_given(args))
+        lines, _ = areas.revise(
+            loaded,
+            after,
+            core.records(),
+            core.labels(),
+            s,
+            tuple(config["areas_include"]),
+            config,
+            (core.DIR_PAPERS, core.DIR_EMBEDDINGS),
+            args.cache_only,
+        )
+    except (LookupError, PermissionError, ValueError, OSError) as e:
+        sys.exit(f"No feedback on the edit: {e}")
+    print("\n".join(lines))
 
 
 def embeddings_given(args: argparse.Namespace) -> dict:
@@ -435,30 +466,43 @@ def areas_table(args: argparse.Namespace, config: dict) -> None:
             f"Cannot include {', '.join(sorted(unknown))}: choose among {', '.join(areas.INCLUDE)}"
         )
     view = core.areas_view()
-    records = load_records(*args.numbers)
+    records, labels = load_records(), core.labels()  # all: labelled papers join their areas
     try:
         rubrics = areas.load(core.DIR_RUBRICS)
         s = models.settings(config, **embeddings_given(args))
         directories = (core.DIR_PAPERS, core.DIR_EMBEDDINGS)
         results, failures = areas.score(
-            records, rubrics, s, include, config, directories, args.cache_only
+            records, rubrics, s, include, config, directories, args.cache_only, labels=labels
         )
     except (LookupError, PermissionError, ValueError, OSError) as e:
         sys.exit(f"Area scores: {e}")
     shown = args.show.split(",") if args.show else [c for c in rubrics if c not in view["hidden"]]
-    numbers = {r["number"] for r in records}
+    numbers = set(args.numbers) or {r["number"] for r in records}
     found = [
         r
-        for r in areas.rows(latest, {r["number"]: r for r in records}, results)
+        for r in areas.rows(latest, {r["number"]: r for r in records}, results, labels)
         if r["number"] in numbers
     ]
     found = areas.ordered(found, areas.sort_spec(args.sort) if args.sort else view["sort"])
     print(
         f"{s.model}, {'+'.join(include)}; rubrics {areas.fingerprint(rubrics)}; nearest "
-        f"{config['areas_top_k']}, temperature {config['areas_temperature']}; shares in %"
+        f"{config['areas_top_k']}, temperature {config['areas_temperature']}; shares in %; "
+        + areas.agreement(results, labels)
     )
-    head = ["#"] + shown + ["best", "margin", "reviews", "rating", "±", "conf.", "meta", "title"]
-    widths = [5] + [max(len(c), 3) for c in shown] + [6, 6, 7, 6, 4, 5, 12, 0]
+    head = [
+        "#",
+        *shown,
+        "best",
+        "margin",
+        "label",
+        "reviews",
+        "rating",
+        "±",
+        "conf.",
+        "meta",
+        "title",
+    ]
+    widths = [5] + [max(len(c), 3) for c in shown] + [6, 6, 6, 7, 6, 4, 5, 12, 0]
     print(" ".join(f"{h:>{w}}" for h, w in zip(head, widths)).rstrip())
     for r in found:
         values = [cell(r["number"], 5)] + [
@@ -467,6 +511,7 @@ def areas_table(args: argparse.Namespace, config: dict) -> None:
         values += [
             cell(r.get("best"), 6),
             cell(round(r["margin"] * 100) if r.get("margin") is not None else None, 6),
+            cell(r["label"], 6),
             cell(f"{r['reviews']}/{r['reviewers']}", 7),
             cell(r["rating"], 6),
             cell(r["spread"], 4),
@@ -475,10 +520,12 @@ def areas_table(args: argparse.Namespace, config: dict) -> None:
             (r["title"] or "")[:60],
         ]
         print(" ".join(values))
+    failures = [f for f in failures if int(f[1:].split(":")[0]) in numbers]
     if failures:
         print("\n".join(f"Not scored: {f}" for f in failures))
     if args.csv:
-        columns = ["number", "title", *rubrics, "best", "margin", *areas.metrics({"reviews": []})]
+        columns = ["number", "title", *rubrics, "best", "margin", "label"]
+        columns += list(areas.metrics({"reviews": []}))
         with args.csv.open("w", newline="", encoding="utf-8") as file:
             writer = csv.DictWriter(file, columns, extrasaction="ignore")
             writer.writeheader()
