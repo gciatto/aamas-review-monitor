@@ -21,7 +21,7 @@ from requests.adapters import HTTPAdapter
 from aamas_review_monitor.core import LoggedRetry
 
 PRESETS = {
-    "ollama": {"url": "http://localhost:11434/v1", "model": "bge-m3"},
+    "ollama": {"url": "http://localhost:11434/v1", "model": "nomic-embed-text"},
     "openai": {"url": "https://api.openai.com/v1", "model": "text-embedding-3-small"},
 }
 BATCH = 32  # texts per request

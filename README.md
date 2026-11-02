@@ -210,7 +210,7 @@ message goes out twice.
 The `--embeddings-*` options set the embedding model used for area scores; each also comes from
 `AAMAS_MONITOR_EMBEDDINGS_<NAME>` (e.g. `AAMAS_MONITOR_EMBEDDINGS_API_KEY`, the only place
 besides the command line for a key), then from the config (`embeddings_*`). `--embeddings-vendor`
-picks a preset: `ollama` (`http://localhost:11434/v1`, `bge-m3`, the default) or `openai`;
+picks a preset: `ollama` (`http://localhost:11434/v1`, `nomic-embed-text`, the default: `ollama pull nomic-embed-text`) or `openai`;
 `--embeddings-url` and `--embeddings-model` override it, for any OpenAI-compatible server.
 **Paper data only goes to endpoints that resolve inside `--embeddings-networks`** (IP ranges,
 loopback only by default, e.g. `127.0.0.0/8,10.0.0.0/8`); the areas' public topics may go

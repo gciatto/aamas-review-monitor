@@ -144,7 +144,7 @@ def test_areas_command_prints_the_table_and_writes_csv(monkeypatch, rubrics, tmp
     out_csv = tmp_path / "areas.csv"
     cli.main(["areas", "--sort=-ROBOT", "--csv", str(out_csv)])
     out = capsys.readouterr().out.splitlines()
-    assert out[0].startswith("bge-m3, title+keywords+abstract; rubrics ")
+    assert out[0].startswith("nomic-embed-text, title+keywords+abstract; rubrics ")
     assert out[1].split() == ["#", "LEARN", "ROBOT", "best", "margin", "label", "reviews"] + [
         "rating",
         "±",

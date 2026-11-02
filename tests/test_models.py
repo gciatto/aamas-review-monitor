@@ -59,7 +59,7 @@ def resolves_to(monkeypatch, *addresses):
 
 def test_settings_come_from_given_then_environment_then_config_then_preset(monkeypatch):
     s = models.settings(CONFIG)
-    assert (s.url, s.model, s.api_key) == ("http://localhost:11434/v1", "bge-m3", "")
+    assert (s.url, s.model, s.api_key) == ("http://localhost:11434/v1", "nomic-embed-text", "")
     assert s.networks == ("127.0.0.0/8", "::1/128") and s.retries == 5
     monkeypatch.setenv("AAMAS_MONITOR_EMBEDDINGS_MODEL", "nomic-embed-text")
     monkeypatch.setenv("AAMAS_MONITOR_EMBEDDINGS_NETWORKS", "10.0.0.0/8, 127.0.0.0/8")

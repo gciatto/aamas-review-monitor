@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     embeddings.add_argument("--embeddings-vendor", help="preset: ollama or openai")
     embeddings.add_argument("--embeddings-url", help="base URL of the OpenAI-compatible API")
-    embeddings.add_argument("--embeddings-model", help="model name, e.g. bge-m3")
+    embeddings.add_argument("--embeddings-model", help="model name, e.g. nomic-embed-text")
     embeddings.add_argument("--embeddings-api-key", help="API key, if the endpoint wants one")
     embeddings.add_argument(
         "--embeddings-networks", help="IP ranges paper data may go to, e.g. 127.0.0.0/8,10.0.0.0/8"
