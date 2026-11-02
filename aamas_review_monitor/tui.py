@@ -1165,6 +1165,8 @@ class Monitor(App):
                 text.append(f"{code} {round(share * 100)}% (similarity {similarity:.3f})\n", "bold")
                 for cos, topic in result["nearest"][code]:
                     text.append(f"  {cos:.3f}  {topic[:90]}\n")
+                for held in result.get("rules", {}).get(code, []):
+                    text.append(f"  rule: {held[:90]}\n", "cyan")
         if row["label"]:
             text.append(f"Your label: {row['label']}\n")
         text.append(

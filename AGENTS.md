@@ -17,6 +17,7 @@ aamas_review_monitor/     the package, at the repo root (renamed by rename-templ
   documents.py    on-request document checks (xpdf tools, zipfile), cached per PDF version
   markers.py      signs of generated text: fixed phrase and word lists (resources/ai_*.txt), no model
   areas.py        area rubrics (YAML): extracted from the call's public page, the AC's copies
+  rules.py        rubric rules: string matching on a paper's local text (any/all/near/count/cites)
   models.py       embeddings: OpenAI-compatible client (ollama/openai presets), local-network
                   check for paper data, retries, sha512-named YAML cache
   outreach.py     email templates (resources/templates/*.txt) -> per-SPC / per-paper drafts

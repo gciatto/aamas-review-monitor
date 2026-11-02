@@ -227,6 +227,27 @@ cosine similarities with the area's topics, description and exemplars; a softmax
 takes more). `areas_include` sets what is embedded by default. Every result names the model, the
 data included and the rubrics' version.
 
+Rubric **rules** add evidence by plain string matching on the paper's local text (never sent
+anywhere; the PDF's text if downloaded), for what embeddings miss or get wrong:
+
+```yaml
+rules:
+- {any: [MARL, multi-agent reinforcement learning], in: [title, abstract], weight: 2}
+- {all: [equilibrium, learning], near: 10, none: [argumentation]}  # within 10 words
+- {count: '\b(Theorem|Lemma)\b', at_least: 3}                       # regex, case-sensitive
+- {cites: [NeurIPS, ICML, ICLR]}                                     # in the references
+- {any: [argumentation framework], weight: -2}                       # evidence against
+```
+
+Phrases match whole words in any case; `in` picks among `title`, `keywords`, `abstract`,
+`text`, `references`, `reviews`, `meta-reviews` (default: the first four). A rule that holds is
+worth 1 - 1/2^matches, times its weight (1 by default); an area's rule score is their weighted
+mean. When a paper matches at least one rule, a softmax at `areas_temperature_rules` turns the
+rule scores into shares, mixed in with weight `areas_weight_rules` (0.3); otherwise its shares
+are the embeddings' alone. The Areas tab lists the rules each paper matched, and agreement with
+your labels is also given per channel ("embeddings alone", "rules alone": the papers some rule
+matched), so you can see whether the rules earn their weight.
+
 ## Terminal UI
 
 `tui` has five tabs (`t` switches between them):

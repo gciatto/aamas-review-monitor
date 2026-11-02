@@ -19,7 +19,7 @@ from typing import Any
 import requests
 import yaml
 
-from aamas_review_monitor import models, papers
+from aamas_review_monitor import models, papers, rules
 from aamas_review_monitor.collector import replies
 from aamas_review_monitor.resources import DIR_RUBRICS_DEFAULT
 
@@ -145,6 +145,9 @@ def problems(rubric: Any, code: str | None = None) -> list[str]:
         found.append("exemplars should be a list of texts")
     if not isinstance(rubric["rules"], list):
         found.append("rules should be a list")
+    else:
+        for i, rule in enumerate(rubric["rules"], 1):
+            found += [f"rule {i}: {p}" for p in rules.problems(rule)]
     return found
 
 
@@ -337,6 +340,9 @@ def score(
         code: [(n, v) for n, v in vectors.items() if (labels or {}).get(n) == code]
         for code in rubrics
     }
+    by_number = {r["number"]: r for r in records}
+    ruled = any(r["rules"] for r in rubrics.values())
+    weight = config["areas_weight_rules"] if ruled else 0
     results = {}
     for number, vector in vectors.items():
         similarities, nearest_ = {}, {}
@@ -349,25 +355,52 @@ def score(
             nearest_[code] = [
                 [cos, text] for cos, text in heapq.nlargest(3, zip(cosines, described))
             ]
+        channels = {"embeddings": shares(similarities, temperature)}
+        held: dict[str, list[str]] = {}
+        if ruled:
+            paper_texts = rules.texts(by_number[number], config, folder)
+            scores = {}
+            for code, rubric in rubrics.items():
+                scores[code], held[code] = rules.score(rubric["rules"], paper_texts)
+            if any(held.values()):  # no rule matched: no evidence either way, embeddings alone
+                channels["rules"] = shares(scores, config["areas_temperature_rules"])
         results[number] = {
             "similarities": similarities,
-            "shares": shares(similarities, temperature),
+            "shares": {
+                c: round(
+                    (1 - weight) * channels["embeddings"][c] + weight * channels["rules"][c], 4
+                )
+                if "rules" in channels
+                else channels["embeddings"][c]
+                for c in rubrics
+            },
+            "channels": channels,
             "nearest": nearest_,
+            "rules": held,
         }
     if progress:
         progress(len(records), len(records))
     return results, failures
 
 
-def ranking(result: dict) -> list[str]:
-    """Area codes from the best; ties go to the first code alphabetically."""
-    return [c for c, _ in sorted(result["shares"].items(), key=lambda cs: (-cs[1], cs[0]))]
+def ranking(result: dict, channel: str | None = None) -> list[str]:
+    """Area codes from the best (by one channel alone, if given); ties go to the first code
+    alphabetically."""
+    found = result["channels"][channel] if channel else result["shares"]
+    return [c for c, _ in sorted(found.items(), key=lambda cs: (-cs[1], cs[0]))]
 
 
-def accuracy(results: dict[int, dict], labels: dict[int, str]) -> tuple[set[int], set[int], int]:
+def accuracy(
+    results: dict[int, dict], labels: dict[int, str], channel: str | None = None
+) -> tuple[set[int], set[int], int]:
     """Of the labelled papers that have scores: those whose label is the best area, those
-    whose label is among the best three, and how many there are."""
-    scored = {n: ranking(results[n]) for n in labels if n in results}
+    whose label is among the best three, and how many there are (by one channel alone, if
+    given and the results have it)."""
+    scored = {
+        n: ranking(results[n], channel)
+        for n in labels
+        if n in results and (channel is None or channel in results[n].get("channels", {}))
+    }
     top1 = {n for n, r in scored.items() if r[0] == labels[n]}
     top3 = {n for n, r in scored.items() if labels[n] in r[:3]}
     return top1, top3, len(scored)
@@ -378,7 +411,10 @@ def agreement(results: dict[int, dict], labels: dict[int, str]) -> str:
     top1, top3, total = accuracy(results, labels)
     if not total:
         return "no labelled papers scored yet"
-    return f"labels: best area {len(top1)}/{total}, top 3 {len(top3)}/{total}"
+    alone = [(c, accuracy(results, labels, c)) for c in ("embeddings", "rules")]
+    channels = ", ".join(f"{c} alone {len(a[0])}/{a[2]}" for c, a in alone if a[2])
+    more = f" ({channels})" if len(alone) > 1 and accuracy(results, labels, "rules")[2] else ""
+    return f"labels: best area {len(top1)}/{total}{more}, top 3 {len(top3)}/{total}"
 
 
 def _papers(numbers: set[int]) -> str:
@@ -412,6 +448,12 @@ def feedback(
         f"top 3: {len(old3)}/{n0} -> {len(new3)}/{n1}"
     )
     lines.append(f"Fixed: {_papers(new1 - old1)}; broken: {_papers(old1 - new1)}")
+    if any(r["rules"] for r in [*before.values(), *after.values()]):
+        alone = []
+        for channel in ("embeddings", "rules"):
+            (o, _, m), (n, _, t) = (accuracy(r, labels, channel) for r in results)
+            alone.append(f"{channel} {len(o)}/{m} -> {len(n)}/{t}")
+        lines.append(f"Best area by each channel alone: {'; '.join(alone)}")
     return lines
 
 

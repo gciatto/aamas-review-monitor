@@ -46,5 +46,7 @@
   "embeddings_backoff_max_seconds": 60,
   "areas_top_k": 3,
   "areas_temperature": 0.02,
+  "areas_temperature_rules": 0.1,
+  "areas_weight_rules": 0.3,
   "areas_include": ["title", "keywords", "abstract"]
 }
