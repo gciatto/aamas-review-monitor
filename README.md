@@ -194,6 +194,7 @@ Paper lists (`N ...`) default to all your papers.
 | `history [N ...] [--full]` | Emails and comments sent from the app, newest first, optionally only about some papers |
 | `ignore [N CODE ...] [--undo]` | Ignore issues of a paper (codes are in brackets in `issues N`), or count them again; without arguments, list the ignored ones |
 | `rubrics list` / `show CODE` / `edit CODE` | The area rubrics (one YAML file per area of the call: topics, description, exemplars, rules): list them, print one, or edit your copy in `$EDITOR` (checked on save) |
+| `rubrics check` | Validate the rubrics and embed their topics: where each area's topics land when left out of it, i.e. which areas the rubrics fail to separate |
 | `rubrics extract [--url URL] [--force]` | Extract the rubrics from the call's public page (`url_areas`) into your copies, keeping those you have (`--force` replaces them) |
 
 Options that come before the command apply to every OpenReview request. `--rate` caps how
@@ -203,6 +204,18 @@ downloads stay under OpenReview's rate limits rather than only reacting once the
 limits, server errors and connection failures, honouring `Retry-After`, for reads. The defaults
 are 8 retries, a first wait of 1 s and a longest wait of 120 s. Email is never retried, so no
 message goes out twice.
+
+The `--embeddings-*` options set the embedding model used for area scores; each also comes from
+`AAMAS_MONITOR_EMBEDDINGS_<NAME>` (e.g. `AAMAS_MONITOR_EMBEDDINGS_API_KEY`, the only place
+besides the command line for a key), then from the config (`embeddings_*`). `--embeddings-vendor`
+picks a preset: `ollama` (`http://localhost:11434/v1`, `bge-m3`, the default) or `openai`;
+`--embeddings-url` and `--embeddings-model` override it, for any OpenAI-compatible server.
+**Paper data only goes to endpoints that resolve inside `--embeddings-networks`** (IP ranges,
+loopback only by default, e.g. `127.0.0.0/8,10.0.0.0/8`); the areas' public topics may go
+anywhere. Embeddings are cached in `cache/embeddings/`, one YAML file per model and text named
+after the request's SHA-512, so reruns are identical and free; `--cache-only` never asks the
+endpoint. Retries work as above (`--embeddings-retries`, `--embeddings-backoff`,
+`--embeddings-backoff-max`).
 
 ## Terminal UI
 

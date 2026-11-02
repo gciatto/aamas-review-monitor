@@ -4,8 +4,11 @@ page, then edited by the AC. The AC's copies (in the data folder) replace the sh
 from __future__ import annotations
 
 import hashlib
+import heapq
 import json
+import operator
 import re
+from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -132,9 +135,11 @@ def problems(rubric: Any, code: str | None = None) -> list[str]:
         found.append("description should be a text")
     elif not topics and not rubric["description"].strip():
         found.append("topics and description are both empty: nothing describes the area")
-    for key in ("exemplars", "rules"):
-        if not isinstance(rubric[key], list):
-            found.append(f"{key} should be a list")
+    exemplars = rubric["exemplars"]
+    if not isinstance(exemplars, list) or not all(isinstance(e, str) for e in exemplars):
+        found.append("exemplars should be a list of texts")
+    if not isinstance(rubric["rules"], list):
+        found.append("rules should be a list")
     return found
 
 
@@ -190,3 +195,39 @@ def save(rubric: dict, directory: Path) -> Path:
     file = directory / f"{rubric['code']}.yaml"
     file.write_text(dump(rubric), encoding="utf-8")
     return file
+
+
+def texts(rubric: dict) -> list[str]:
+    """What describes an area, embedded one vector each: its topics, its description and its
+    exemplars (all public: rubrics never hold paper data)."""
+    description = [rubric["description"]] if rubric["description"].strip() else []
+    return [*rubric["topics"], *description, *rubric["exemplars"]]
+
+
+def similarity(vector: list[float], vectors: list[list[float]], k: int) -> float:
+    """Mean of the `k` highest cosine similarities (unit vectors), rounded so that float noise
+    across machines cannot reorder results."""
+    best = heapq.nlargest(k, (sum(map(operator.mul, vector, v)) for v in vectors))
+    return round(sum(best) / len(best), 4) if best else 0.0
+
+
+def nearest(scores: dict[str, float]) -> str:
+    """The best-scoring area; ties go to the first code alphabetically."""
+    return max(sorted(scores), key=scores.__getitem__)
+
+
+def confusion(rubrics: dict[str, dict], vectors: dict[str, list[list[float]]], k: int) -> dict:
+    """Where each area's topics land when left out of it: per area, how many of its topics are
+    nearest to each area (its own, ideally). Shows which areas the rubrics fail to separate."""
+    found: dict[str, Counter[str]] = {}
+    for code, own in vectors.items():
+        found[code] = Counter()
+        for i in range(len(rubrics[code]["topics"])):
+            scores = {
+                other: similarity(
+                    own[i], [v for j, v in enumerate(vs) if (other, j) != (code, i)], k
+                )
+                for other, vs in vectors.items()
+            }
+            found[code][nearest(scores)] += 1
+    return found

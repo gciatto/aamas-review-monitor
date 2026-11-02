@@ -25,3 +25,4 @@ def private_data(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(core, "FILE_HISTORY", data / "history.jsonl")
     monkeypatch.setattr(core, "FILE_IGNORED", data / "ignored.json")
     monkeypatch.setattr(core, "DIR_RUBRICS", data / "rubrics")
+    monkeypatch.setattr(core, "DIR_EMBEDDINGS", data / "cache" / "embeddings")

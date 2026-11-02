@@ -45,6 +45,29 @@ def main(argv: list[str] | None = None) -> None:
     retries.add_argument(
         "--backoff-max", type=float, dest="backoff_max_seconds", help="longest wait in seconds"
     )
+    embeddings = parser.add_argument_group(
+        "embeddings (area scores; defaults from AAMAS_MONITOR_EMBEDDINGS_<NAME>, then the config)"
+    )
+    embeddings.add_argument("--embeddings-vendor", help="preset: ollama or openai")
+    embeddings.add_argument("--embeddings-url", help="base URL of the OpenAI-compatible API")
+    embeddings.add_argument("--embeddings-model", help="model name, e.g. bge-m3")
+    embeddings.add_argument("--embeddings-api-key", help="API key, if the endpoint wants one")
+    embeddings.add_argument(
+        "--embeddings-networks", help="IP ranges paper data may go to, e.g. 127.0.0.0/8,10.0.0.0/8"
+    )
+    embeddings.add_argument("--embeddings-retries", type=int, help="retries after a failure")
+    embeddings.add_argument(
+        "--embeddings-backoff", type=float, dest="embeddings_backoff_seconds", help="first wait (s)"
+    )
+    embeddings.add_argument(
+        "--embeddings-backoff-max",
+        type=float,
+        dest="embeddings_backoff_max_seconds",
+        help="longest wait (s)",
+    )
+    embeddings.add_argument(
+        "--cache-only", action="store_true", help="never ask the endpoint: cached embeddings only"
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("sync", help="fetch papers and a new snapshot from OpenReview (read-only)")
     report_cmd = commands.add_parser("report", help="action queue from the latest snapshot")
@@ -102,9 +125,9 @@ def main(argv: list[str] | None = None) -> None:
     outreach_cmd.add_argument("template", help="a template key, from `templates`")
     outreach_cmd.add_argument("--spc", action="append", help="only this SPC (repeatable)")
     rubrics_cmd = commands.add_parser(
-        "rubrics", help="area rubrics: list, show or edit them, or extract them from the call"
+        "rubrics", help="area rubrics: list, show, edit, check them, or extract them from the call"
     )
-    rubrics_cmd.add_argument("action", choices=("list", "show", "edit", "extract"))
+    rubrics_cmd.add_argument("action", choices=("list", "show", "edit", "check", "extract"))
     rubrics_cmd.add_argument("code", nargs="?", help="area code, e.g. LEARN (show, edit)")
     rubrics_cmd.add_argument("--url", help="page of the areas (extract; config: url_areas)")
     rubrics_cmd.add_argument(
@@ -333,6 +356,21 @@ def rubrics(args: argparse.Namespace, config: dict) -> None:
             counts += f", {len(r['rules'])} rules"
             print(f"{code:6} {r['area']}  ({counts}; {', '.join(notes)})")
         return
+    if args.action == "check":
+        texts = {code: areas.texts(r) for code, r in loaded.items()}
+        try:
+            vectors = embedded(args, config, sum(texts.values(), []), private=False)
+        except (LookupError, PermissionError, ValueError, OSError) as e:
+            sys.exit(f"Embeddings: {e}")
+        by_area = {code: [vectors.pop(0) for _ in t] for code, t in texts.items()}
+        print(
+            f"Where each area's topics land when left out of it ({config['areas_top_k']} nearest):"
+        )
+        for code, counts in areas.confusion(loaded, by_area, config["areas_top_k"]).items():
+            others = ", ".join(f"{c} {n}" for c, n in counts.most_common() if c != code)
+            total = len(loaded[code]["topics"])
+            print(f"{code:6} {counts[code]}/{total} own" + (f"; {others}" if others else ""))
+        return
     if args.code not in loaded:
         sys.exit(f"Which area? One of {', '.join(loaded)}")
     if args.action == "show":
@@ -347,6 +385,21 @@ def rubrics(args: argparse.Namespace, config: dict) -> None:
     except ValueError as e:
         sys.exit(f"{file}: {e}. Fix it with `rubrics edit {args.code}`")
     print(f"Saved {file}")
+
+
+def embedded(
+    args: argparse.Namespace, config: dict, texts: list[str], private: bool
+) -> list[list[float]]:
+    """Embeddings with the settings from the command line, environment and config."""
+    from aamas_review_monitor import models
+
+    given = {
+        k.removeprefix("embeddings_"): v
+        for k, v in vars(args).items()
+        if k.startswith("embeddings_")
+    }
+    s = models.settings(config, **given)
+    return models.embed(s, texts, core.DIR_EMBEDDINGS, private, args.cache_only)
 
 
 def editor() -> list[str]:

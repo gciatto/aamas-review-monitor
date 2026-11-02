@@ -49,7 +49,7 @@ def test_dump_and_read_round_trip_and_problems_are_explained():
     assert areas.problems(empty) == [
         "code should be capital letters, e.g. LEARN",
         "topics and description are both empty: nothing describes the area",
-        "exemplars should be a list",
+        "exemplars should be a list of texts",
     ]
 
 
