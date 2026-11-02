@@ -280,16 +280,37 @@ def test_tui_bulk_download_survives_a_failure(tmp_path, monkeypatch):
     assert notes[-1] == "#7: rate limited\n#8: rate limited\n0 of 2 papers have pdf: cached"
 
 
-def test_command_palette_offers_every_action(tmp_path, monkeypatch):
+def test_command_palette_and_footer_offer_each_tabs_actions(tmp_path, monkeypatch):
+    from textual.widgets import TabbedContent
+
     app, _, _ = cached_monitor(tmp_path, monkeypatch)
 
     async def scenario():
         async with app.run_test() as pilot:
-            commands = {c.title: c for c in app.get_system_commands(app.screen)}
-            assert {title for title, _, _ in tui.COMMANDS} <= set(commands)
+            offered = set()
+            tables = ["#issues", "#spcs", "#history", "#areas", "#rubrics"]
+            for tab, table in zip(tui.TAB_ACTIONS, tables):  # together, they offer every action
+                app.query_one(TabbedContent).active = tab
+                app.query_one(table).focus()  # as `t` does
+                await pilot.pause()
+                titles = {c.title for c in app.get_system_commands(app.screen)}
+                offered |= titles
+                shown = {
+                    b.binding.action.split("(")[0]
+                    for b in app.active_bindings.values()
+                    if b.enabled
+                }
+                assert ("score_areas" in shown) == (tab == "areas-tab"), tab
+                assert ("mark" in shown) == (tab in ("papers", "spcs-tab")), tab
+                assert "switch_tab" in shown and "sync" in shown
+            assert {title for title, _, _ in tui.COMMANDS} <= offered
             for _, _, action in tui.COMMANDS:  # every action names a real method
                 name = action.split("(")[0]
                 assert hasattr(app, f"action_{name}"), name
+            app.query_one(TabbedContent).active = "papers"
+            await pilot.pause()
+            commands = {c.title: c for c in app.get_system_commands(app.screen)}
+            assert "Score areas" not in commands
             await commands["Legend"].callback()
             await pilot.pause()
             assert isinstance(app.screen, tui.Legend)

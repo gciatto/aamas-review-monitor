@@ -265,8 +265,10 @@ SPCs), and to the selected paper when nothing is marked. Comments and templated 
 only the marked issues, so a paper can get a new comment about just its new issues. `space`
 marks or unmarks, `*` marks everything the filter shows (or clears the marks if all are
 marked), and `a` opens a menu of what can be done, naming the papers it will act on.
-The footer shows only these few keys. Each action also has its own key, listed in the menu and
-in the command palette (`ctrl+p`):
+The footer shows the main keys of the tab you are in, and each key works only in the tabs it
+makes sense in (marking in Papers and SPCs, scoring and labels in Areas, saving in Rubrics).
+Each action also has its own key, listed in the menu and in the command palette (`ctrl+p`),
+which likewise offers the current tab's actions:
 
 | Key | Action |
 |---|---|

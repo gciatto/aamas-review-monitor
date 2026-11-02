@@ -99,8 +99,21 @@ COMMANDS = [
 ]  # fmt: skip
 
 
-# Actions that work on the main table, so only while it is on screen
+# Actions that work on the main screen's tabs, so only while it is on screen
 TABLE_ACTIONS = {a.split("(")[0] for _, _, a in COMMANDS}
+# Which of them each tab offers (keys, footer and command palette); the rest work everywhere
+TAB_ACTIONS = {
+    "papers": {
+        "focus", "mark", "mark_all", "mark_some", "actions", "toggle_green", "ignore",
+        "toggle_unsent", "details", "open", "view_pdf", "folder", "download", "inspect", "mail",
+        "comment", "email",
+    },
+    "spcs-tab": {"mark", "mark_all", "actions", "mail"},
+    "history-tab": set(),
+    "areas-tab": {"score_areas", "hide_areas", "label_area", "confirm_area"},
+    "rubrics-tab": {"save_rubric", "revert_rubric"},
+}  # fmt: skip
+EVERYWHERE = TABLE_ACTIONS - set().union(*TAB_ACTIONS.values())  # sync, legend, tab, reload
 # What the action menu offers, per tab
 MENU = {
     "papers": [
@@ -142,6 +155,13 @@ class Monitor(App):
         ("asterisk", "mark_all", "Mark all"),
         ("plus", "mark_some", "Mark…"),
         ("a", "actions", "Actions"),
+        # the footer shows only what the tab offers: these, in the Areas and Rubrics tabs
+        Binding("k", "score_areas", "Score"),
+        Binding("b", "label_area", "Label"),
+        Binding("y", "confirm_area", "Confirm best"),
+        Binding("h", "hide_areas", "Areas shown"),
+        Binding("ctrl+s", "save_rubric", "Save", priority=True),
+        Binding("ctrl+r", "revert_rubric", "Revert", priority=True),
         ("t", "switch_tab", "Tab"),
         ("s", "sync", "Sync"),
         ("l", "legend", "Legend"),
@@ -160,12 +180,6 @@ class Monitor(App):
         Binding("c", "comment", "Comment", show=False),
         Binding("e", "email", "Email", show=False),
         Binding("r", "reload", "Reload", show=False),
-        Binding("k", "score_areas", "Score areas", show=False),
-        Binding("h", "hide_areas", "Hide areas", show=False),
-        Binding("b", "label_area", "Label area", show=False),
-        Binding("y", "confirm_area", "Confirm area", show=False),
-        Binding("ctrl+s", "save_rubric", "Save rubric", show=False, priority=True),
-        Binding("ctrl+r", "revert_rubric", "Revert rubric", show=False, priority=True),
     ]
 
     def __init__(self, config: dict, embeddings: dict | None = None) -> None:
@@ -757,13 +771,20 @@ class Monitor(App):
         yield from super().get_system_commands(screen)
         if screen.query("#issues"):  # the main screen, where the actions apply
             for title, help, action in COMMANDS:
-                yield SystemCommand(title, help, partial(self.run_action, action))
+                if self.in_tab(action.split("(")[0]):
+                    yield SystemCommand(title, help, partial(self.run_action, action))
+
+    def in_tab(self, action: str) -> bool:
+        """Whether the tab shown offers the action."""
+        return action in EVERYWHERE or action in TAB_ACTIONS[self.query_one(TabbedContent).active]
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         # While a job runs, the UI only allows quitting; the table's actions need the table
         if isinstance(self.screen, Busy):
             return action == "quit"
-        return action not in TABLE_ACTIONS or bool(self.screen.query("#issues"))
+        if action not in TABLE_ACTIONS:
+            return True
+        return bool(self.screen.query("#issues")) and self.in_tab(action)
 
     def online(
         self,
@@ -1021,6 +1042,7 @@ class Monitor(App):
 
     @on(TabbedContent.TabActivated)
     def tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        self.refresh_bindings()  # the footer shows what this tab offers
         if event.pane.id == "areas-tab" and self.area_results is None:
             self.score_areas(cache_only=True)
 
@@ -1155,13 +1177,6 @@ class Monitor(App):
         if row := self.area_row():
             self.show_details(row["number"])
 
-    def on_areas(self) -> dict | None:
-        """The selected row of the Areas tab, if that is the tab shown."""
-        if self.query_one(TabbedContent).active != "areas-tab":
-            self.notify("Labels are given in the Areas tab")
-            return None
-        return self.area_row()
-
     def give_label(self, number: int, code: str | None) -> None:
         """Labels the paper, then rescores from the cache: labelled papers join their areas."""
         self.labels = core.label(number, code)
@@ -1169,7 +1184,7 @@ class Monitor(App):
         self.score_areas(cache_only=True)
 
     def action_label_area(self) -> None:
-        if (row := self.on_areas()) is None:
+        if (row := self.area_row()) is None:
             return
         result = (self.area_results or {}).get(row["number"])
         ranked = areas.ranking(result) if result else self.area_codes
@@ -1184,7 +1199,7 @@ class Monitor(App):
         self.push_screen(Actions(f"The area of #{row['number']}", choices), chosen)
 
     def action_confirm_area(self) -> None:
-        if (row := self.on_areas()) is None:
+        if (row := self.area_row()) is None:
             return
         if not row.get("best"):
             self.notify(f"#{row['number']} is not scored: press k", severity="warning")
@@ -1231,20 +1246,15 @@ class Monitor(App):
         else:
             self.rubric_drafts.pop(code, None)
 
-    def on_rubrics(self) -> str | None:
-        if self.query_one(TabbedContent).active != "rubrics-tab" or self.rubric_code is None:
-            return None
-        return self.rubric_code
-
     def action_revert_rubric(self) -> None:
-        if (code := self.on_rubrics()) is None:
+        if (code := self.rubric_code) is None:
             return
         self.rubric_drafts.pop(code, None)
         self.query_one("#rubric-editor", TextArea).load_text(areas.dump(self.rubrics[code]))
         self.query_one("#rubric-note", Static).update(f"{code}: reverted to the saved rubric")
 
     def action_save_rubric(self) -> None:
-        if (code := self.on_rubrics()) is None:
+        if (code := self.rubric_code) is None:
             return
         note = self.query_one("#rubric-note", Static)
         try:
