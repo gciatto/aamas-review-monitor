@@ -1,3 +1,17 @@
+## [1.9.0](https://github.com/gciatto/aamas-review-monitor/compare/1.8.0...1.9.0) (2026-11-02)
+
+### Features
+
+* area adherence: rubrics, embeddings and rules, Areas and Rubrics tabs, labels ([#4](https://github.com/gciatto/aamas-review-monitor/issues/4)) ([0516952](https://github.com/gciatto/aamas-review-monitor/commit/051695257b14094472079b564e39d88df7d0b8b9))
+
+### Dependency updates
+
+* **deps:** update node.js to v26 ([#3](https://github.com/gciatto/aamas-review-monitor/issues/3)) ([cbb8349](https://github.com/gciatto/aamas-review-monitor/commit/cbb8349f78d84cf1403a2c32f9267d86c845bcdc))
+
+### Build and continuous integration
+
+* **deps:** update astral-sh/setup-uv action to v10.3.3 ([#2](https://github.com/gciatto/aamas-review-monitor/issues/2)) ([2a43844](https://github.com/gciatto/aamas-review-monitor/commit/2a43844dcaf84098570e6b1bafa866a49624a4ee))
+
 ## [1.8.0](https://github.com/gciatto/aamas-review-monitor/compare/1.7.0...1.8.0) (2026-10-26)
 
 ### Features
