@@ -329,12 +329,13 @@ def score(
         try:
             chunks = parts(record, include, config, folder)
             if not chunks:
-                raise LookupError(f"nothing to embed among {', '.join(include)}")
+                failures.append(f"#{record['number']}: nothing to embed among {', '.join(include)}")
+                continue
             found = iter(models.embed(s, sum(chunks, []), cache, True, cache_only))
             vectors[record["number"]] = models._unit(
                 _mean([_mean([next(found) for _ in p]) for p in chunks])
             )
-        except (LookupError, FileNotFoundError) as e:
+        except (models.NotEmbedded, FileNotFoundError) as e:  # FileNotFoundError: no pdftotext
             failures.append(f"#{record['number']}: {e}")
     labelled = {
         code: [(n, v) for n, v in vectors.items() if (labels or {}).get(n) == code]

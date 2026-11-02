@@ -389,7 +389,7 @@ def rubrics(args: argparse.Namespace, config: dict) -> None:
         texts = {code: areas.texts(r) for code, r in loaded.items()}
         try:
             vectors = embedded(args, config, sum(texts.values(), []), private=False)
-        except (LookupError, PermissionError, ValueError, OSError) as e:
+        except (models.NotEmbedded, PermissionError, ValueError, OSError) as e:
             sys.exit(f"Embeddings: {e}")
         by_area = {code: [vectors.pop(0) for _ in t] for code, t in texts.items()}
         print(
@@ -429,7 +429,7 @@ def rubrics(args: argparse.Namespace, config: dict) -> None:
             (core.DIR_PAPERS, core.DIR_EMBEDDINGS),
             args.cache_only,
         )
-    except (LookupError, PermissionError, ValueError, OSError) as e:
+    except (models.NotEmbedded, PermissionError, ValueError, OSError) as e:
         sys.exit(f"No feedback on the edit: {e}")
     print("\n".join(lines))
 
@@ -474,7 +474,7 @@ def areas_table(args: argparse.Namespace, config: dict) -> None:
         results, failures = areas.score(
             records, rubrics, s, include, config, directories, args.cache_only, labels=labels
         )
-    except (LookupError, PermissionError, ValueError, OSError) as e:
+    except (models.NotEmbedded, PermissionError, ValueError, OSError) as e:
         sys.exit(f"Area scores: {e}")
     shown = args.show.split(",") if args.show else [c for c in rubrics if c not in view["hidden"]]
     numbers = set(args.numbers) or {r["number"] for r in records}

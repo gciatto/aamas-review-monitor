@@ -24,6 +24,10 @@ import requests
 
 URL_PROCEEDINGS = "https://ifaamas.org/Proceedings/aamas2026/"
 FILE_LABELS = Path(__file__).with_name("aamas2026_areas.json")
+# the proceedings' page footer: licence, venue and copyright, the same in every paper
+PATTERN_FOOTER = re.compile(
+    r"(This work is licensed under|Proc\. of the \d+\w* International).*?ifaamas\.org\)\.?"
+)
 CODES = r"\b(LEARN|GAAI|GTEP|COINE|SOPS|RR|EMAS|SIM|HAI|ROBOT|IASI)\b"
 
 
@@ -45,6 +49,7 @@ def front(text: str) -> tuple[str, list[str]] | None:
     if not found:
         return None
     abstract = " ".join(found.group(1).replace("-\n", "").split())
+    abstract = PATTERN_FOOTER.sub("", abstract).strip()  # pdftotext puts the page footer in it
     keys = re.search(r"\bKEYWORDS\b(.*?)ACM Reference Format", text, re.S)
     keywords = [" ".join(k.split()) for k in keys.group(1).split(";")] if keys else []
     keywords = [re.sub(rf"\s*[,;]?\s*{CODES}\s*[,;]?", " ", k).strip(" ,") for k in keywords]

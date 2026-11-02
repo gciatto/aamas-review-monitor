@@ -231,8 +231,8 @@ The shipped rubrics keep each area's topics and description as the call states t
 exemplars (descriptions of typical papers) and rules (signature terms, acronyms, cited venues).
 On 318 published AAMAS 2026 papers (same 11 areas; areas labelled independently by two
 annotators who agreed on 95% of the papers, and with every author who put the code in their
-keywords), the best area matched the label for 77% of the 157 held-out papers (top 3: 97%),
-against 62% (87%) with the call's text alone, using `nomic-embed-text` on titles, keywords and
+keywords), the best area matched the label for 76% of the 157 held-out papers (top 3: 97%),
+against 63% (87%) with the call's text alone, using `nomic-embed-text` on titles, keywords and
 abstracts. Small areas (EMAS, HAI, IASI) had too few papers to measure; your labels and edits
 are how the rubrics improve for your own batch.
 
@@ -461,7 +461,8 @@ uv run poe rubrics-benchmark [--split dev|test] [--rubrics DIR] [--model M]
 (rules on the PDFs too) with a local embedding endpoint, and prints how often the best area is
 the label, overall, per channel and per area. Tune rubrics on `dev`, report `test`; `--rubrics`
 takes a folder of rubric copies that replace the shipped ones. On the test split, the shipped
-rubrics get 77% (`nomic-embed-text`) and 76% (`bge-m3`).
+rubrics get 76% with either `nomic-embed-text` (the default) or `bge-m3`, whose embeddings
+alone do worse (65% against 69%).
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/), from which
 semantic-release derives versions. Releases are GitHub releases only: the wheel and sdist are

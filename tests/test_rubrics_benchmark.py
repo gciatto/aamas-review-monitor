@@ -19,7 +19,10 @@ Coordinate</strong></font></a> (Page 4)</p>
 FRONT = """Learning to Coordinate
 ABSTRACT
 We study multi-
-agent learning.
+agent learning. This work is licensed under a Creative Commons Attribution
+International 4.0 License. Proc. of the 25th International Conference on Autonomous
+Agents and Multiagent Systems (AAMAS 2026), Paphos, Cyprus. © 2026 International
+Foundation for Autonomous Agents and Multiagent Systems (www.ifaamas.org).
 KEYWORDS
 Reinforcement learning; Coordination, LEARN; GAAI
 ACM Reference Format:

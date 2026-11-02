@@ -29,6 +29,10 @@ DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
 LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 
+class NotEmbedded(LookupError):
+    """Texts missing from the cache when only the cache may be used."""
+
+
 class Settings(NamedTuple):
     vendor: str
     url: str
@@ -132,11 +136,11 @@ def embed(
 ) -> list[list[float]]:
     """Unit vectors of `texts`, from the cache in `directory` or else the endpoint. `private`:
     the texts hold paper data, so the endpoint must be local (PermissionError otherwise).
-    `cache_only`: LookupError instead of asking the endpoint."""
+    `cache_only`: NotEmbedded instead of asking the endpoint."""
     files = [directory / f"{fingerprint(s.model, t)}.yaml" for t in texts]
     missing = list(dict.fromkeys(t for t, f in zip(texts, files) if not f.is_file()))
     if missing and cache_only:
-        raise LookupError(f"{len(missing)} texts not embedded with {s.model} yet (cache only)")
+        raise NotEmbedded(f"{len(missing)} texts not embedded with {s.model} yet (cache only)")
     if missing:
         if private:
             check_local(s.url, s.networks)

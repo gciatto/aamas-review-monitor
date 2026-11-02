@@ -2,6 +2,7 @@
 
 import logging
 import os
+import textwrap
 from collections import Counter
 import webbrowser
 from collections.abc import Callable, Iterable
@@ -162,6 +163,7 @@ class Monitor(App):
         Binding("h", "hide_areas", "Areas shown"),
         Binding("ctrl+s", "save_rubric", "Save", priority=True),
         Binding("ctrl+r", "revert_rubric", "Revert", priority=True),
+        Binding("escape", "leave_editor", "Leave the editor", show=False),
         ("t", "switch_tab", "Tab"),
         ("s", "sync", "Sync"),
         ("l", "legend", "Legend"),
@@ -231,23 +233,29 @@ class Monitor(App):
                     yield VerticalScroll(Static(id="history-entry"), id="history-panel")
             with TabPane("Areas", id="areas-tab"):
                 with Horizontal():
-                    yield DataTable(id="areas", cursor_type="row", zebra_stripes=True)
+                    # # and Title stay in view while scrolling right through the areas
+                    yield DataTable(
+                        id="areas", cursor_type="row", zebra_stripes=True, fixed_columns=2
+                    )
                     yield VerticalScroll(Static(id="area-detail"), id="area-panel")
             with TabPane("Rubrics", id="rubrics-tab"):
                 with Horizontal():
                     yield DataTable(id="rubrics", cursor_type="row", zebra_stripes=True)
                     with Vertical(id="rubric-pane"):
+                        yield Static(id="rubric-note")  # above: never pushed out of view
                         yield TextArea(id="rubric-editor", soft_wrap=True)
-                        yield Static(id="rubric-note")
         yield Footer(compact=True)
 
     DEFAULT_CSS = (
         "#queue { width: 3fr; } #paper-panel { width: 2fr; padding: 0 1; }"
         " #spcs { width: 1fr; } #spc-panel { width: 2fr; padding: 0 1; }"
         " #history { width: 3fr; } #history-panel { width: 2fr; padding: 0 1; }"
-        " #areas { width: 3fr; } #area-panel { width: 2fr; padding: 0 1; }"
+        " #areas { width: 2fr; } #area-panel { width: 1fr; padding: 0 1; }"
         " #rubrics { width: 1fr; } #rubric-pane { width: 2fr; }"
-        " #rubric-editor { height: 1fr; } #rubric-note { height: auto; max-height: 12; padding: 0 1; }"
+        # the tabs take the height left, so a tall pane scrolls inside rather than the screen
+        " #tabs { height: 1fr; } #tabs ContentSwitcher, #tabs TabPane { height: 1fr; }"
+        " #rubrics-tab Horizontal { height: 1fr; }"
+        " #rubric-editor { height: 1fr; } #rubric-note { height: auto; max-height: 10; padding: 0 1; }"
     )
     PANEL_WIDTH_MIN = 120  # narrower terminals keep the whole width for the queue
 
@@ -260,7 +268,7 @@ class Monitor(App):
         self.spc_mark_column = spcs.add_column("", width=1)
         spcs.add_columns("SPC", "Papers", "Open", ICONS[RED], ICONS[YELLOW])
         self.query_one("#rubrics", DataTable).add_columns(
-            "Code", "Area", "Topics", "Exemplars", "Rules", "Copy"
+            "Code", "Copy", "Topics", "Exemplars", "Rules", "Area"
         )
         self.fill_rubrics()
         self.action_reload()
@@ -1022,7 +1030,7 @@ class Monitor(App):
                     progress,
                     labels=dict(self.labels),
                 )
-            except LookupError:  # cache only, the areas not embedded yet: nothing scored
+            except models.NotEmbedded:  # cache only, the areas not embedded yet: nothing scored
                 return {}, []
 
         def done(result: tuple[dict[int, dict], list[str]]) -> None:
@@ -1097,22 +1105,19 @@ class Monitor(App):
         )
         shown = [c for c in self.area_codes if c not in self.area_view["hidden"]]
         rank = {c: (i, d) for i, (c, d) in enumerate(self.area_view["sort"], 1)}
-        columns = [("number", "#")] + [(c, c) for c in shown] + [
-            ("best", "Best"), ("margin", "Margin"), ("label", "Label"), ("reviews", "Reviews"), ("rating", "Rating"),
-            ("spread", "±"), ("confidence", "Conf."), ("meta", "Meta"), ("title", "Title"),
-        ]  # fmt: skip
+        # the summary first, so it stays in view; then each area's share
+        columns = [
+            ("number", "#"), ("title", "Title"), ("best", "Best"), ("margin", "Margin"),
+            ("label", "Label"), ("reviews", "Reviews"), ("rating", "Rating"), ("spread", "±"),
+            ("confidence", "Conf."), ("meta", "Meta"),
+        ] + [(c, c) for c in shown]  # fmt: skip
         for key, label in columns:
             if key in rank:
                 label += f" {'▼' if rank[key][1] else '▲'}{rank[key][0]}"
             table.add_column(label, key=key)
         for row in self.area_rows:
-            cells: list[Any] = [str(row["number"])]
-            for code in shown:
-                share = row.get(code)
-                style = f"on rgb(20,{int(40 + 160 * share)},70)" if share is not None else ""
-                cells.append(
-                    Text(f"{round(share * 100):>3}" if share is not None else "  —", style)
-                )
+            title = row["title"] or ""
+            cells: list[Any] = [str(row["number"]), title[:24] + "…" * (len(title) > 24)]
             figure = lambda v: "—" if v is None else f"{v:.1f}"  # noqa: E731
             margin = row.get("margin")
             cells += [
@@ -1131,8 +1136,13 @@ class Monitor(App):
                 figure(row["spread"]),
                 figure(row["confidence"]),
                 row["meta"] or "—",
-                row["title"] or "",
             ]
+            for code in shown:
+                share = row.get(code)
+                style = f"on rgb(20,{int(40 + 160 * share)},70)" if share is not None else ""
+                cells.append(
+                    Text(f"{round(share * 100):>3}" if share is not None else "  —", style)
+                )
             table.add_row(*cells, key=str(row["number"]))
         self.show_area_row()
 
@@ -1154,7 +1164,10 @@ class Monitor(App):
         rating = "—" if row["rating"] is None else f"{row['rating']:.1f} ± {row['spread']:.1f}"
         conf = "—" if row["confidence"] is None else f"{row['confidence']:.1f}"
         text.append(f"Reviews {row['reviews']}/{row['reviewers']} · rating {rating}")
-        text.append(f" · confidence {conf} · meta-review {row['meta'] or '—'}\n\n")
+        text.append(f" · confidence {conf} · meta-review {row['meta'] or '—'}\n")
+        if row["label"]:
+            text.append(f"Your label: {row['label']}\n")
+        text.append("\n")
         result = (self.area_results or {}).get(row["number"])
         if result is None:
             text.append("Not scored: press k to score")
@@ -1164,11 +1177,9 @@ class Monitor(App):
                 similarity = result["similarities"][code]
                 text.append(f"{code} {round(share * 100)}% (similarity {similarity:.3f})\n", "bold")
                 for cos, topic in result["nearest"][code]:
-                    text.append(f"  {cos:.3f}  {topic[:90]}\n")
+                    text.append(f"  {cos:.3f}  {textwrap.shorten(topic, 150)}\n")
                 for held in result.get("rules", {}).get(code, []):
-                    text.append(f"  rule: {held[:90]}\n", "cyan")
-        if row["label"]:
-            text.append(f"Your label: {row['label']}\n")
+                    text.append(f"  rule: {textwrap.shorten(held, 150)}\n", "cyan")
         text.append(
             f"\n{self.area_about}; {areas.agreement(self.area_results or {}, self.labels)}", "dim"
         )
@@ -1222,7 +1233,9 @@ class Monitor(App):
         for code, r in self.rubrics.items():
             copy = ("yours" if code in yours else "shipped") + (", edited" * areas.edited(r))
             counts = (len(r["topics"]), len(r["exemplars"]), len(r["rules"]))
-            table.add_row(code, r["area"], *counts, copy, key=code)
+            table.add_row(code, copy, *counts, r["area"], key=code)
+        if self.rubric_code in self.rubrics:  # stay on the rubric being edited
+            table.move_cursor(row=list(self.rubrics).index(self.rubric_code))
 
     @on(DataTable.RowHighlighted, "#rubrics")
     @mounted
@@ -1247,6 +1260,11 @@ class Monitor(App):
             self.rubric_drafts[code] = event.text_area.text
         else:
             self.rubric_drafts.pop(code, None)
+
+    def action_leave_editor(self) -> None:
+        """Escape in the rubric editor: back to the list, where t and the other keys work."""
+        if isinstance(self.focused, TextArea) and self.focused.id == "rubric-editor":
+            self.query_one("#rubrics", DataTable).focus()
 
     def action_revert_rubric(self) -> None:
         if (code := self.rubric_code) is None:

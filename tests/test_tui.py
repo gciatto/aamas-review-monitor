@@ -690,7 +690,8 @@ def test_areas_tab_scores_sorts_hides_and_explains(monkeypatch):
             await done(app, pilot, lambda: app.area_results is not None)
             table = app.query_one("#areas")
             assert table.row_count == 2 and endpoint.requests == []
-            assert table.get_row_at(0)[1].plain.strip() == "—"
+            assert table.get_row_at(0)[1] == "Multiagent learning"  # the title
+            assert table.get_row_at(0)[-1].plain.strip() == "—"  # the shares come last
             await pilot.press("k")
             choices = app.screen.query_one(SelectionList)
             assert choices.selected == ["title", "keywords", "abstract"]
@@ -702,7 +703,7 @@ def test_areas_tab_scores_sorts_hides_and_explains(monkeypatch):
             app.sort_areas("ROBOT")
             assert [table.get_row_at(r)[0] for r in range(2)] == ["2", "1"]
             labels = [str(c.label) for c in table.columns.values()]
-            assert labels[:3] == ["#", "LEARN", "ROBOT ▼1"] and labels[-1] == "Title"
+            assert labels[:3] == ["#", "Title", "Best"] and labels[-2:] == ["LEARN", "ROBOT ▼1"]
             app.sort_areas("ROBOT")  # again: ascending
             assert [table.get_row_at(r)[0] for r in range(2)] == ["1", "2"]
             detail = str(app.query_one("#area-detail").render())
@@ -712,7 +713,7 @@ def test_areas_tab_scores_sorts_hides_and_explains(monkeypatch):
             app.screen.query_one(SelectionList).deselect("LEARN")
             await pilot.click("#marks-apply")
             labels = [str(c.label) for c in table.columns.values()]
-            assert "LEARN" not in labels and labels[1] == "ROBOT ▲1"
+            assert "LEARN" not in labels and labels[-1] == "ROBOT ▲1"
             assert core.areas_view() == {"hidden": ["LEARN"], "sort": [("ROBOT", False)]}
 
     asyncio.run(scenario())
@@ -749,7 +750,7 @@ def test_labels_and_rubric_edits_report_what_they_change(monkeypatch):
             table = app.query_one("#areas")
             await pilot.press("y")  # #1: its best area, LEARN
             await done(app, pilot, lambda: app.labels == {1: "LEARN"})
-            assert table.get_row_at(0)[5].plain == "LEARN"  # #, LEARN, ROBOT, Best, Margin, Label
+            assert table.get_row_at(0)[4].plain == "LEARN"  # #, Title, Best, Margin, Label
             await pilot.press("down", "b")  # #2: pick LEARN, its second area
             options = app.screen.query_one(OptionList)
             assert options.get_option_at_index(0).id == "ROBOT"
@@ -775,9 +776,22 @@ def test_labels_and_rubric_edits_report_what_they_change(monkeypatch):
             note = str(app.query_one("#rubric-note").render())
             assert "Fixed: #2; broken: none" in note and app.rubric_drafts == {}
             assert areas.load(core.DIR_RUBRICS)["LEARN"]["topics"][-1] == "Robots in swarms"
-            assert app.query_one("#rubrics").get_row_at(0)[5] == "yours, edited"
+            assert app.query_one("#rubrics").get_row_at(0)[1] == "yours, edited"
             editor.load_text("anything")
             await pilot.press("ctrl+r")
             assert "Robots in swarms" in editor.text
+            app.query_one("#rubrics").move_cursor(row=1)  # ROBOT: saving it stays on it
+            await pilot.pause()
+            editor.load_text(editor.text.replace("exemplars: []", "exemplars:\n- Drones"))
+            await pilot.press("ctrl+s")
+            await done(
+                app,
+                pilot,
+                lambda: "ROBOT saved. What" in str(app.query_one("#rubric-note").render()),
+            )
+            assert app.rubric_code == "ROBOT" and "code: ROBOT" in editor.text
+            editor.focus()
+            await pilot.press("escape", "t")  # out of the editor, then to the next tab
+            assert app.query_one("#tabs").active == "papers" and "code: ROBOT" in editor.text
 
     asyncio.run(scenario())
