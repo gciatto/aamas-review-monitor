@@ -13,6 +13,17 @@ def no_openreview(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_embeddings_endpoint(monkeypatch):
+    """Tests never reach an embedding endpoint, not even a local one: FakeEndpoint stands in."""
+    import requests
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("tests must use FakeEndpoint")
+
+    monkeypatch.setattr(requests.Session, "post", refuse)
+
+
+@pytest.fixture(autouse=True)
 def private_data(tmp_path_factory, monkeypatch):
     """Tests never touch the real data folder (snapshots, papers, token, history)."""
     from aamas_review_monitor import core
@@ -24,3 +35,7 @@ def private_data(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(core, "FILE_TOKEN", data / "token")
     monkeypatch.setattr(core, "FILE_HISTORY", data / "history.jsonl")
     monkeypatch.setattr(core, "FILE_IGNORED", data / "ignored.json")
+    monkeypatch.setattr(core, "DIR_RUBRICS", data / "rubrics")
+    monkeypatch.setattr(core, "DIR_EMBEDDINGS", data / "cache" / "embeddings")
+    monkeypatch.setattr(core, "FILE_AREAS_VIEW", data / "areas-view.json")
+    monkeypatch.setattr(core, "FILE_LABELS", data / "labels.json")

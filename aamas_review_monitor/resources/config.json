@@ -2,6 +2,7 @@
   "venue_id": "ifaamas.org/AAMAS/2027/Conference",
   "url_api": "https://api2.openreview.net",
   "url_forum": "https://openreview.net/forum?id=",
+  "url_areas": "https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/",
   "retries": 8,
   "backoff_seconds": 1,
   "backoff_max_seconds": 120,
@@ -35,5 +36,17 @@
   "pages_min": 6,
   "supplementary_mb_max": 25,
   "ai_markers_min": 3,
-  "ai_markers_per_1000_max": 3
+  "ai_markers_per_1000_max": 3,
+  "embeddings_vendor": "ollama",
+  "embeddings_url": "",
+  "embeddings_model": "",
+  "embeddings_networks": ["127.0.0.0/8", "::1/128"],
+  "embeddings_retries": 5,
+  "embeddings_backoff_seconds": 1,
+  "embeddings_backoff_max_seconds": 60,
+  "areas_top_k": 3,
+  "areas_temperature": 0.02,
+  "areas_temperature_rules": 0.1,
+  "areas_weight_rules": 0.3,
+  "areas_include": ["title", "keywords", "abstract"]
 }

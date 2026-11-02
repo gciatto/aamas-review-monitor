@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.10" # Update workflows/check.yml if you change this
 dependencies = [
     "openreview-py>=2.9.0",
+    "pyyaml>=6.0.3",
     "requests>=2.34.2",
     "textual>=8.2.8",
     "urllib3>=2.8.0",
@@ -32,6 +33,7 @@ dev = [
     "poethepoet>=0.45.0",
     "pytest>=9.0.3",
     "ruff>=0.15.12",
+    "types-pyyaml>=6.0.12.20261030",
 ]
 
 [tool.poe.tasks]
@@ -59,6 +61,9 @@ static-fixes = [
 # conventional-commits, no-ai-signature, pre-push)
 install-hooks = "python scripts/githooks.py install"
 uninstall-hooks = "python scripts/githooks.py uninstall"
+# Measures the area rubrics on published AAMAS 2026 papers (downloads them once; needs a
+# local embedding endpoint and pdftotext); options: --split, --rubrics, --model, --weight
+rubrics-benchmark = "python scripts/rubrics_benchmark.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -2,6 +2,7 @@
 
 import logging
 import os
+import textwrap
 from collections import Counter
 import webbrowser
 from collections.abc import Callable, Iterable
@@ -25,9 +26,10 @@ from textual.widgets import (
     Static,
     TabbedContent,
     TabPane,
+    TextArea,
 )
 
-from aamas_review_monitor import core, documents, logger, outreach, papers
+from aamas_review_monitor import areas, core, documents, logger, models, outreach, papers
 from aamas_review_monitor.checks import (
     GREEN,
     ICONS,
@@ -87,13 +89,32 @@ COMMANDS = [
     ("Templated email", "From a template, to SPCs (SPCs tab) or to the papers' people  [m]", "mail"),
     ("Comment", "Post each paper's issues on its forum (one paper: editable)  [c]", "comment"),
     ("Email", "Free-form, to reviewers, late reviewers or SPCs, one message per paper  [e]", "email"),
-    ("Switch tab", "Papers, SPCs, History  [t]", "switch_tab"),
+    ("Score areas", "Each paper's share of each area, choosing what to embed (Areas tab)  [k]", "score_areas"),
+    ("Show or hide areas", "Which areas the Areas tab shows  [h]", "hide_areas"),
+    ("Label the paper's area", "The area you judge right for the selected paper (Areas tab)  [b]", "label_area"),
+    ("Confirm the best area", "Label the selected paper with its best area (Areas tab)  [y]", "confirm_area"),
+    ("Save the rubric", "Check and save the edited rubric, then show what it changed (Rubrics tab)  [ctrl+s]", "save_rubric"),
+    ("Revert the rubric", "Drop the unsaved edits of the rubric (Rubrics tab)  [ctrl+r]", "revert_rubric"),
+    ("Switch tab", "Papers, SPCs, History, Areas, Rubrics  [t]", "switch_tab"),
     ("Legend", "What each check verifies, with the current thresholds  [l]", "legend"),
 ]  # fmt: skip
 
 
-# Actions that work on the main table, so only while it is on screen
+# Actions that work on the main screen's tabs, so only while it is on screen
 TABLE_ACTIONS = {a.split("(")[0] for _, _, a in COMMANDS}
+# Which of them each tab offers (keys, footer and command palette); the rest work everywhere
+TAB_ACTIONS = {
+    "papers": {
+        "focus", "mark", "mark_all", "mark_some", "actions", "toggle_green", "ignore",
+        "toggle_unsent", "details", "open", "view_pdf", "folder", "download", "inspect", "mail",
+        "comment", "email",
+    },
+    "spcs-tab": {"mark", "mark_all", "actions", "mail"},
+    "history-tab": set(),
+    "areas-tab": {"score_areas", "hide_areas", "label_area", "confirm_area"},
+    "rubrics-tab": {"save_rubric", "revert_rubric"},
+}  # fmt: skip
+EVERYWHERE = TABLE_ACTIONS - set().union(*TAB_ACTIONS.values())  # sync, legend, tab, reload
 # What the action menu offers, per tab
 MENU = {
     "papers": [
@@ -135,6 +156,14 @@ class Monitor(App):
         ("asterisk", "mark_all", "Mark all"),
         ("plus", "mark_some", "Mark…"),
         ("a", "actions", "Actions"),
+        # the footer shows only what the tab offers: these, in the Areas and Rubrics tabs
+        Binding("k", "score_areas", "Score"),
+        Binding("b", "label_area", "Label"),
+        Binding("y", "confirm_area", "Confirm best"),
+        Binding("h", "hide_areas", "Areas shown"),
+        Binding("ctrl+s", "save_rubric", "Save", priority=True),
+        Binding("ctrl+r", "revert_rubric", "Revert", priority=True),
+        Binding("escape", "leave_editor", "Leave the editor", show=False),
         ("t", "switch_tab", "Tab"),
         ("s", "sync", "Sync"),
         ("l", "legend", "Legend"),
@@ -155,9 +184,23 @@ class Monitor(App):
         Binding("r", "reload", "Reload", show=False),
     ]
 
-    def __init__(self, config: dict) -> None:
+    def __init__(
+        self, config: dict, embeddings: dict | None = None, cache_only: bool = False
+    ) -> None:
         super().__init__()
         self.config = config
+        self.embeddings_given = embeddings or {}  # --embeddings-* options
+        self.cache_only = cache_only  # --cache-only: never ask the embedding endpoint
+        self.area_include = tuple(config["areas_include"])
+        self.area_results: dict[int, dict] | None = None  # None: not loaded yet
+        self.area_codes: list[str] = []
+        self.area_rows: list[dict] = []
+        self.area_about = ""  # model, included data, rubrics' version
+        self.area_view = core.areas_view()
+        self.labels = core.labels()  # the area the AC gave each paper
+        self.rubrics: dict[str, dict] = {}  # as saved
+        self.rubric_drafts: dict[str, str] = {}  # unsaved edits, by code
+        self.rubric_code: str | None = None  # the one in the editor
         self.issues: list[Issue] = []  # plus one GREEN row per paper without issues
         self.ignored: set[tuple[int, str]] = set()  # (number, code) the user ignores
         self.hide_green = False
@@ -191,12 +234,31 @@ class Monitor(App):
                 with Horizontal():
                     yield DataTable(id="history", cursor_type="row", zebra_stripes=True)
                     yield VerticalScroll(Static(id="history-entry"), id="history-panel")
+            with TabPane("Areas", id="areas-tab"):
+                with Horizontal():
+                    # # and Title stay in view while scrolling right through the areas
+                    yield DataTable(
+                        id="areas", cursor_type="row", zebra_stripes=True, fixed_columns=2
+                    )
+                    yield VerticalScroll(Static(id="area-detail"), id="area-panel")
+            with TabPane("Rubrics", id="rubrics-tab"):
+                with Horizontal():
+                    yield DataTable(id="rubrics", cursor_type="row", zebra_stripes=True)
+                    with Vertical(id="rubric-pane"):
+                        yield Static(id="rubric-note")  # above: never pushed out of view
+                        yield TextArea(id="rubric-editor", soft_wrap=True)
         yield Footer(compact=True)
 
     DEFAULT_CSS = (
         "#queue { width: 3fr; } #paper-panel { width: 2fr; padding: 0 1; }"
         " #spcs { width: 1fr; } #spc-panel { width: 2fr; padding: 0 1; }"
         " #history { width: 3fr; } #history-panel { width: 2fr; padding: 0 1; }"
+        " #areas { width: 2fr; } #area-panel { width: 1fr; padding: 0 1; }"
+        " #rubrics { width: 1fr; } #rubric-pane { width: 2fr; }"
+        # the tabs take the height left, so a tall pane scrolls inside rather than the screen
+        " #tabs { height: 1fr; } #tabs ContentSwitcher, #tabs TabPane { height: 1fr; }"
+        " #rubrics-tab Horizontal { height: 1fr; }"
+        " #rubric-editor { height: 1fr; } #rubric-note { height: auto; max-height: 10; padding: 0 1; }"
     )
     PANEL_WIDTH_MIN = 120  # narrower terminals keep the whole width for the queue
 
@@ -208,6 +270,10 @@ class Monitor(App):
         spcs = self.query_one("#spcs", DataTable)
         self.spc_mark_column = spcs.add_column("", width=1)
         spcs.add_columns("SPC", "Papers", "Open", ICONS[RED], ICONS[YELLOW])
+        self.query_one("#rubrics", DataTable).add_columns(
+            "Code", "Copy", "Topics", "Exemplars", "Rules", "Area"
+        )
+        self.fill_rubrics()
         self.action_reload()
         issues.focus()
 
@@ -238,6 +304,7 @@ class Monitor(App):
         self.fill_history()  # first: the table shows when each issue went out
         self.fill()
         self.fill_spcs()
+        self.fill_areas()  # the snapshot's review figures
 
     def last_sent(self, issue: Issue, kind: str) -> str:
         """When a sent `kind` ("comment", "email") last listed the issue (MM-DD), or ""."""
@@ -380,7 +447,12 @@ class Monitor(App):
 
     def action_switch_tab(self) -> None:
         tabs = self.query_one(TabbedContent)
-        order = {"papers": ("spcs-tab", "#spcs"), "spcs-tab": ("history-tab", "#history")}
+        order = {
+            "papers": ("spcs-tab", "#spcs"),
+            "spcs-tab": ("history-tab", "#history"),
+            "history-tab": ("areas-tab", "#areas"),
+            "areas-tab": ("rubrics-tab", "#rubrics"),
+        }
         tabs.active, table = order.get(tabs.active, ("papers", "#issues"))
         self.query_one(table, DataTable).focus()
 
@@ -517,6 +589,9 @@ class Monitor(App):
         self.query_one("#issues", DataTable).focus()
 
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
+        if event.data_table.id == "areas":
+            self.sort_areas(str(event.column_key.value))
+            return
         event.data_table.sort(
             event.column_key,
             key=lambda v: (
@@ -681,7 +756,7 @@ class Monitor(App):
     def action_actions(self) -> None:
         tab = self.query_one(TabbedContent).active
         if tab not in MENU:
-            self.notify("Nothing to act on in the history")
+            self.notify("Nothing to act on in this tab")
             return
         if tab == "spcs-tab":
             if not (spcs := self.spc_scope()):
@@ -707,13 +782,20 @@ class Monitor(App):
         yield from super().get_system_commands(screen)
         if screen.query("#issues"):  # the main screen, where the actions apply
             for title, help, action in COMMANDS:
-                yield SystemCommand(title, help, partial(self.run_action, action))
+                if self.in_tab(action.split("(")[0]):
+                    yield SystemCommand(title, help, partial(self.run_action, action))
+
+    def in_tab(self, action: str) -> bool:
+        """Whether the tab shown offers the action."""
+        return action in EVERYWHERE or action in TAB_ACTIONS[self.query_one(TabbedContent).active]
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         # While a job runs, the UI only allows quitting; the table's actions need the table
         if isinstance(self.screen, Busy):
             return action == "quit"
-        return action not in TABLE_ACTIONS or bool(self.screen.query("#issues"))
+        if action not in TABLE_ACTIONS:
+            return True
+        return bool(self.screen.query("#issues")) and self.in_tab(action)
 
     def online(
         self,
@@ -794,7 +876,12 @@ class Monitor(App):
 
     def action_sync(self) -> None:
         def done(result: tuple[Path, list[str]]) -> None:
+            # the papers' text may have changed: area scores again, from the cache (papers
+            # whose current text is not embedded yet stay unscored until k)
+            self.area_results = None
             self.action_reload()
+            if self.query_one(TabbedContent).active == "areas-tab":
+                self.score_areas(cache_only=True)
             self.notify("\n".join([*result[1], "Synced with OpenReview"]))
 
         self.online(
@@ -917,3 +1004,325 @@ class Monitor(App):
             self.send(drafts, unreachable)
 
         self.push_screen(Email(numbered(numbers)), review)
+
+    # The Areas tab: each paper's share of each area, sortable on several columns
+
+    def area_settings(self) -> "tuple[dict[str, dict], models.Settings] | None":
+        try:
+            rubrics = areas.load(core.DIR_RUBRICS)
+            return rubrics, models.settings(self.config, **self.embeddings_given)
+        except ValueError as e:
+            self.notify(f"Area scores: {e}", severity="error")
+            return None
+
+    def score_areas(self, cache_only: bool) -> None:
+        """Scores every cached paper; `cache_only` never asks the endpoint (papers not embedded
+        yet stay unscored), nor does --cache-only. No OpenReview sign-in: all is local."""
+        cache_only = cache_only or self.cache_only
+        if (found := self.area_settings()) is None:
+            return
+        rubrics, s = found
+        include, records = self.area_include, core.records()
+        self.area_results = self.area_results or {}  # tried: opening the tab won't retry
+
+        def job(client: Any, progress: Callable[[int, int], None]) -> Any:
+            directories = (core.DIR_PAPERS, core.DIR_EMBEDDINGS)
+            try:
+                return areas.score(
+                    records,
+                    rubrics,
+                    s,
+                    include,
+                    self.config,
+                    directories,
+                    cache_only,
+                    progress,
+                    labels=dict(self.labels),
+                )
+            except models.NotEmbedded:  # cache only, the areas not embedded yet: nothing scored
+                return {}, []
+
+        def done(result: tuple[dict[int, dict], list[str]]) -> None:
+            self.area_results, failures = result
+            self.area_about = (
+                f"{s.model}, {'+'.join(include)}; rubrics {areas.fingerprint(rubrics)}; nearest "
+                f"{self.config['areas_top_k']}, temperature {self.config['areas_temperature']}"
+            )
+            self.area_codes = list(rubrics)
+            self.fill_areas()
+            if failures and not cache_only:
+                more = f" (and {len(failures) - 1} more)" if len(failures) > 1 else ""
+                self.notify(f"Not scored: {failures[0]}{more}", severity="warning")
+
+        label = "Loading area scores…" if cache_only else f"Scoring areas of {len(records)} papers…"
+        self.online(label, job, done, offline=True)
+
+    @on(TabbedContent.TabActivated)
+    def tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        self.refresh_bindings()  # the footer shows what this tab offers
+        if event.pane.id == "areas-tab" and self.area_results is None:
+            self.score_areas(cache_only=True)
+
+    def action_score_areas(self) -> None:
+        options = [(n, n, n in self.area_include) for n in areas.INCLUDE]
+
+        def chosen(picked: set[str] | None) -> None:
+            if picked:
+                self.area_include = tuple(n for n in areas.INCLUDE if n in picked)
+                self.score_areas(cache_only=False)
+
+        title = "What of each paper to embed (paper data only goes to local endpoints)"
+        self.push_screen(Marks(options, title, "Score", None), chosen)
+
+    def action_hide_areas(self) -> None:
+        codes = self.area_codes
+        if not codes:
+            if (found := self.area_settings()) is None:
+                return
+            codes = list(found[0])
+        options = [(c, c, c not in self.area_view["hidden"]) for c in codes]
+
+        def chosen(shown: set[str] | None) -> None:
+            if shown is not None:
+                self.area_view["hidden"] = [c for c in codes if c not in shown]
+                core.save_areas_view(self.area_view)
+                self.fill_areas()
+
+        self.push_screen(Marks(options, "Areas to show", "Show", None), chosen)
+
+    def sort_areas(self, column: str) -> None:
+        """Makes `column` the first sort key (again: flips its direction), keeping two more."""
+        spec = list(self.area_view["sort"])
+        if spec and spec[0][0] == column:
+            spec[0] = (column, not spec[0][1])
+        else:
+            descending = column not in ("number", "title", "best", "meta")
+            spec = [(column, descending)] + [x for x in spec if x[0] != column]
+        self.area_view["sort"] = spec[:3]
+        core.save_areas_view(self.area_view)
+        self.fill_areas()
+
+    def fill_areas(self) -> None:
+        table = self.query_one("#areas", DataTable)
+        table.clear(columns=True)
+        if self.latest is None or self.area_results is None:
+            return
+        by_number = {r["number"]: r for r in core.records()}
+        self.area_rows = areas.ordered(
+            areas.rows(self.latest, by_number, self.area_results, self.labels),
+            self.area_view["sort"],
+        )
+        shown = [c for c in self.area_codes if c not in self.area_view["hidden"]]
+        rank = {c: (i, d) for i, (c, d) in enumerate(self.area_view["sort"], 1)}
+        # the summary first, so it stays in view; then each area's share
+        columns = [
+            ("number", "#"), ("title", "Title"), ("best", "Best"), ("margin", "Margin"),
+            ("label", "Label"), ("reviews", "Reviews"), ("rating", "Rating"), ("spread", "±"),
+            ("confidence", "Conf."), ("meta", "Meta"),
+        ] + [(c, c) for c in shown]  # fmt: skip
+        for key, label in columns:
+            if key in rank:
+                label += f" {'▼' if rank[key][1] else '▲'}{rank[key][0]}"
+            table.add_column(label, key=key)
+        for row in self.area_rows:
+            title = row["title"] or ""
+            cells: list[Any] = [str(row["number"]), title[:24] + "…" * (len(title) > 24)]
+            figure = lambda v: "—" if v is None else f"{v:.1f}"  # noqa: E731
+            margin = row.get("margin")
+            cells += [
+                row.get("best") or "—",
+                "—" if margin is None else f"{round(margin * 100):>3}",
+                Text(
+                    row["label"] or "—",
+                    ""
+                    if not row["label"]
+                    else "green"
+                    if row["label"] == row.get("best")
+                    else "yellow",
+                ),
+                f"{row['reviews']}/{row['reviewers']}",
+                figure(row["rating"]),
+                figure(row["spread"]),
+                figure(row["confidence"]),
+                row["meta"] or "—",
+            ]
+            for code in shown:
+                share = row.get(code)
+                style = f"on rgb(20,{int(40 + 160 * share)},70)" if share is not None else ""
+                cells.append(
+                    Text(f"{round(share * 100):>3}" if share is not None else "  —", style)
+                )
+            table.add_row(*cells, key=str(row["number"]))
+        self.show_area_row()
+
+    def area_row(self) -> dict | None:
+        table = self.query_one("#areas", DataTable)
+        if not table.row_count:
+            return None
+        row = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
+        return next((r for r in self.area_rows if str(r["number"]) == row.value), None)
+
+    @on(DataTable.RowHighlighted, "#areas")
+    @mounted
+    def show_area_row(self) -> None:
+        if (row := self.area_row()) is None:
+            note = "Shares of each paper in %: k scores, h hides areas, headers sort"
+            self.query_one("#area-detail", Static).update(f"{self.area_about}\n{note}")
+            return
+        text = Text(f"#{row['number']}  {row['title'] or ''}\n", "bold")
+        rating = "—" if row["rating"] is None else f"{row['rating']:.1f} ± {row['spread']:.1f}"
+        conf = "—" if row["confidence"] is None else f"{row['confidence']:.1f}"
+        text.append(f"Reviews {row['reviews']}/{row['reviewers']} · rating {rating}")
+        text.append(f" · confidence {conf} · meta-review {row['meta'] or '—'}\n")
+        if row["label"]:
+            text.append(f"Your label: {row['label']}\n")
+        text.append("\n")
+        result = (self.area_results or {}).get(row["number"])
+        if result is None:
+            text.append("Not scored: press k to score")
+        else:
+            ranked = sorted(result["shares"].items(), key=lambda cs: (-cs[1], cs[0]))
+            for code, share in ranked[:3]:
+                similarity = result["similarities"][code]
+                text.append(f"{code} {round(share * 100)}% (similarity {similarity:.3f})\n", "bold")
+                for cos, topic in result["nearest"][code]:
+                    text.append(f"  {cos:.3f}  {textwrap.shorten(topic, 150)}\n")
+                for held in result.get("rules", {}).get(code, []):
+                    text.append(f"  rule: {textwrap.shorten(held, 150)}\n", "cyan")
+        text.append(
+            f"\n{self.area_about}; {areas.agreement(self.area_results or {}, self.labels)}", "dim"
+        )
+        self.query_one("#area-detail", Static).update(text)
+
+    @on(DataTable.RowSelected, "#areas")
+    def area_selected(self) -> None:
+        if row := self.area_row():
+            self.show_details(row["number"])
+
+    def give_label(self, number: int, code: str | None) -> None:
+        """Labels the paper, then rescores from the cache: labelled papers join their areas."""
+        self.labels = core.label(number, code)
+        self.notify(f"#{number}: labelled {code}" if code else f"#{number}: label removed")
+        self.score_areas(cache_only=True)
+
+    def action_label_area(self) -> None:
+        if (row := self.area_row()) is None:
+            return
+        result = (self.area_results or {}).get(row["number"])
+        ranked = areas.ranking(result) if result else self.area_codes
+        choices = [
+            (f"{c} {round(result['shares'][c] * 100)}%" if result else c, "", c) for c in ranked
+        ] + [("Remove the label", "", "-")] * bool(row["label"])
+
+        def chosen(code: str | None) -> None:
+            if code:
+                self.give_label(row["number"], None if code == "-" else code)
+
+        self.push_screen(Actions(f"The area of #{row['number']}", choices), chosen)
+
+    def action_confirm_area(self) -> None:
+        if (row := self.area_row()) is None:
+            return
+        if not row.get("best"):
+            self.notify(f"#{row['number']} is not scored: press k", severity="warning")
+            return
+        self.give_label(row["number"], row["best"])
+
+    # The Rubrics tab: one YAML rubric per area, edited in place
+
+    def fill_rubrics(self) -> None:
+        table, note = self.query_one("#rubrics", DataTable), self.query_one("#rubric-note", Static)
+        table.clear()
+        try:
+            self.rubrics = areas.load(core.DIR_RUBRICS)
+        except ValueError as e:
+            note.update(Text(str(e), "red"))
+            return
+        yours = {f.stem for f in core.DIR_RUBRICS.glob("*.yaml")}
+        for code, r in self.rubrics.items():
+            copy = ("yours" if code in yours else "shipped") + (", edited" * areas.edited(r))
+            counts = (len(r["topics"]), len(r["exemplars"]), len(r["rules"]))
+            table.add_row(code, copy, *counts, r["area"], key=code)
+        if self.rubric_code in self.rubrics:  # stay on the rubric being edited
+            table.move_cursor(row=list(self.rubrics).index(self.rubric_code))
+
+    @on(DataTable.RowHighlighted, "#rubrics")
+    @mounted
+    def show_rubric(self, event: DataTable.RowHighlighted) -> None:
+        code = str(event.row_key.value)
+        if code == self.rubric_code or code not in self.rubrics:
+            return
+        self.rubric_code = code
+        editor = self.query_one("#rubric-editor", TextArea)
+        editor.load_text(self.rubric_drafts.get(code) or areas.dump(self.rubrics[code]))
+        draft = " (unsaved edits)" if code in self.rubric_drafts else ""
+        self.query_one("#rubric-note", Static).update(
+            f"{code}{draft}: ctrl+s checks and saves it, then shows what it changed; ctrl+r reverts"
+        )
+
+    @on(TextArea.Changed, "#rubric-editor")
+    def rubric_changed(self, event: TextArea.Changed) -> None:
+        code = self.rubric_code
+        if code is None or code not in self.rubrics:
+            return
+        if event.text_area.text != areas.dump(self.rubrics[code]):
+            self.rubric_drafts[code] = event.text_area.text
+        else:
+            self.rubric_drafts.pop(code, None)
+
+    def action_leave_editor(self) -> None:
+        """Escape in the rubric editor: back to the list, where t and the other keys work."""
+        if isinstance(self.focused, TextArea) and self.focused.id == "rubric-editor":
+            self.query_one("#rubrics", DataTable).focus()
+
+    def action_revert_rubric(self) -> None:
+        if (code := self.rubric_code) is None:
+            return
+        self.rubric_drafts.pop(code, None)
+        self.query_one("#rubric-editor", TextArea).load_text(areas.dump(self.rubrics[code]))
+        self.query_one("#rubric-note", Static).update(f"{code}: reverted to the saved rubric")
+
+    def action_save_rubric(self) -> None:
+        if (code := self.rubric_code) is None:
+            return
+        note = self.query_one("#rubric-note", Static)
+        try:
+            rubric = areas.read(self.query_one("#rubric-editor", TextArea).text, code)
+        except ValueError as e:
+            note.update(Text(f"{code} not saved: {e}", "red"))
+            return
+        before = dict(self.rubrics)
+        after = before | {code: rubric}
+        areas.save(rubric, core.DIR_RUBRICS)
+        self.rubric_drafts.pop(code, None)
+        self.rubrics = after
+        self.fill_rubrics()
+        note.update(f"{code} saved")
+        if after == before or (found := self.area_settings()) is None:
+            return
+        s, include, labels = found[1], self.area_include, dict(self.labels)
+
+        def job(client: Any, progress: Callable[[int, int], None]) -> Any:
+            return areas.revise(
+                before,
+                after,
+                core.records(),
+                labels,
+                s,
+                include,
+                self.config,
+                (core.DIR_PAPERS, core.DIR_EMBEDDINGS),
+                self.cache_only,
+            )
+
+        def done(result: tuple[list[str], dict[int, dict]]) -> None:
+            lines, self.area_results = result
+            self.area_codes = list(after)
+            self.area_about = (
+                f"{s.model}, {'+'.join(include)}; rubrics {areas.fingerprint(after)}; nearest "
+                f"{self.config['areas_top_k']}, temperature {self.config['areas_temperature']}"
+            )
+            self.fill_areas()
+            note.update("\n".join([f"{code} saved. What the edit changed:", *lines]))
+
+        self.online(f"Checking the edit of {code}…", job, done, offline=True)

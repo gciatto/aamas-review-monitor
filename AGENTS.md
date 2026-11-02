@@ -16,15 +16,22 @@ aamas_review_monitor/     the package, at the repo root (renamed by rename-templ
   papers.py       record cache, metadata/reviews text, attachment downloads, emails
   documents.py    on-request document checks (xpdf tools, zipfile), cached per PDF version
   markers.py      signs of generated text: fixed phrase and word lists (resources/ai_*.txt), no model
+  areas.py        area rubrics (YAML): extracted from the call's public page, the AC's copies
+  rules.py        rubric rules: string matching on a paper's local text (any/all/near/count/cites)
+  models.py       embeddings: OpenAI-compatible client (ollama/openai presets), local-network
+                  check for paper data, retries, sha512-named YAML cache
   outreach.py     email templates (resources/templates/*.txt) -> per-SPC / per-paper drafts
   tui.py          Textual app; network jobs run in worker threads behind a blocking Busy dialog
   screens.py      the TUI's screens and dialogs (details, attachment, legend, Busy, forms, Confirm)
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
+                  (`rubrics/`: the shipped area rubrics, from the AAMAS 2027 call)
 tests/            pytest unit tests: test_core.py covers the shared services without a front end;
                   test_tui.py drives the app, and waits for a job's visible effect (`done`),
                   never for a fixed time or a quiet spell
 docs/             README screenshots (Textual SVGs of synthetic data only: never real papers)
-scripts/          githooks.py: installs/removes local Git hooks (poe install-hooks)
+scripts/          githooks.py: installs/removes local Git hooks (poe install-hooks);
+                  rubrics_benchmark.py + aamas2026_areas.json: measures the area rubrics on
+                  published AAMAS 2026 papers (poe rubrics-benchmark; public data, network)
 .github/workflows/
   check.yml       static-checks + coverage, then tests on ubuntu/windows/macos x Python 3.10-3.13,
                   then deploy.yml
@@ -61,6 +68,14 @@ folder). Never send real emails or comments: sending must keep requiring a typed
 must keep recording each message in the history (`papers.deliver`, `papers.post_comments`). Keep
 checks deterministic; never add LLM calls or scientific judgments (generated-text checks
 stay string matching against the lists, and never report a probability).
+
+The one exception, granted by the maintainer: area adherence (`areas.py`, `models.py`) may send
+paper data to embedding models, but only to endpoints whose host resolves inside the allowed IP
+ranges (`embeddings_networks`, loopback by default). `models.embed(..., private=True)` enforces
+it: a check before connecting, then on every connection the address actually reached (so DNS,
+proxies and redirects cannot route around it), no environment proxies, no redirects. Keep every
+paper-data call `private=True`. It measures fit to areas for the AC to sort by; it never
+scores quality or suggests decisions. Rubrics hold public text only. Generative LLMs stay out.
 
 ## Conventions
 

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import functools
 import logging
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -12,7 +14,7 @@ import webbrowser
 from datetime import date
 from pathlib import Path
 
-from aamas_review_monitor import core, documents, outreach, papers
+from aamas_review_monitor import areas, core, documents, models, outreach, papers
 from aamas_review_monitor.checks import (
     Issue,
     check,
@@ -44,6 +46,29 @@ def main(argv: list[str] | None = None) -> None:
     )
     retries.add_argument(
         "--backoff-max", type=float, dest="backoff_max_seconds", help="longest wait in seconds"
+    )
+    embeddings = parser.add_argument_group(
+        "embeddings (area scores; defaults from AAMAS_MONITOR_EMBEDDINGS_<NAME>, then the config)"
+    )
+    embeddings.add_argument("--embeddings-vendor", help="preset: ollama or openai")
+    embeddings.add_argument("--embeddings-url", help="base URL of the OpenAI-compatible API")
+    embeddings.add_argument("--embeddings-model", help="model name, e.g. nomic-embed-text")
+    embeddings.add_argument("--embeddings-api-key", help="API key, if the endpoint wants one")
+    embeddings.add_argument(
+        "--embeddings-networks", help="IP ranges paper data may go to, e.g. 127.0.0.0/8,10.0.0.0/8"
+    )
+    embeddings.add_argument("--embeddings-retries", type=int, help="retries after a failure")
+    embeddings.add_argument(
+        "--embeddings-backoff", type=float, dest="embeddings_backoff_seconds", help="first wait (s)"
+    )
+    embeddings.add_argument(
+        "--embeddings-backoff-max",
+        type=float,
+        dest="embeddings_backoff_max_seconds",
+        help="longest wait (s)",
+    )
+    embeddings.add_argument(
+        "--cache-only", action="store_true", help="never ask the endpoint: cached embeddings only"
     )
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("sync", help="fetch papers and a new snapshot from OpenReview (read-only)")
@@ -101,11 +126,39 @@ def main(argv: list[str] | None = None) -> None:
     )
     outreach_cmd.add_argument("template", help="a template key, from `templates`")
     outreach_cmd.add_argument("--spc", action="append", help="only this SPC (repeatable)")
+    rubrics_cmd = commands.add_parser(
+        "rubrics", help="area rubrics: list, show, edit, check them, or extract them from the call"
+    )
+    rubrics_cmd.add_argument("action", choices=("list", "show", "edit", "check", "extract"))
+    rubrics_cmd.add_argument("code", nargs="?", help="area code, e.g. LEARN (show, edit)")
+    rubrics_cmd.add_argument("--url", help="page of the areas (extract; config: url_areas)")
+    rubrics_cmd.add_argument(
+        "--force", action="store_true", help="extract: replace your edited copies too"
+    )
+    areas_cmd = commands.add_parser(
+        "areas", help="each paper's share of each area, with its reviews (embeds what is missing)"
+    )
+    areas_cmd.add_argument(
+        "--include", help=f"what to embed, of {','.join(areas.INCLUDE)} (config: areas_include)"
+    )
+    areas_cmd.add_argument("--show", help="only these areas, e.g. LEARN,GTEP (default: not hidden)")
+    areas_cmd.add_argument(
+        "--sort",
+        help="columns, the first deciding most, minus for descending: --sort=LEARN,-rating",
+    )
+    areas_cmd.add_argument("--csv", type=Path, help="also write every column to this CSV file")
+    label_cmd = commands.add_parser(
+        "label", help="give a paper the area you judge right (no arguments: list the labels)"
+    )
+    label_cmd.add_argument("number", type=int, nargs="?")
+    label_cmd.add_argument("code", nargs="?", help="area code, e.g. LEARN")
+    label_cmd.add_argument("--undo", action="store_true", help="remove the paper's label")
     for cmd in (email_cmd, outreach_cmd, comment_cmd):
         cmd.add_argument(
             "--edit", action="store_true", help="edit each message in $EDITOR before the preview"
         )
-    for cmd in (download_cmd, email_cmd, inspect_cmd, outreach_cmd, comment_cmd, history_cmd):
+    numbered_cmds = (download_cmd, email_cmd, inspect_cmd, outreach_cmd, comment_cmd, history_cmd)
+    for cmd in (*numbered_cmds, areas_cmd):
         cmd.add_argument("numbers", type=int, nargs="*", help="papers (default: all)")
     args = parser.parse_args(argv)
     # Only the application configures logging; importing the package leaves it alone. The TUI
@@ -138,7 +191,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "tui":
         from aamas_review_monitor.tui import Monitor
 
-        Monitor(config).run()
+        Monitor(config, embeddings_given(args), args.cache_only).run()
     elif args.command in ("report", "show", "issues"):
         state = core.current(config)
         if (latest := state.latest) is None:
@@ -285,6 +338,17 @@ def main(argv: list[str] | None = None) -> None:
             if entries
             else "Nothing sent from the app yet"
         )
+    elif args.command == "rubrics":
+        rubrics(args, config)
+    elif args.command == "areas":
+        areas_table(args, config)
+    elif args.command == "label":
+        if args.number is not None:
+            codes = list(areas.files(core.DIR_RUBRICS))
+            if not args.undo and args.code not in codes:
+                sys.exit(f"Which area? One of {', '.join(codes)}")
+            core.label(args.number, None if args.undo else args.code)
+        print("\n".join(f"#{n}  {c}" for n, c in core.labels().items()) or "No paper is labelled")
     elif args.command == "email":
         body = args.body.read_text(encoding="utf-8")
         drafts, unreachable = outreach.direct(
@@ -300,20 +364,207 @@ def confirmed(preview: str, count: int, what: str) -> bool:
     return count > 0 and input(f"Type SEND to {what}: ").strip() == "SEND"
 
 
+def rubrics(args: argparse.Namespace, config: dict) -> None:
+    broken = None  # an unusable copy: `edit` can still repair it, `extract --force` replace it
+    try:
+        loaded = areas.load(core.DIR_RUBRICS)
+    except ValueError as e:
+        if args.action not in ("edit", "extract"):
+            sys.exit(f"{e}. Repair it with `rubrics edit CODE` or `rubrics extract --force`")
+        loaded, broken = {}, e
+    if args.action == "extract":
+        url = args.url or config["url_areas"]
+        for rubric in areas.extract(url):
+            mine = core.DIR_RUBRICS / f"{rubric['code']}.yaml"
+            if mine.is_file() and not args.force:
+                print(f"{rubric['code']:6} kept your copy {mine} (--force replaces it)")
+            else:
+                print(f"{rubric['code']:6} saved {areas.save(rubric, core.DIR_RUBRICS)}")
+        return
+    if args.action == "list":
+        yours = {f.stem for f in core.DIR_RUBRICS.glob("*.yaml")}
+        for code, r in loaded.items():
+            notes = ["yours" if code in yours else "shipped"] + ["edited"] * areas.edited(r)
+            counts = f"{len(r['topics'])} topics, {len(r['exemplars'])} exemplars"
+            counts += f", {len(r['rules'])} rules"
+            print(f"{code:6} {r['area']}  ({counts}; {', '.join(notes)})")
+        return
+    if args.action == "check":
+        texts = {code: areas.texts(r) for code, r in loaded.items()}
+        try:
+            vectors = embedded(args, config, sum(texts.values(), []), private=False)
+        except (models.NotEmbedded, PermissionError, ValueError, OSError) as e:
+            sys.exit(f"Embeddings: {e}")
+        by_area = {code: [vectors.pop(0) for _ in t] for code, t in texts.items()}
+        print(
+            f"Where each area's topics land when left out of it ({config['areas_top_k']} nearest):"
+        )
+        for code, counts in areas.confusion(loaded, by_area, config["areas_top_k"]).items():
+            others = ", ".join(f"{c} {n}" for c, n in counts.most_common() if c != code)
+            total = len(loaded[code]["topics"])
+            print(f"{code:6} {counts[code]}/{total} own" + (f"; {others}" if others else ""))
+        return
+    files = areas.files(core.DIR_RUBRICS)
+    if args.code not in files:
+        sys.exit(f"Which area? One of {', '.join(files)}")
+    if args.action == "show":
+        print(areas.dump(loaded[args.code]), end="")
+        return
+    file = core.DIR_RUBRICS / f"{args.code}.yaml"
+    if not file.is_file():  # a copy of the shipped one
+        core.DIR_RUBRICS.mkdir(parents=True, exist_ok=True)
+        shutil.copy(files[args.code], file)
+    subprocess.run([*editor(), str(file)], check=True)
+    try:
+        after = loaded | {args.code: areas.read(file.read_text(encoding="utf-8"), args.code)}
+    except ValueError as e:
+        sys.exit(f"{file}: {e}. Fix it with `rubrics edit {args.code}`")
+    print(f"Saved {file}")
+    if broken:  # nothing valid to compare with
+        try:
+            areas.load(core.DIR_RUBRICS)
+        except ValueError as e:
+            sys.exit(f"Still unusable: {e}")
+        return
+    if after == loaded:
+        return
+    try:
+        s = models.settings(config, **embeddings_given(args))
+        lines, _ = areas.revise(
+            loaded,
+            after,
+            core.records(),
+            core.labels(),
+            s,
+            tuple(config["areas_include"]),
+            config,
+            (core.DIR_PAPERS, core.DIR_EMBEDDINGS),
+            args.cache_only,
+        )
+    except (models.NotEmbedded, PermissionError, ValueError, OSError) as e:
+        sys.exit(f"No feedback on the edit: {e}")
+    print("\n".join(lines))
+
+
+def embeddings_given(args: argparse.Namespace) -> dict:
+    """The --embeddings-* options given on the command line, by setting name."""
+    given = {k: v for k, v in vars(args).items() if k.startswith("embeddings_") and v is not None}
+    return {k.removeprefix("embeddings_"): v for k, v in given.items()}
+
+
+def embedded(
+    args: argparse.Namespace, config: dict, texts: list[str], private: bool
+) -> list[list[float]]:
+    """Embeddings with the settings from the command line, environment and config."""
+    s = models.settings(config, **embeddings_given(args))
+    return models.embed(s, texts, core.DIR_EMBEDDINGS, private, args.cache_only)
+
+
+def cell(value: object, width: int, digits: int = 1) -> str:
+    text = (
+        "—" if value is None else f"{value:.{digits}f}" if isinstance(value, float) else str(value)
+    )
+    return f"{text:>{width}}"
+
+
+def areas_table(args: argparse.Namespace, config: dict) -> None:
+    """Each paper's share of each area (%), best area and margin, and review figures."""
+    latest = core.load_snapshots()[0]
+    if latest is None:
+        sys.exit(f"No snapshots in {core.DIR_SNAPSHOTS}: run `sync` first")
+    include = tuple(args.include.split(",")) if args.include else tuple(config["areas_include"])
+    if unknown := set(include) - set(areas.INCLUDE):
+        sys.exit(
+            f"Cannot include {', '.join(sorted(unknown))}: choose among {', '.join(areas.INCLUDE)}"
+        )
+    view = core.areas_view()
+    records, labels = load_records(), core.labels()
+    # the papers asked for, plus the labelled ones: they join their areas' vectors
+    scored = [r for r in records if not args.numbers or r["number"] in {*args.numbers, *labels}]
+    try:
+        rubrics = areas.load(core.DIR_RUBRICS)
+        s = models.settings(config, **embeddings_given(args))
+        directories = (core.DIR_PAPERS, core.DIR_EMBEDDINGS)
+        results, failures = areas.score(
+            scored, rubrics, s, include, config, directories, args.cache_only, labels=labels
+        )
+    except (models.NotEmbedded, PermissionError, ValueError, OSError) as e:
+        sys.exit(f"Area scores: {e}")
+    shown = args.show.split(",") if args.show else [c for c in rubrics if c not in view["hidden"]]
+    numbers = set(args.numbers) or {r["number"] for r in records}
+    found = [
+        r
+        for r in areas.rows(latest, {r["number"]: r for r in records}, results, labels)
+        if r["number"] in numbers
+    ]
+    found = areas.ordered(found, areas.sort_spec(args.sort) if args.sort else view["sort"])
+    print(
+        f"{s.model}, {'+'.join(include)}; rubrics {areas.fingerprint(rubrics)}; nearest "
+        f"{config['areas_top_k']}, temperature {config['areas_temperature']}; shares in %; "
+        + areas.agreement(results, labels)
+    )
+    head = [
+        "#",
+        *shown,
+        "best",
+        "margin",
+        "label",
+        "reviews",
+        "rating",
+        "±",
+        "conf.",
+        "meta",
+        "title",
+    ]
+    widths = [5] + [max(len(c), 3) for c in shown] + [6, 6, 6, 7, 6, 4, 5, 12, 0]
+    print(" ".join(f"{h:>{w}}" for h, w in zip(head, widths)).rstrip())
+    for r in found:
+        values = [cell(r["number"], 5)] + [
+            cell(round(r[c] * 100) if c in r else None, w) for c, w in zip(shown, widths[1:])
+        ]
+        values += [
+            cell(r.get("best"), 6),
+            cell(round(r["margin"] * 100) if r.get("margin") is not None else None, 6),
+            cell(r["label"], 6),
+            cell(f"{r['reviews']}/{r['reviewers']}", 7),
+            cell(r["rating"], 6),
+            cell(r["spread"], 4),
+            cell(r["confidence"], 5),
+            f"{(r['meta'] or '—')[:12]:>12}",
+            (r["title"] or "")[:60],
+        ]
+        print(" ".join(values))
+    failures = [f for f in failures if int(f[1:].split(":")[0]) in numbers]
+    if failures:
+        print("\n".join(f"Not scored: {f}" for f in failures))
+    if args.csv:
+        columns = ["number", "title", *rubrics, "best", "margin", "label"]
+        columns += list(areas.metrics({"reviews": []}))
+        with args.csv.open("w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, columns, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(found)
+
+
+def editor() -> list[str]:
+    """The command of $VISUAL or $EDITOR, or of the system's default editor."""
+    default = "notepad" if sys.platform == "win32" else "vi"
+    return shlex.split(
+        os.environ.get("VISUAL") or os.environ.get("EDITOR") or default, posix=os.name != "nt"
+    )
+
+
 def edit(items: list[outreach.Item], field: str) -> list[outreach.Item]:
     """Opens each item in $VISUAL or $EDITOR, its first line holding the subject (or title).
     The file lives in the private data folder, as the text is confidential, and is removed."""
-    default = "notepad" if sys.platform == "win32" else "vi"
-    editor = shlex.split(
-        os.environ.get("VISUAL") or os.environ.get("EDITOR") or default, posix=os.name != "nt"
-    )
+    editor_ = editor()
     file, edited = core.DIR_DATA / "draft.txt", []
     core.DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
         for item in items:
             file.touch(mode=0o600)
             file.write_text(f"{field}: {item.title}\n\n{item.text}", encoding="utf-8")
-            subprocess.run([*editor, str(file)], check=True)
+            subprocess.run([*editor_, str(file)], check=True)
             first, _, text = file.read_text(encoding="utf-8").partition("\n")
             title = first.removeprefix(f"{field}:").strip()
             edited.append(item._replace(title=title, text=text.lstrip("\n")))

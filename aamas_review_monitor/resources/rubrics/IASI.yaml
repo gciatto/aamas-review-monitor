@@ -1,0 +1,86 @@
+area: Innovative Applications and Societal Impact
+code: IASI
+source:
+  url: https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/
+  sha256: c2da2741d50daffce5be37df4263c9aa88be397a5e93744ce4e8d986f5bb5bb7
+topics:
+- Deployed or emerging applications of agent-based and agentic systems addressing real-world challenges
+- Agent-based and agentic systems for social good, sustainability, public policy, education, health, science,
+  industry, and critical domains
+- Realistic agent-based and agentic models of human organizations, institutions, and socio-technical systems
+- Evaluation of the cognitive, social, organizational, or decision-support capabilities of agent-based
+  and agentic systems in real-world settings
+- Integration of agent-based and agentic systems with other AI, software, cyber-physical, robotic, simulation,
+  or decision-support technologies
+- Hybrid agent-based, agentic AI, and reinforcement learning solutions for real-world applications
+- Deployment, adoption, usability, robustness, safety, and maintainability of agent-based and agentic
+  technologies in practice
+- Challenges, best practices, and lessons learned from real-world deployments of agent-based and agentic
+  technologies
+- Evaluation methodologies, benchmarks, and evidence of measurable impact for innovative applications
+- Stakeholder involvement, participatory design, and co-creation of agent-based and agentic applications
+- Ethical, legal, societal, and environmental implications of deployed or emerging agent-based and agentic
+  systems
+- Frameworks, platforms, and tools supporting the implementation and deployment of innovative agent-based
+  and agentic applications
+description: |-
+  This area welcomes papers whose primary contribution is an innovative application or demonstrated societal impact of agent technologies. Relevant submissions include deployed systems, emerging applications, realistic prototypes, stakeholder-driven designs, and rigorous evaluations of autonomous agents and multiagent systems addressing real-world challenges.
+
+  Submissions should clearly explain the application context, the role of agents, the novelty of the application, and the evidence of benefit, feasibility, adoption, or measurable impact. Collaborations with relevant stakeholders are strongly encouraged, especially where they demonstrate that the proposed approach addresses a real need and can be used, evaluated, or deployed in practice.
+
+  Papers should be submitted to IASI when the primary contribution is an innovative application, deployment, realistic validation, stakeholder-driven design, or demonstrated societal impact of agent-based or agentic technologies. Papers whose primary contribution is a new algorithm, architecture, learning method, engineering tool, or simulation method should be submitted to the corresponding technical area unless the application or impact contribution is central.
+exemplars:
+- A deployed agent-based system used by a hospital, city or company, with an evaluation of its measured
+  impact over months of operation.
+- An application of multi-agent techniques to energy grids, transportation or disaster response, developed
+  with stakeholders and validated on real data.
+- Lessons learned from the real-world deployment of an AI agent for social good, including adoption challenges
+  and ethical considerations.
+- A field study of an agentic assistant in education or healthcare, conducted with domain experts.
+rules:
+- any:
+  - deployed
+  - deployment
+  - field study
+  - field trial
+  - pilot study
+  - stakeholders
+  - stakeholder
+  - social good
+  - lessons learned
+  - in practice
+  - real-world deployment
+  - practitioners
+  - domain experts
+  in: &id001
+  - title
+  - keywords
+  - abstract
+  weight: 3
+- any:
+  - healthcare
+  - hospital
+  - hospitals
+  - patients
+  - energy
+  - smart grid
+  - power grid
+  - electricity
+  - transportation
+  - ride-hailing
+  - wildlife
+  - conservation
+  - agriculture
+  - disaster
+  - emergency
+  - public health
+  - education
+  - students
+  - finance
+  - supply chain
+  - logistics
+  - climate
+  - sustainability
+  - case study
+  in: *id001
+  weight: 1

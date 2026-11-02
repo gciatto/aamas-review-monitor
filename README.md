@@ -193,6 +193,11 @@ Paper lists (`N ...`) default to all your papers.
 | `comment [N ...] [--spcs] [--text FILE] [--edit]` | Post each paper's open issues (or the file's text) as a comment on its forum, readable by PCs and SACs (and SPCs with `--spcs`), after you type `SEND` (`--edit`: edit each first) |
 | `history [N ...] [--full]` | Emails and comments sent from the app, newest first, optionally only about some papers |
 | `ignore [N CODE ...] [--undo]` | Ignore issues of a paper (codes are in brackets in `issues N`), or count them again; without arguments, list the ignored ones |
+| `rubrics list` / `show CODE` / `edit CODE` | The area rubrics (one YAML file per area of the call: topics, description, exemplars, rules): list them, print one, or edit your copy in `$EDITOR` (checked on save; then what the edit changed, as in the Rubrics tab) |
+| `rubrics check` | Validate the rubrics and embed their topics: where each area's topics land when left out of it, i.e. which areas the rubrics fail to separate |
+| `areas [N ...] [--include DATA] [--show CODES] [--sort=COLUMNS] [--csv FILE]` | Each paper's share of each area (%, summing to 100), its best area and margin over the second, reviews done/assigned, mean rating ± spread, mean confidence, meta-review recommendation. Embeds what is missing (paper data only to local endpoints). `--include` picks among `title,keywords,abstract,text,reviews,meta-reviews` (`text`: downloaded PDFs); `--sort=LEARN,-rating` sorts on several columns, a minus for descending; `--show` overrides the areas hidden in the TUI |
+| `label [N CODE] [--undo]` | Label a paper with the area you judge right, or remove its label; without arguments, list the labels |
+| `rubrics extract [--url URL] [--force]` | Extract the rubrics from the call's public page (`url_areas`) into your copies, keeping those you have (`--force` replaces them) |
 
 Options that come before the command apply to every OpenReview request. `--rate` caps how
 many requests the app makes per second (5 by default, `0` for no cap), so bulk syncs and
@@ -202,9 +207,60 @@ limits, server errors and connection failures, honouring `Retry-After`, for read
 are 8 retries, a first wait of 1 s and a longest wait of 120 s. Email is never retried, so no
 message goes out twice.
 
+The `--embeddings-*` options set the embedding model used for area scores; each also comes from
+`AAMAS_MONITOR_EMBEDDINGS_<NAME>` (e.g. `AAMAS_MONITOR_EMBEDDINGS_API_KEY`, the only place
+besides the command line for a key), then from the config (`embeddings_*`). `--embeddings-vendor`
+picks a preset: `ollama` (`http://localhost:11434/v1`, `nomic-embed-text`, the default: `ollama pull nomic-embed-text`) or `openai`;
+`--embeddings-url` and `--embeddings-model` override it, for any OpenAI-compatible server.
+**Paper data only goes to endpoints that resolve inside `--embeddings-networks`** (IP ranges,
+loopback only by default, e.g. `127.0.0.0/8,10.0.0.0/8`): every connection is checked for the
+address it actually reached before anything is sent, and such requests follow no redirects and
+use no proxies from the environment. The areas' public topics may go anywhere. Embeddings are cached in `cache/embeddings/`, one YAML file per model and text named
+after the request's SHA-512, so reruns are identical and free; `--cache-only` never asks the
+endpoint. Retries work as above (`--embeddings-retries`, `--embeddings-backoff`,
+`--embeddings-backoff-max`).
+
+Area scores: a paper's vector is the mean of its parts (title, keywords and abstract together;
+PDF text; reviews; meta-reviews), each embedded in chunks of 300 words, so a long part counts
+no more than a short one. Its similarity to an area is the mean of its `areas_top_k` highest
+cosine similarities with the area's topics, description and exemplars; a softmax at
+`areas_temperature` turns the similarities into shares summing to 100% (lower: the nearest area
+takes more). `areas_include` sets what is embedded by default. Every result names the model, the
+data included and the rubrics' version.
+
+The shipped rubrics keep each area's topics and description as the call states them, and add
+exemplars (descriptions of typical papers) and rules (signature terms, acronyms, cited venues).
+On 318 published AAMAS 2026 papers (same 11 areas; areas labelled independently by two
+annotators who agreed on 95% of the papers, and with every author who put the code in their
+keywords), the best area matched the label for 76% of the 157 held-out papers (top 3: 97%),
+against 63% (87%) with the call's text alone, using `nomic-embed-text` on titles, keywords and
+abstracts. Small areas (EMAS, HAI, IASI) had too few papers to measure; your labels and edits
+are how the rubrics improve for your own batch.
+
+Rubric **rules** add evidence by plain string matching on the paper's local text (never sent
+anywhere; the PDF's text if downloaded), for what embeddings miss or get wrong:
+
+```yaml
+rules:
+- {any: [MARL, multi-agent reinforcement learning], in: [title, abstract], weight: 2}
+- {all: [equilibrium, learning], near: 10, none: [argumentation]}  # within 10 words
+- {count: '\b(Theorem|Lemma)\b', at_least: 3}                       # regex, case-sensitive
+- {cites: [NeurIPS, ICML, ICLR]}                                     # in the references
+- {any: [argumentation framework], weight: -2}                       # evidence against
+```
+
+Phrases match whole words in any case; `in` picks among `title`, `keywords`, `abstract`,
+`text`, `references`, `reviews`, `meta-reviews` (default: the first four). A rule that holds is
+worth 1 - 1/2^matches, times its weight (1 by default); an area's rule score is their weighted
+mean. When a paper matches at least one rule, a softmax at `areas_temperature_rules` turns the
+rule scores into shares, mixed in with weight `areas_weight_rules` (0.3); otherwise its shares
+are the embeddings' alone. The Areas tab lists the rules each paper matched, and agreement with
+your labels is also given per channel ("embeddings alone", "rules alone": the papers some rule
+matched), so you can see whether the rules earn their weight.
+
 ## Terminal UI
 
-`tui` has three tabs (`t` switches between them):
+`tui` has five tabs (`t` switches between them):
 
 - **Papers:** every paper, with one row per issue and a 🟢 row for each paper without issues.
   The Commented and Emailed columns give the date of the last comment or templated email
@@ -214,6 +270,23 @@ message goes out twice.
   SPC's issues paper by paper, plus what was sent to them.
 - **History:** every email and comment sent from the app, newest first, with the full text of
   the selected one.
+- **Areas:** each paper's share of each area (%, as a heatmap), its best area and margin, and its
+  review figures: reviews done/assigned, mean rating ± spread, mean confidence, meta-review
+  recommendation. Click headers to sort: the clicked column decides first (again: reverses it),
+  the two before it break ties. Beside the table, the selected paper's three best areas with
+  their nearest topics, as evidence. Opening the tab shows cached scores only; `k` embeds the
+  rest. The software measures fit to areas; it never scores quality or suggests decisions.
+  `b` labels the selected paper with the area you judge right, `y` confirms its best area.
+- **Rubrics:** the area rubrics, one YAML editor each. `ctrl+s` checks and saves your copy, then
+  shows what the edit changed: how many of the area's topics are nearest to it when left out,
+  and how many labelled papers get their label as best area, before and after, naming the
+  papers it fixed and broke. `ctrl+r` drops unsaved edits; edits of other areas are kept while
+  you switch between them.
+
+**Labels are how the scores get better.** A labelled paper joins its area's vectors (never
+when it is itself scored), and every rubric edit is measured against the labels, so you can
+see whether a new topic, exemplar or rule helps on your own papers. Labels live in
+`labels.json`; the agreement with them is in every result's header.
 
 The line above the tabs says where the process stands ("Reviewing: reviews due 13 Nov, in 25
 days") and how old the snapshot is, in yellow once it is past `snapshot_stale_hours`.
@@ -223,8 +296,10 @@ SPCs), and to the selected paper when nothing is marked. Comments and templated 
 only the marked issues, so a paper can get a new comment about just its new issues. `space`
 marks or unmarks, `*` marks everything the filter shows (or clears the marks if all are
 marked), and `a` opens a menu of what can be done, naming the papers it will act on.
-The footer shows only these few keys. Each action also has its own key, listed in the menu and
-in the command palette (`ctrl+p`):
+The footer shows the main keys of the tab you are in, and each key works only in the tabs it
+makes sense in (marking in Papers and SPCs, scoring and labels in Areas, saving in Rubrics).
+Each action also has its own key, listed in the menu and in the command palette (`ctrl+p`),
+which likewise offers the current tab's actions:
 
 | Key | Action |
 |---|---|
@@ -245,7 +320,11 @@ in the command palette (`ctrl+p`):
 | `m` | Templated email to the SPCs (SPCs tab) or to the papers' people, reviewed and editable before you type `SEND` |
 | `c` | Comment on each paper's forum with its issues (SPCs as readers optional), reviewed and editable before you type `SEND` |
 | `e` | Free-form email to reviewers, late reviewers or SPCs, reviewed and editable before you type `SEND` |
-| `t` | Switch between the Papers, SPCs and History tabs |
+| `k` | Score the papers' areas, choosing what to embed (title, keywords, abstract, PDF text, reviews, meta-reviews); paper data only goes to local endpoints |
+| `h` | Choose the areas the Areas tab shows (kept with the sort order in `areas-view.json`) |
+| `b` / `y` | Label the selected paper's area: pick it (best first, with shares) / confirm its best area (Areas tab) |
+| `ctrl+s` / `ctrl+r` | Save the edited rubric and show what it changed / drop the unsaved edits (Rubrics tab) |
+| `t` | Switch between the Papers, SPCs, History, Areas and Rubrics tabs |
 | `s` | Sync with OpenReview |
 | `l` | Legend of all checks; type to filter them, Esc closes |
 | `r` / `q` | Reload / quit |
@@ -360,7 +439,8 @@ elsewhere.
   MinHash fingerprints of reviews (comparable, but the text can't be recovered from them), and
   which entries of the marker lists a review matches.
 - Paper content, reviews, PDFs, extracted text and document check results are cached in
-  `~/.aamas-review-monitor/papers/`, what the app sent in `history.jsonl` next to it, and the issues you ignore in `ignored.json`.
+  `~/.aamas-review-monitor/papers/`, what the app sent in `history.jsonl` next to it, the issues you ignore in `ignored.json`, your copies of the area rubrics in `rubrics/`, your
+  area labels in `labels.json`, and the embeddings (with the text embedded) in `cache/embeddings/`.
 - **Run it in your own terminal, not through an AI coding assistant.** Its output and its cache
   hold submissions, reviews and the identities of reviewers and SPCs.
 - The project is developed and tested only on synthetic data. The screenshots above are
@@ -373,7 +453,17 @@ uv sync                    # environment and development tools
 uv run poe test            # tests (synthetic data, no network)
 uv run poe static-checks   # compile, ruff format/lint, mypy
 uv run poe install-hooks   # optional local Git hooks
+uv run poe rubrics-benchmark [--split dev|test] [--rubrics DIR] [--model M]
 ```
+
+`rubrics-benchmark` measures the area rubrics on 318 published AAMAS 2026 papers, labelled in
+`scripts/aamas2026_areas.json`: it downloads the public proceedings once (to
+`~/.cache/aamas-rubrics-benchmark`), scores titles, keywords and abstracts as the app does
+(rules on the PDFs too) with a local embedding endpoint, and prints how often the best area is
+the label, overall, per channel and per area. Tune rubrics on `dev`, report `test`; `--rubrics`
+takes a folder of rubric copies that replace the shipped ones. On the test split, the shipped
+rubrics get 76% with either `nomic-embed-text` (the default) or `bge-m3`, whose embeddings
+alone do worse (65% against 69%).
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/), from which
 semantic-release derives versions. Releases are GitHub releases only: the wheel and sdist are

@@ -32,6 +32,10 @@ DIR_PAPERS = DIR_DATA / "papers"
 FILE_TOKEN = DIR_DATA / "token"
 FILE_HISTORY = DIR_DATA / "history.jsonl"  # what the app sent: emails and comments
 FILE_IGNORED = DIR_DATA / "ignored.json"  # issues the user chose to ignore: [number, code]
+DIR_RUBRICS = DIR_DATA / "rubrics"  # the AC's copies of the area rubrics
+DIR_EMBEDDINGS = DIR_DATA / "cache" / "embeddings"  # one YAML per model and text
+FILE_AREAS_VIEW = DIR_DATA / "areas-view.json"  # areas hidden from the view, its sort order
+FILE_LABELS = DIR_DATA / "labels.json"  # the area the AC gives each paper: {number: code}
 
 
 def load_config() -> dict:
@@ -237,6 +241,34 @@ def ignore(keys: set[tuple[int, str]], undo: bool = False) -> set[tuple[int, str
     DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
     FILE_IGNORED.touch(mode=0o600)
     FILE_IGNORED.write_text(json.dumps(sorted(found)), encoding="utf-8")
+    return found
+
+
+def areas_view() -> dict:
+    """The area view's settings: `hidden` area codes, `sort` as [column, descending] pairs."""
+    saved = (
+        json.loads(FILE_AREAS_VIEW.read_text(encoding="utf-8")) if FILE_AREAS_VIEW.is_file() else {}
+    )
+    return {"hidden": saved.get("hidden", []), "sort": [tuple(s) for s in saved.get("sort", [])]}
+
+
+def save_areas_view(view: dict) -> None:
+    DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+    FILE_AREAS_VIEW.write_text(json.dumps(view), encoding="utf-8")
+
+
+def labels() -> dict[int, str]:
+    """The area the AC gave each paper they labelled."""
+    if not FILE_LABELS.is_file():
+        return {}
+    return {int(n): c for n, c in json.loads(FILE_LABELS.read_text(encoding="utf-8")).items()}
+
+
+def label(number: int, code: str | None) -> dict[int, str]:
+    """Labels a paper with an area (None: removes its label); returns all labels."""
+    found = {n: c for n, c in sorted((labels() | {number: code}).items()) if c}
+    DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+    FILE_LABELS.write_text(json.dumps(found, indent=1), encoding="utf-8")
     return found
 
 

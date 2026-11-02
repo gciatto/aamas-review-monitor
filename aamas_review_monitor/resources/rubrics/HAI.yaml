@@ -1,0 +1,85 @@
+area: Human-Agent Interaction
+code: HAI
+source:
+  url: https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/
+  sha256: 6f649fb14f1c090ffce2288b906cffaf4a816c0cb524abe8866115153bf00b11
+topics:
+- Human-agent interaction
+- Agent-based analysis of human interactions
+- Socially interactive agents
+- Trust and explainability in human-agent interactions
+- Human-robot interaction and collaboration
+- Social robotics and social interactions
+- Mixed-initiative and shared autonomy in human-agent interactions
+- Groups of humans and agents
+- Agent models and architectures for interaction with humans
+- Design for human-agent interaction
+- Virtual humans
+- Theory of mind and user modeling in human-agent interaction
+- Modelling, detecting, and accounting for deception in human-AI teams
+- Human cognitive modeling for agent interaction
+description: |-
+  This area welcomes papers whose primary contribution concerns the design, modeling, evaluation, or analysis of interaction between humans and agents. Relevant submissions include work on human-agent interaction, socially interactive agents, human-robot interaction, mixed-initiative and shared autonomy, groups of humans and agents, trust, explainability, deception, theory of mind, cognitive modeling, virtual humans, and agent architectures for interaction with humans.
+
+  Human interaction with artificially intelligent agents is becoming increasingly common in the social and organizational contexts through which people make decisions, coordinate work, and act in the world. Significant challenges arise when moving from purely multiagent systems to hybrid systems that incorporate bidirectional human-agent interaction in competitive, cooperative, or mixed settings. Agents need models and architectures that support perception and recognition of human states and activities, interaction modalities that enable coordination, and careful consideration of human factors and ethical concerns.
+
+  Papers should be submitted to HAI when human-agent interaction is central to the research question, methodology, or evaluation. Papers focused primarily on institutional, normative, or governance aspects should be submitted to COINE; papers focused primarily on generative-agent architectures should be submitted to GAAI.
+exemplars:
+- A user study with human participants examining how an agent's explanations affect trust and reliance
+  in a joint decision task.
+- A socially interactive virtual agent or embodied conversational agent that adapts its non-verbal behaviour
+  to the user.
+- Human-robot collaboration in which the robot models the human partner's intentions and adapts shared
+  autonomy.
+- Theory-of-mind modelling of human users to personalise agent assistance, evaluated in a crowdsourced
+  experiment.
+rules:
+- any:
+  - user study
+  - user studies
+  - participants
+  - human participants
+  - human subjects
+  - human-subject
+  - crowdsourced
+  - Prolific
+  - Mechanical Turk
+  - human-agent
+  - human-agent interaction
+  - human-AI
+  - human-AI collaboration
+  - human-robot
+  - human-robot interaction
+  - HRI
+  - virtual agent
+  - virtual agents
+  - virtual human
+  - virtual humans
+  - conversational agent
+  - conversational agents
+  - embodied conversational agent
+  - socially interactive
+  - social robot
+  - social robots
+  - theory of mind
+  - mixed-initiative
+  - shared autonomy
+  - human-agent teaming
+  - human-agent teams
+  - humans
+  in:
+  - title
+  - keywords
+  - abstract
+  weight: 3
+- cites:
+  - Human Factors in Computing Systems
+  - CHI
+  - Human-Robot Interaction
+  - Intelligent Virtual Agents
+  - IVA
+  - Computer-Supported Cooperative Work
+  - CSCW
+  - Human-Computer Studies
+  - Computers in Human Behavior
+  weight: 1

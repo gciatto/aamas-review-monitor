@@ -1,0 +1,83 @@
+area: Search, Optimization, Planning, and Scheduling
+code: SOPS
+source:
+  url: https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/
+  sha256: c319a2d1cb6db42ccce72fa4a125ccd5b86b346a3f17b12bd888d009adee5b9b
+topics:
+- Single-agent planning and scheduling
+- Multiagent planning and scheduling
+- Decentralized planning and scheduling
+- Planning under uncertainty
+- Decision-theoretic planning
+- Temporal reasoning and scheduling
+- Combinatorial optimization
+- Constraint programming
+- Distributed constraint reasoning
+- Resource and task allocation
+- Non-strategic coalition formation
+- Plan and goal recognition
+- Human-aware planning and scheduling
+- Knowledge representation methods for search, optimization, planning, and scheduling
+description: |-
+  This area welcomes theoretical and experimental contributions to search, optimization, planning, and scheduling in single-agent and multiagent systems. Relevant submissions include decentralized planning, planning under uncertainty, decision-theoretic planning, temporal reasoning and scheduling, combinatorial optimization, constraint programming, distributed constraint reasoning, resource and task allocation, plan and goal recognition, human-aware planning and scheduling, and non-strategic coalition formation.
+
+  Contributions that integrate learning-based methods, including foundation models, with search, optimization, planning, and scheduling techniques are welcome, provided that the primary contribution remains in the SOPS area. Similarly, approaches to motion and path planning are relevant when they are framed as planning, search, or decision-making problems for autonomous agents or multiagent systems.
+
+  Papers should be submitted to SOPS when the primary contribution is a search, optimization, planning, scheduling, or decision-theoretic method, even if the method is applied to multiagent, robotic, human-aware, or foundation-model-assisted settings.
+exemplars:
+- A heuristic search algorithm for multi-agent path finding with optimality and bounded-suboptimality
+  guarantees.
+- Decentralised partially observable Markov decision processes and decision-theoretic planning under uncertainty
+  with Monte Carlo tree search.
+- Distributed constraint optimisation problems solved by message-passing algorithms.
+- Task allocation and scheduling for fleets of agents formulated as mixed-integer programming or combinatorial
+  optimisation.
+- Goal and plan recognition from observed agent behaviour using classical planning.
+rules:
+- any:
+  - planning
+  - planner
+  - planners
+  - PDDL
+  - scheduling
+  - MAPF
+  - multi-agent path finding
+  - multi-agent pathfinding
+  - path finding
+  - pathfinding
+  - heuristic search
+  - A*
+  - Monte Carlo tree search
+  - MCTS
+  - POMDP
+  - POMDPs
+  - Dec-POMDP
+  - Dec-POMDPs
+  - constraint optimization
+  - constraint optimisation
+  - DCOP
+  - DCOPs
+  - constraint satisfaction
+  - constraint programming
+  - combinatorial optimization
+  - combinatorial optimisation
+  - integer programming
+  - MILP
+  - task allocation
+  - goal recognition
+  - plan recognition
+  - vehicle routing
+  - search
+  in:
+  - title
+  - keywords
+  - abstract
+  weight: 3
+- cites:
+  - Automated Planning and Scheduling
+  - ICAPS
+  - Combinatorial Search
+  - SoCS
+  - Principles and Practice of Constraint Programming
+  - Operations Research
+  weight: 1
