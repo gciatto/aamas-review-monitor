@@ -1,0 +1,26 @@
+area: Representation and Reasoning
+code: RR
+source:
+  url: https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/
+  sha256: 8384ab1f931ea7479a9d20b2a4e3741a6435eda86c40c6d94f0c4897ee5360c0
+topics:
+- Neurosymbolic approaches
+- Argumentation
+- Agent theories and models
+- Explainability
+- Logics for agent reasoning
+- Ontologies for agents
+- Reasoning about knowledge, beliefs, goals, actions, plans, and change in multiagent systems
+- Reasoning and problem solving in agent-based systems
+- Verification of agents and multiagent systems
+- Autoformalization
+- Logic-constrained learning
+- Strategic reasoning and strategy logics
+description: |-
+  This area welcomes theoretical and experimental contributions to knowledge representation and reasoning for single-agent and multiagent systems. Relevant submissions include formal and computational approaches to agent theories, logics for agent reasoning, argumentation, ontologies, knowledge graphs, semantic frameworks, strategic reasoning, reasoning about knowledge, beliefs, goals, actions, plans, and change, verification, autoformalization, logic-constrained learning, and neurosymbolic reasoning.
+
+  Knowledge representation is interpreted broadly, encompassing formal approaches such as epistemic, strategic, and description logics, as well as data-driven techniques such as representation learning, when they support reasoning in agent or multiagent systems. Relevant reasoning paradigms include automated reasoning, theorem proving, verification-based approaches, probabilistic inference, neurosymbolic methods, and reasoning methods that support trustworthiness, accountability, transparency, fairness, explainability, or responsible AI.
+
+  Papers should be submitted to RR when the primary contribution is a representation or reasoning framework, method, analysis, or formalism for agents or multiagent systems. Papers whose primary contribution is planning, scheduling, or optimization should be submitted to SOPS, unless the representation or reasoning formalism is central.
+exemplars: []
+rules: []

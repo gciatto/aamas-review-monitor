@@ -16,10 +16,12 @@ aamas_review_monitor/     the package, at the repo root (renamed by rename-templ
   papers.py       record cache, metadata/reviews text, attachment downloads, emails
   documents.py    on-request document checks (xpdf tools, zipfile), cached per PDF version
   markers.py      signs of generated text: fixed phrase and word lists (resources/ai_*.txt), no model
+  areas.py        area rubrics (YAML): extracted from the call's public page, the AC's copies
   outreach.py     email templates (resources/templates/*.txt) -> per-SPC / per-paper drafts
   tui.py          Textual app; network jobs run in worker threads behind a blocking Busy dialog
   screens.py      the TUI's screens and dialogs (details, attachment, legend, Busy, forms, Confirm)
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
+                  (`rubrics/`: the shipped area rubrics, from the AAMAS 2027 call)
 tests/            pytest unit tests: test_core.py covers the shared services without a front end;
                   test_tui.py drives the app, and waits for a job's visible effect (`done`),
                   never for a fixed time or a quiet spell

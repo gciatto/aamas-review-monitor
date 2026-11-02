@@ -1,0 +1,25 @@
+area: Learning and Adaptation
+code: LEARN
+source:
+  url: https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/
+  sha256: 57f649fcdd09740cf069fe79491e976102121c2fdf36513d0655c3d80ec0f77e
+topics:
+- Reasoning and learning under uncertainty
+- Supervised learning
+- Unsupervised and representation learning
+- Reinforcement learning
+- Multiagent learning
+- Evolutionary and biologically inspired algorithms
+- Learning agent capabilities
+- Learning agent-to-agent interactions, including learning to communicate and emergent communication
+- Human-in-the-loop learning
+- Few-shot learning
+- Distributionally robust learning
+- Adversarial learning
+- Imitation learning
+description: |-
+  This area welcomes papers whose primary contribution concerns learning and adaptation in single-agent or multiagent systems. Relevant submissions include theoretical, algorithmic, and empirical work on supervised, unsupervised, reinforcement, imitation, evolutionary, adversarial, robust, and human-in-the-loop learning, as well as learning agent capabilities and agent-to-agent interactions.
+
+  Papers should be submitted to LEARN when the main contribution is a learning method, learning-theoretic analysis, or empirical study of learning in agent or multiagent settings. Papers focused primarily on generative-model-based agent architectures, workflows, or evaluation should be submitted to GAAI.
+exemplars: []
+rules: []

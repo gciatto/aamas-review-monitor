@@ -1,0 +1,30 @@
+area: Coordination, Organizations, Institutions, Norms, and Ethics
+code: COINE
+source:
+  url: https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/
+  sha256: a47e75b214b2462cbfab6ce64f4e8c2342c4e092f5d84faff185e96342111a9b
+topics:
+- Coordination and teamwork
+- Social network analysis
+- Norms and normative systems
+- Multiagent organizations and institutions
+- Non-strategic coalition or team formation
+- Communication, including communication using natural language
+- Policy, regulation, and accountability
+- Safety, robustness, trust, and reputation
+- Ethical considerations, including bias, equity, fairness, privacy, safety, security, and transparency
+- Values and preferences
+- 'Agreement technologies: negotiation and argumentation'
+- Responsible socio-technical systems
+- Explainability and interpretability of norms and ethics in human-agent teams
+- Ethical and governance challenges of LLM-based agents in coordination, organizations, institutions,
+  and normative systems
+- Rebellion and disobedience in AI
+description: |-
+  This area welcomes papers whose primary contribution concerns coordination, organizations, institutions, norms, ethics, accountability, governance, and responsible behavior in agent and multiagent systems. Relevant submissions include theoretical, computational, empirical, and design-oriented work on teamwork, social reasoning, normative systems, institutions, trust, reputation, values, policy, regulation, agreement technologies, and responsible socio-technical systems.
+
+  Research in agent and multiagent systems has a long history of balancing agent autonomy, adaptation, and distributed social reasoning with system-level considerations such as organizational and institutional policy enforcement, safety, security, fairness, and accountability. Submissions may address machine-machine cooperation, human-machine cooperation, and multiagent coordination, especially where these raise questions of transparency, trust, responsibility, governance, or alignment with social norms and ethical values.
+
+  Papers should be submitted to COINE when social, institutional, normative, organizational, governance, or ethical dimensions are central to the contribution. Papers focused primarily on human-subject interaction design or evaluation should be submitted to HAI; papers focused primarily on generative-agent architectures should be submitted to GAAI.
+exemplars: []
+rules: []

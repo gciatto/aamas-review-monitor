@@ -2,6 +2,7 @@
   "venue_id": "ifaamas.org/AAMAS/2027/Conference",
   "url_api": "https://api2.openreview.net",
   "url_forum": "https://openreview.net/forum?id=",
+  "url_areas": "https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/",
   "retries": 8,
   "backoff_seconds": 1,
   "backoff_max_seconds": 120,

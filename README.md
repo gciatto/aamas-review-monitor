@@ -193,6 +193,8 @@ Paper lists (`N ...`) default to all your papers.
 | `comment [N ...] [--spcs] [--text FILE] [--edit]` | Post each paper's open issues (or the file's text) as a comment on its forum, readable by PCs and SACs (and SPCs with `--spcs`), after you type `SEND` (`--edit`: edit each first) |
 | `history [N ...] [--full]` | Emails and comments sent from the app, newest first, optionally only about some papers |
 | `ignore [N CODE ...] [--undo]` | Ignore issues of a paper (codes are in brackets in `issues N`), or count them again; without arguments, list the ignored ones |
+| `rubrics list` / `show CODE` / `edit CODE` | The area rubrics (one YAML file per area of the call: topics, description, exemplars, rules): list them, print one, or edit your copy in `$EDITOR` (checked on save) |
+| `rubrics extract [--url URL] [--force]` | Extract the rubrics from the call's public page (`url_areas`) into your copies, keeping those you have (`--force` replaces them) |
 
 Options that come before the command apply to every OpenReview request. `--rate` caps how
 many requests the app makes per second (5 by default, `0` for no cap), so bulk syncs and
@@ -360,7 +362,7 @@ elsewhere.
   MinHash fingerprints of reviews (comparable, but the text can't be recovered from them), and
   which entries of the marker lists a review matches.
 - Paper content, reviews, PDFs, extracted text and document check results are cached in
-  `~/.aamas-review-monitor/papers/`, what the app sent in `history.jsonl` next to it, and the issues you ignore in `ignored.json`.
+  `~/.aamas-review-monitor/papers/`, what the app sent in `history.jsonl` next to it, the issues you ignore in `ignored.json`, and your copies of the area rubrics in `rubrics/`.
 - **Run it in your own terminal, not through an AI coding assistant.** Its output and its cache
   hold submissions, reviews and the identities of reviewers and SPCs.
 - The project is developed and tested only on synthetic data. The screenshots above are

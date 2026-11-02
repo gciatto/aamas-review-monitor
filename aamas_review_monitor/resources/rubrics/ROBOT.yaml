@@ -1,0 +1,31 @@
+area: Robotics and Control
+code: ROBOT
+source:
+  url: https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/
+  sha256: b0d652dbd3587b0266a85359354918be2550d1d9150149977d5cf3e4cb709e05
+topics:
+- Coordination and collaboration in robotic systems
+- Swarm and multi-robot collective behavior
+- Robots in adversarial settings
+- Perception and vision for autonomous robots
+- Networked systems and distributed robotics
+- Foundation models for autonomous robots and robot teams
+- Knowledge representation and reasoning in robotic systems
+- Robot planning and decision-making
+- Mapping, localization, and navigation for autonomous robots and robot teams
+- Autonomous robot manipulation and task execution
+- Decision-making and control for autonomous robots and robot teams
+- Robot learning for autonomy and adaptation
+- Long-term or lifelong autonomy for robotic systems
+- Execution monitoring and failure recovery for robots
+- Robot modeling and simulation for autonomous agents
+- Explainability, trust, and ethics for robots
+- Hybrid systems of robots with humans and/or software agents
+description: |-
+  This area welcomes papers whose primary contribution concerns autonomous robots, robotic agents, multi-robot systems, or the interaction of robots with humans, software agents, or physical environments. Relevant submissions include work on coordination, collaboration, swarms, distributed robotics, robot planning, robot learning, knowledge representation and reasoning for robots, long-term autonomy, execution monitoring, failure recovery, modeling and simulation, explainability, trust, ethics, decision-making, and control for autonomous robots.
+
+  Robots are embodied and situated agents that operate in the physical world. Research on autonomous agents and multiagent systems shares many challenges and synergies with intelligent robotics, especially where robotic systems must reason, learn, plan, coordinate, adapt, or act autonomously in realistic settings.
+
+  Submissions involving perception, vision, mapping, localization, manipulation, or control are welcome when these components are integrated into, or make a clear contribution to, autonomous robots or multi-robot systems.
+exemplars: []
+rules: []

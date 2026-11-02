@@ -1,0 +1,26 @@
+area: Modeling and Simulation of Artificial Societies
+code: SIM
+source:
+  url: https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/
+  sha256: d3eb426647d3659b89b391efb238d366e980a18a561ce27b5299406f14af74cf
+topics:
+- Modeling for agent-based simulation
+- Simulation of complex systems
+- Modeling of societies and social simulations
+- Agent-based modeling and evaluation of public policies
+- Simulation techniques, tools, and platforms
+- Analysis of agent-based simulations
+- Calibration, verification, and validation of agent-based simulation systems
+- Robustness, reliability, and trustworthiness of agent-based simulations
+- Design and implementation of large-scale agent-based simulations
+- High-performance computing and frameworks for agent-based simulation
+- Interactive and participatory simulation
+- LLM-supported agent-based simulation and modeling
+description: |-
+  This area welcomes papers whose primary contribution concerns agent-based modeling and simulation of artificial societies and complex systems. Relevant submissions include modeling methods, simulation techniques, tools and platforms, calibration, verification, validation, robustness, participatory simulation, large-scale simulation, and the analysis of emergent behavior in social, organizational, economic, ecological, transportation, and socio-technical systems.
+
+  Artificial societies are computer simulations or models created to emulate and study the behavior of complex social systems. Agent-based models provide a way to analyze how individual behaviors, interactions, incentives, policies, and interventions give rise to emergent structures and dynamics at the system level. Relevant application areas include ecology, biology, economics, transportation, management, organizational studies, and the social sciences.
+
+  Papers should be submitted to SIM when simulation is central to the contribution, either as a methodological advance or as a way to explain, predict, explore, or evaluate complex systems.
+exemplars: []
+rules: []

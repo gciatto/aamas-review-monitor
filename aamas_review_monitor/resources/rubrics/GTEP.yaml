@@ -1,0 +1,29 @@
+area: Game Theory and Economic Paradigms
+code: GTEP
+source:
+  url: https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/
+  sha256: e83d896bda8bf94828fd54fdb2a5131f5329ec49db4e83c34913fb9e578c6c30
+topics:
+- Auctions and mechanism design
+- Economic foundations and market design for economics of AI agents
+- Bargaining and negotiation
+- Behavioural game theory
+- Evolutionary game theory
+- 'Non-cooperative games: equilibrium concepts'
+- 'Non-cooperative games: computational issues'
+- 'Non-cooperative games: theory and applications'
+- Voting and preference aggregation
+- Social choice and social networks
+- Judgment aggregation and forecasting
+- Fair allocation and matching
+- Tournaments and agent evaluation
+- Digital and liquid democracy
+- Strategic coalition formation
+- Cooperative games
+- Persuasion and information design
+description: |-
+  This area welcomes papers whose primary contribution advances game theory, economic paradigms, mechanism design, market design, social choice, or strategic decision-making for agents and multiagent systems. Relevant submissions include theoretical, computational, and applied work on cooperative and non-cooperative games, equilibrium computation, auctions, bargaining, negotiation, voting, allocation, matching, persuasion, information design, and economic models of AI agents.
+
+  Papers should be submitted to GTEP when the strategic, economic, game-theoretic, or social-choice model is central to the contribution. Papers focused mainly on norms, institutions, ethics, or organizational governance should be submitted to COINE unless the strategic or economic model is central.
+exemplars: []
+rules: []

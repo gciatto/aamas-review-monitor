@@ -12,7 +12,7 @@ import webbrowser
 from datetime import date
 from pathlib import Path
 
-from aamas_review_monitor import core, documents, outreach, papers
+from aamas_review_monitor import areas, core, documents, outreach, papers
 from aamas_review_monitor.checks import (
     Issue,
     check,
@@ -101,6 +101,15 @@ def main(argv: list[str] | None = None) -> None:
     )
     outreach_cmd.add_argument("template", help="a template key, from `templates`")
     outreach_cmd.add_argument("--spc", action="append", help="only this SPC (repeatable)")
+    rubrics_cmd = commands.add_parser(
+        "rubrics", help="area rubrics: list, show or edit them, or extract them from the call"
+    )
+    rubrics_cmd.add_argument("action", choices=("list", "show", "edit", "extract"))
+    rubrics_cmd.add_argument("code", nargs="?", help="area code, e.g. LEARN (show, edit)")
+    rubrics_cmd.add_argument("--url", help="page of the areas (extract; config: url_areas)")
+    rubrics_cmd.add_argument(
+        "--force", action="store_true", help="extract: replace your edited copies too"
+    )
     for cmd in (email_cmd, outreach_cmd, comment_cmd):
         cmd.add_argument(
             "--edit", action="store_true", help="edit each message in $EDITOR before the preview"
@@ -285,6 +294,8 @@ def main(argv: list[str] | None = None) -> None:
             if entries
             else "Nothing sent from the app yet"
         )
+    elif args.command == "rubrics":
+        rubrics(args, config)
     elif args.command == "email":
         body = args.body.read_text(encoding="utf-8")
         drafts, unreachable = outreach.direct(
@@ -300,20 +311,63 @@ def confirmed(preview: str, count: int, what: str) -> bool:
     return count > 0 and input(f"Type SEND to {what}: ").strip() == "SEND"
 
 
+def rubrics(args: argparse.Namespace, config: dict) -> None:
+    try:
+        loaded = areas.load(core.DIR_RUBRICS)
+    except ValueError as e:
+        sys.exit(str(e))
+    if args.action == "extract":
+        url = args.url or config["url_areas"]
+        for rubric in areas.extract(url):
+            mine = core.DIR_RUBRICS / f"{rubric['code']}.yaml"
+            if mine.is_file() and not args.force:
+                print(f"{rubric['code']:6} kept your copy {mine} (--force replaces it)")
+            else:
+                print(f"{rubric['code']:6} saved {areas.save(rubric, core.DIR_RUBRICS)}")
+        return
+    if args.action == "list":
+        yours = {f.stem for f in core.DIR_RUBRICS.glob("*.yaml")}
+        for code, r in loaded.items():
+            notes = ["yours" if code in yours else "shipped"] + ["edited"] * areas.edited(r)
+            counts = f"{len(r['topics'])} topics, {len(r['exemplars'])} exemplars"
+            counts += f", {len(r['rules'])} rules"
+            print(f"{code:6} {r['area']}  ({counts}; {', '.join(notes)})")
+        return
+    if args.code not in loaded:
+        sys.exit(f"Which area? One of {', '.join(loaded)}")
+    if args.action == "show":
+        print(areas.dump(loaded[args.code]), end="")
+        return
+    file = core.DIR_RUBRICS / f"{args.code}.yaml"
+    if not file.is_file():
+        areas.save(loaded[args.code], core.DIR_RUBRICS)
+    subprocess.run([*editor(), str(file)], check=True)
+    try:
+        areas.read(file.read_text(encoding="utf-8"), args.code)
+    except ValueError as e:
+        sys.exit(f"{file}: {e}. Fix it with `rubrics edit {args.code}`")
+    print(f"Saved {file}")
+
+
+def editor() -> list[str]:
+    """The command of $VISUAL or $EDITOR, or of the system's default editor."""
+    default = "notepad" if sys.platform == "win32" else "vi"
+    return shlex.split(
+        os.environ.get("VISUAL") or os.environ.get("EDITOR") or default, posix=os.name != "nt"
+    )
+
+
 def edit(items: list[outreach.Item], field: str) -> list[outreach.Item]:
     """Opens each item in $VISUAL or $EDITOR, its first line holding the subject (or title).
     The file lives in the private data folder, as the text is confidential, and is removed."""
-    default = "notepad" if sys.platform == "win32" else "vi"
-    editor = shlex.split(
-        os.environ.get("VISUAL") or os.environ.get("EDITOR") or default, posix=os.name != "nt"
-    )
+    editor_ = editor()
     file, edited = core.DIR_DATA / "draft.txt", []
     core.DIR_DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
         for item in items:
             file.touch(mode=0o600)
             file.write_text(f"{field}: {item.title}\n\n{item.text}", encoding="utf-8")
-            subprocess.run([*editor, str(file)], check=True)
+            subprocess.run([*editor_, str(file)], check=True)
             first, _, text = file.read_text(encoding="utf-8").partition("\n")
             title = first.removeprefix(f"{field}:").strip()
             edited.append(item._replace(title=title, text=text.lstrip("\n")))

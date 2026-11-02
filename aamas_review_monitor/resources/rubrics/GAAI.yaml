@@ -1,0 +1,39 @@
+area: Generative and Agentic AI
+code: GAAI
+source:
+  url: https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/call-for-main-track/
+  sha256: ca7f20a5881b66ab10ba4b3a3f2e26223dde5051836e1db5a0ab4f743f0c04a7
+topics:
+- Memory, state, context, long-lived interaction, and other architectural patterns for generative and
+  agentic AI systems
+- Orchestration and workflows of agents and tools
+- Runtime support, infrastructure, and engineering for generative and agentic AI systems
+- Embodied, multimodal, and grounded generative AI agents
+- Open-ended, autonomous, and self-improving agents based on generative AI
+- Planning, reasoning, and long-horizon agentic workflows
+- Agency and learning in generative and agentic AI
+- Interaction protocols for agentic AI
+- Coordination, cooperation, and negotiation in generative AI agents
+- Normative reasoning and institutional constraints for generative AI agents
+- Theory of mind, user modeling, and social reasoning in generative AI agents
+- Hybrid classic-generative agents, with a focus on how generative AI agents use classical tools, models,
+  and protocols
+- Failure handling, recovery, and resilience in agentic AI
+- Modeling and analysis of generative AI agents
+- Instruction following and multi-turn agent behavior in generative AI agents
+- Human-agent interaction for delegation, feedback, and task collaboration in generative AI agents
+- Agentic decision support and decision boundaries
+- Alignment, learning from human feedback, and controllability of generative and agentic AI systems
+- Explainability, introspection, and debugging for generative AI agents and systems
+- Assurance, verification, and safety in generative and agentic AI systems
+- Benchmarks, evaluation, and metrics for generative and agentic AI systems
+- Generative AI-supported specification and implementation of agents and multiagent systems
+- Agentic AI applications in science, software, education, and critical domains
+description: |-
+  This area welcomes papers whose primary contribution advances generative and agentic AI systems, namely agents or multiagent systems that act, reason, interact, coordinate, or make decisions by using, integrating, or analyzing generative AI models. Relevant submissions may address foundations, architectures, learning methods, orchestration, tool use, evaluation, safety, alignment, verification, governance, deployment, and human-agent or multiagent interaction in generative-agent systems.
+
+  Papers should be submitted to GAAI when the central technical contribution concerns agents whose capabilities, architecture, reasoning, interaction, learning, evaluation, or deployment substantially rely on generative AI models. Papers whose main contribution is a general learning, planning, engineering, governance, or human-interaction method should instead be submitted to the corresponding AAMAS area, unless the generative-agent aspect is central.
+
+  Submissions where the core contribution is not specifically about agents or multiagent systems are out of scope. Advances in language models, prompt engineering, generic tool use, or arbitrary generative tasks are outside the scope of this area unless they make a clear contribution to autonomous agents or multiagent systems.
+exemplars: []
+rules: []
