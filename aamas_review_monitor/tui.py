@@ -74,9 +74,9 @@ COMMANDS = [
     ("Filter", "By SPC, #paper, issue text or color  [f]", "focus('filter')"),
     ("Show or hide green papers", "Papers without issues  [g]", "toggle_green"),
     ("Only issues never sent, or all", "Issues no comment or email listed yet  [n]", "toggle_unsent"),
-    ("Ignore or count again", "The selected issue: gray, uncounted, left out of emails and comments  [x]", "ignore"),
-    ("Mark or unmark", "The selected issue (or SPC), to act on several at once  [space]", "mark"),
-    ("Mark all shown", "Every issue (or SPC) shown; if all are marked, clears the marks  [*]", "mark_all"),
+    ("Ignore or count again", "The marked issues, else the selected one: gray, uncounted, left out of emails and comments  [x]", "ignore"),
+    ("Mark or unmark", "The selected issue (or SPC's, or paper's issues), to act on several at once  [space]", "mark"),
+    ("Mark all shown", "Every issue shown; if all are marked, clears the marks  [*]", "mark_all"),
     ("Mark by color, check or sent status", "The shown issues matching the chosen options, or none  [+]", "mark_some"),
     ("Actions", "What can be done on the marked papers or SPCs, else on the selected one  [a]", "actions"),
     ("Paper details", "Metadata, checks, anonymous reviews of the selected paper  [d]", "details"),
@@ -109,7 +109,7 @@ TAB_ACTIONS = {
         "toggle_unsent", "details", "open", "view_pdf", "folder", "download", "inspect", "mail",
         "comment", "email",
     },
-    "spcs-tab": {"mark", "mark_all", "actions", "mail"},
+    "spcs-tab": {"mark", "mark_all", "mark_some", "actions", "mail"},
     "history-tab": set(),
     "areas-tab": {"score_areas", "hide_areas", "label_area", "confirm_area"},
     "rubrics-tab": {"save_rubric", "revert_rubric"},
@@ -211,7 +211,10 @@ class Monitor(App):
         self.papers: list[dict] = []  # the latest snapshot's
         self.sent: list[dict] = []  # the history, newest first
         self.marked: set[tuple[int, str]] = set()  # issues: (number, code)
-        self.marked_spcs: set[str] = set()
+        # SPCs tab: a tree of SPC -> paper -> issue rows; marks are per SPC, as are emails
+        self.spc_marked: set[tuple[str, int, str]] = set()  # (spc, number, code)
+        self.spc_closed: set[tuple[str, int | None]] = set()  # collapsed (spc, None), (spc, #)
+        self.spc_rows: list[tuple[str, int | None, Issue | None, set]] = []  # ..., issue keys
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -251,7 +254,7 @@ class Monitor(App):
 
     DEFAULT_CSS = (
         "#queue { width: 3fr; } #paper-panel { width: 2fr; padding: 0 1; }"
-        " #spcs { width: 1fr; } #spc-panel { width: 2fr; padding: 0 1; }"
+        " #spcs { width: 3fr; } #spc-panel { width: 2fr; padding: 0 1; }"
         " #history { width: 3fr; } #history-panel { width: 2fr; padding: 0 1; }"
         " #areas { width: 2fr; } #area-panel { width: 1fr; padding: 0 1; }"
         " #rubrics { width: 1fr; } #rubric-pane { width: 2fr; }"
@@ -269,7 +272,16 @@ class Monitor(App):
         self.query_one("#history", DataTable).add_columns("", "When", "Kind", "Via", "To")
         spcs = self.query_one("#spcs", DataTable)
         self.spc_mark_column = spcs.add_column("", width=1)
-        spcs.add_columns("SPC", "Papers", "Open", ICONS[RED], ICONS[YELLOW])
+        spcs.add_columns(
+            "SPC · paper · issue",
+            "Status",
+            "Check",
+            "Papers",
+            "Open",
+            ICONS[RED],
+            ICONS[YELLOW],
+            "Emailed",
+        )
         self.query_one("#rubrics", DataTable).add_columns(
             "Code", "Copy", "Topics", "Exemplars", "Rules", "Area"
         )
@@ -346,20 +358,26 @@ class Monitor(App):
         return [i for i in self.issues if (i.number, i.code) not in self.ignored]
 
     def action_ignore(self) -> None:
-        """Ignores the selected issue, or counts it again if it is ignored."""
+        """Ignores the marked issues (else the selected one), or counts them again if they all
+        are ignored."""
         issue = self.selected()
         if self.query_one(TabbedContent).active != "papers" or issue is None:
             return
-        if issue.severity == GREEN:
+        found = [i for i in self.issues if (i.number, i.code) in self.marked] or [issue]
+        found = [i for i in found if i.severity != GREEN]
+        if not found:
             self.notify("Nothing to ignore: every check passes")
             return
-        key, table = (issue.number, issue.code), self.query_one("#issues", DataTable)
-        undo, row = key in self.ignored, table.cursor_row
-        core.ignore({key}, undo)
+        keys, table = {(i.number, i.code) for i in found}, self.query_one("#issues", DataTable)
+        undo, row = keys <= self.ignored, table.cursor_row
+        core.ignore(keys, undo)
         self.action_reload()
         table.move_cursor(row=row)
         what = "counted again" if undo else "ignored: gray, left out of emails and comments"
-        self.notify(f"#{issue.number} {issue.message}: {what}")
+        about = (
+            f"#{found[0].number} {found[0].message}" if len(found) == 1 else f"{len(found)} issues"
+        )
+        self.notify(f"{about}: {what}")
 
     def by_spc(self) -> dict[str, list[Issue]]:
         """Open issues per SPC, every SPC of the snapshot included."""
@@ -401,28 +419,90 @@ class Monitor(App):
             text.append("Nothing sent from this app yet", "italic")
         self.query_one("#history-entry", Static).update(text)
 
+    def spc_mark(self, keys: set) -> str:
+        return MARK if keys and keys <= self.spc_marked else "–" if keys & self.spc_marked else ""
+
     def fill_spcs(self) -> None:
+        """SPCs, worst first, expanded into their papers and issues; Enter collapses a row."""
         table = self.query_one("#spcs", DataTable)
+        row = table.cursor_row
         table.clear()
+        self.spc_rows = []
+        by_spc = self.by_spc()
         count = {
-            spc: sum(spc in (p["spcs"] or ["(no SPC)"]) for p in self.papers)
-            for spc in self.by_spc()
+            spc: sum(spc in (p["spcs"] or ["(no SPC)"]) for p in self.papers) for spc in by_spc
         }
+
+        def add(spc: str, number: int | None, issue: Issue | None, mine: list[Issue]) -> None:
+            keys = {(spc, i.number, i.code) for i in mine}
+            reds = sum(i.severity == RED for i in mine)
+            status = ICONS[RED if reds else YELLOW if mine else GREEN]
+            if issue:
+                cells = [Text(f"    {issue.message}"), status, issue.code.split(":")[0], "", ""]
+                cells += ["", "", self.last_sent(issue, "email")]
+            else:
+                arrow = "▸" if (spc, number) in self.spc_closed else "▾" if mine else " "
+                label = f"{arrow} {spc}" if number is None else f"  {arrow} #{number}"
+                papers = (count[spc], len({i.number for i in mine})) if number is None else ("", "")
+                emailed = next(
+                    (e["at"][5:10] for e in self.sent if e["to"] == spc and e["status"] == "sent"),
+                    "",
+                )
+                cells = [label, status, "", *papers, reds, len(mine) - reds]
+                cells.append(emailed if number is None else "")
+            table.add_row(self.spc_mark(keys), *cells, key=str(len(self.spc_rows)))
+            self.spc_rows.append((spc, number, issue, keys))
+
         for spc, mine in sorted(
-            self.by_spc().items(),
+            by_spc.items(),
             key=lambda kv: (-sum(i.severity == RED for i in kv[1]), -len(kv[1]), kv[0]),
         ):
-            reds = sum(i.severity == RED for i in mine)
-            mark = MARK if spc in self.marked_spcs else ""
-            numbers = len({i.number for i in mine})
-            table.add_row(mark, spc, count[spc], numbers, reds, len(mine) - reds, key=spc)
+            add(spc, None, None, mine)
+            if (spc, None) in self.spc_closed:
+                continue
+            for number in sorted({i.number for i in mine}):
+                theirs = [i for i in mine if i.number == number]
+                add(spc, number, None, theirs)
+                if (spc, number) not in self.spc_closed:
+                    for i in theirs:
+                        add(spc, number, i, [i])
+        table.move_cursor(row=row)
         self.show_spc()
 
-    def selected_spc(self) -> str | None:
+    def spc_row(self) -> tuple[str, int | None, Issue | None, set] | None:
         table = self.query_one("#spcs", DataTable)
         if not table.row_count:
             return None
-        return str(table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value)
+        key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
+        return self.spc_rows[int(key.value or 0)]
+
+    def selected_spc(self) -> str | None:
+        row = self.spc_row()
+        return row[0] if row else None
+
+    @on(DataTable.RowSelected, "#spcs")
+    def spc_selected(self) -> None:
+        """Expands or collapses an SPC or paper row; on an issue, shows its paper."""
+        if not (row := self.spc_row()):
+            return
+        spc, number, issue, _ = row
+        if issue:
+            self.show_details(issue.number)
+            return
+        self.spc_closed ^= {(spc, number)}
+        self.fill_spcs()
+
+    def spc_chosen(self) -> dict[str, list[Issue]]:
+        """The marked issues per SPC, else those of the selected row."""
+        by_spc = self.by_spc()
+        if self.spc_marked:
+            found = {s: [i for i in mine if (s, i.number, i.code) in self.spc_marked]
+                     for s, mine in by_spc.items()}  # fmt: skip
+            return {s: mine for s, mine in found.items() if mine}
+        if not (row := self.spc_row()):
+            return {}
+        spc, _, _, keys = row
+        return {spc: [i for i in by_spc[spc] if (spc, i.number, i.code) in keys]}
 
     @on(DataTable.RowHighlighted, "#spcs")
     @mounted
@@ -532,13 +612,12 @@ class Monitor(App):
         self.push_screen(CommentForm(numbered(numbers)), compose)
 
     def action_mail(self) -> None:
-        spcs: set[str] | None = None
+        by_spc: dict[str, list[Issue]] = {}
         numbers: set[int] | None = None
         if self.on_spcs():
-            if not (chosen_spcs := self.spc_scope()):
+            if not (by_spc := self.spc_chosen()):
                 return
-            spcs = set(chosen_spcs)
-            scope = chosen_spcs[0] if len(spcs) == 1 else f"{len(spcs)} marked SPCs"
+            scope = next(iter(by_spc)) if len(by_spc) == 1 else f"{len(by_spc)} SPCs"
         else:
             if not (shown := self.scope()):
                 return
@@ -547,21 +626,33 @@ class Monitor(App):
         def chosen(template: outreach.Template | None) -> None:
             if template is None:
                 return
-            issues = self.active() if spcs else self.chosen()
             latest = self.latest
             today = date.fromisoformat(latest["taken_at"][:10]) if latest else date.today()
             records = core.records()
-            drafts, unreachable = outreach.compose(
-                template, issues, records, self.config, today, spcs, numbers
-            )
+            if by_spc and template.audience == "spcs":  # each SPC, only the issues marked for them
+                parts = [
+                    outreach.compose(template, mine, records, self.config, today, {spc})
+                    for spc, mine in by_spc.items()
+                ]
+            elif by_spc:  # to the papers' reviewers: once per paper, whichever SPC it was under
+                issues = list(dict.fromkeys(i for mine in by_spc.values() for i in mine))
+                parts = [outreach.compose(template, issues, records, self.config, today)]
+            else:
+                parts = [
+                    outreach.compose(
+                        template, self.chosen(), records, self.config, today, None, numbers
+                    )
+                ]
+            drafts = [d for found, _ in parts for d in found]
+            unreachable = [u for _, missing in parts for u in missing]
             if not drafts:
                 self.notify("\n".join([*unreachable, f"Nothing to send with {template.name}"]))
                 return
 
             self.send(drafts, unreachable, f" ({template.name})")
 
-        if spcs:
-            about = [i for i in self.active() if spcs & set(i.spcs)]
+        if by_spc:
+            about = list(dict.fromkeys(i for mine in by_spc.values() for i in mine))
         else:
             about = [i for i in self.chosen() if numbers and i.number in numbers]
         self.push_screen(Templates(scope, about), chosen)
@@ -591,6 +682,8 @@ class Monitor(App):
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         if event.data_table.id == "areas":
             self.sort_areas(str(event.column_key.value))
+            return
+        if event.data_table.id == "spcs":  # a tree: sorting would scatter it
             return
         event.data_table.sort(
             event.column_key,
@@ -661,11 +754,6 @@ class Monitor(App):
         issue = self.selected()
         return [issue.number] if issue else []
 
-    def spc_scope(self) -> list[str]:
-        """The marked SPCs, else the selected one."""
-        spc = self.selected_spc()
-        return sorted(self.marked_spcs) if self.marked_spcs else [spc] if spc else []
-
     def on_spcs(self) -> bool:
         return self.query_one(TabbedContent).active == "spcs-tab"
 
@@ -678,22 +766,25 @@ class Monitor(App):
             table.update_cell(key, self.mark_column, mark)
         spcs = self.query_one("#spcs", DataTable)
         for key in spcs.rows:
-            mark = MARK if key.value in self.marked_spcs else ""
+            mark = self.spc_mark(self.spc_rows[int(key.value or 0)][3])
             spcs.update_cell(key, self.spc_mark_column, mark)
 
     def action_mark(self) -> None:
         if self.on_spcs():
-            if spc := self.selected_spc():
-                self.marked_spcs ^= {spc}
+            if row := self.spc_row():
+                keys = row[3]
+                self.spc_marked = (
+                    self.spc_marked - keys if keys <= self.spc_marked else self.spc_marked | keys
+                )
         elif issue := self.selected():
             self.marked ^= {(issue.number, issue.code)}
         self.show_marks()
 
     def action_mark_all(self) -> None:
         if self.on_spcs():
-            shown = {str(k.value) for k in self.query_one("#spcs", DataTable).rows}
-            self.marked_spcs = set() if shown <= self.marked_spcs else self.marked_spcs | shown
-            count, what = len(self.marked_spcs), "SPCs"
+            every = {(s, i.number, i.code) for s, mine in self.by_spc().items() for i in mine}
+            self.spc_marked = set() if every <= self.spc_marked else every
+            count, what = len(self.spc_marked), "issues"
         else:
             rows = self.shown()
             self.marked = set() if rows <= self.marked else self.marked | rows
@@ -718,10 +809,14 @@ class Monitor(App):
         return found
 
     def action_mark_some(self) -> None:
-        if self.on_spcs():
-            return
-        shown = [self.issues[int(k.value or 0)] for k in self.query_one("#issues", DataTable).rows]
-        facets = {(i.number, i.code): self.facets(i) for i in shown}
+        on_spcs = self.on_spcs()
+        items: dict[tuple, Issue]
+        if on_spcs:
+            items = {(s, i.number, i.code): i for s, mine in self.by_spc().items() for i in mine}
+        else:
+            rows = self.query_one("#issues", DataTable).rows
+            items = {(i.number, i.code): i for i in (self.issues[int(k.value or 0)] for k in rows)}
+        facets = {key: self.facets(i) for key, i in items.items()}
         counts = Counter(f for found in facets.values() for f in found)
         labels = {code: label for code, label, _ in legend(self.config)}
         labels |= {code: label for code, label, _ in legend(self.config, documents.DOCUMENT_CHECKS)}
@@ -741,14 +836,18 @@ class Monitor(App):
             if picked is None:
                 return
             groups = {p.split(":")[0] for p in picked}
-            self.marked = {
+            marked = {
                 key
                 for key, found in facets.items()
                 if picked
                 and all(any(p in found for p in picked if p.startswith(f"{g}:")) for g in groups)
             }
+            if on_spcs:
+                self.spc_marked = marked
+            else:
+                self.marked = marked
             self.show_marks()
-            count = len(self.marked)
+            count = len(marked)
             self.notify(f"{count} issue{'s' * (count != 1)} marked" if count else "Marks cleared")
 
         self.push_screen(Marks(options), chosen)
@@ -759,9 +858,9 @@ class Monitor(App):
             self.notify("Nothing to act on in this tab")
             return
         if tab == "spcs-tab":
-            if not (spcs := self.spc_scope()):
+            if not (by_spc := self.spc_chosen()):
                 return
-            scope = spcs[0] if len(spcs) == 1 else f"{len(spcs)} marked SPCs"
+            scope = next(iter(by_spc)) if len(by_spc) == 1 else f"{len(by_spc)} SPCs"
         else:
             if not (numbers := self.scope()):
                 return

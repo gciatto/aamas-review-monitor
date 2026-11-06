@@ -291,8 +291,11 @@ see whether a new topic, exemplar or rule helps on your own papers. Labels live 
 The line above the tabs says where the process stands ("Reviewing: reviews due 13 Nov, in 25
 days") and how old the snapshot is, in yellow once it is past `snapshot_stale_hours`.
 
-Marks are per issue: actions apply to the papers of the **marked** issues (or to the marked
-SPCs), and to the selected paper when nothing is marked. Comments and templated emails list
+Marks are per issue: actions apply to the papers of the **marked** issues, and to the selected
+paper when nothing is marked. The SPCs tab is a tree: Enter expands an SPC into its papers and a
+paper into its issues (with their check and when they were last emailed); marking an SPC or
+paper row marks all its issues, and a templated email to SPCs lists, for each SPC, only the
+issues marked under them. Comments and templated emails list
 only the marked issues, so a paper can get a new comment about just its new issues. `space`
 marks or unmarks, `*` marks everything the filter shows (or clears the marks if all are
 marked), and `a` opens a menu of what can be done, naming the papers it will act on.
@@ -306,9 +309,9 @@ which likewise offers the current tab's actions:
 | `f` | Filter by SPC, `#N`, issue text or color |
 | `g` | Show or hide 🟢 papers |
 | `n` | Show only the issues no comment or email listed yet (then `*` marks them), or all |
-| `x` | Ignore the selected issue, or count it again |
-| `space` / `*` | Mark or unmark the selected issue (or SPC) / everything shown |
-| `+` | Mark the shown issues by color, sent status (never commented on, emailed, or either) and check, picking several options: any option within a group, every group chosen; `None` clears the marks |
+| `x` | Ignore the marked issues (else the selected one), or count them again if all are ignored |
+| `space` / `*` | Mark or unmark the selected issue (or an SPC's or paper's issues) / everything shown |
+| `+` | Mark the shown issues (Papers or SPCs tab) by color, sent status (never commented on, emailed, or either) and check, picking several options: any option within a group, every group chosen; `None` clears the marks |
 | `a` | Action menu for the marked papers or SPCs, else the selected one |
 | Enter, `d` | Paper details: metadata, every check with its outcome, anonymous reviews |
 | `o` | Open the paper on OpenReview |
@@ -339,7 +342,7 @@ retries and waits are logged to the terminal, and `ctrl+c` interrupts.
 
 ### Ignoring issues
 
-A flag you have checked and judged harmless can be ignored: `x` on its row, or `ignore N CODE`.
+A flag you have checked and judged harmless can be ignored: `x` on its row (or on several marked rows), or `ignore N CODE`.
 It stays in the list, in gray with ⚪, so nothing disappears silently, but it no longer makes the
 paper red or yellow, doesn't count for its SPC, and is left out of every email and comment.
 `report`, `issues` and the CSV mark it as ignored. It stays ignored across syncs for as long as

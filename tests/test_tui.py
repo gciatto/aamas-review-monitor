@@ -400,7 +400,8 @@ def test_spc_tab_lists_issues_per_spc_and_sends_a_digest(tmp_path, monkeypatch):
         async with app.run_test(size=(140, 40)) as pilot:
             await pilot.press("t")
             spcs = app.query_one("#spcs")
-            assert spcs.row_count == 1 and spcs.get_row_at(0)[:4] == ["", "~Spc_One1", 1, 1]
+            assert spcs.get_row_at(0)[1:6:3] == ["▾ ~Spc_One1", 1]  # expanded from the start
+            assert "#7" in str(spcs.get_row_at(1)[1]) and spcs.row_count > 2
             panel = str(app.query_one("#spc-issues").render())
             assert "#7" in panel and "ratings [3, 6]" in panel
             await pilot.press("m")
@@ -519,7 +520,7 @@ def test_marks_scope_the_action_menu_and_wide_terminals_show_details(tmp_path, m
             await pilot.press("escape", "space")
             assert app.marked == set() and table.get_row_at(0)[0] == ""
             await pilot.press("t", "space", "a")  # SPCs tab: templated email only
-            assert app.marked_spcs == {"~Spc_One1"}
+            assert {s for s, *_ in app.spc_marked} == {"~Spc_One1"}
             assert [a for *_, a in app.screen.choices] == ["mail"]
             await pilot.press("escape", "t", "a")  # History: nothing to act on
             assert not isinstance(app.screen, tui.Actions)
@@ -582,6 +583,45 @@ def test_review_edits_each_message_and_refuses_empty_ones(tmp_path, monkeypatch)
     asyncio.run(scenario())
     assert [m[0][0] for m in client.messages] == ["Hi, paper 7", "Hi"]
     assert client.messages[1][0][2] == "Dear {{fullname}}, about #8"
+
+
+def test_spc_tree_expands_and_emails_only_the_marked_issues(tmp_path, monkeypatch):
+    app, _, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.press("t", "enter")  # collapses the SPC
+            spcs = app.query_one("#spcs")
+            assert spcs.row_count == 1 and str(spcs.get_row_at(0)[1]).startswith("▸")
+            await pilot.press("enter")  # expands it again
+            assert spcs.row_count > 3 and "#7" in str(spcs.get_row_at(1)[1])
+            await pilot.press("down", "down", "down", "space")  # the second issue only
+            (key,) = app.spc_marked
+            marks = [spcs.get_row_at(r)[0] for r in range(spcs.row_count)]
+            assert marks[:2] == ["–", "–"] and marks.count("✔") == 1
+            await pilot.press("m")
+            await choose_template(app, pilot, "spc-digest")
+            (item,) = (await reviewing(app, pilot)).items
+            listed = [i for i in app.issues if (i.number, i.code) == key[1:]]
+            others = [i for i in app.active() if i.number == 7 and i not in listed]
+            assert listed[0].message in item.text
+            assert not any(f": {i.message}\n" in item.text + "\n" for i in others)
+
+    asyncio.run(scenario())
+
+
+def test_ignore_applies_to_every_marked_issue(tmp_path, monkeypatch):
+    app, _, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.press("asterisk", "x")
+            keys = {(i.number, i.code) for i in app.issues if i.severity != "GREEN"}
+            assert len(keys) > 1 and keys <= app.ignored
+            await pilot.press("x")  # all ignored: counted again
+            assert not keys & app.ignored
+
+    asyncio.run(scenario())
 
 
 def test_ignored_issues_stay_listed_in_gray_and_out_of_comments(tmp_path, monkeypatch):
