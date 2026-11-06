@@ -7,7 +7,8 @@ Subject: AAMAS 2027: status of your papers ($papers)
 Dear {{fullname}},
 
 Here is where the reviewing of the papers you are supervising as SPC stands, according to my
-automatic process checks. Each point says what the check verifies:
+automatic process checks. Each point says what the check verifies, and suggests an action
+(🔴 needs attention soon, 🟡 worth a look):
 
 $issues
 

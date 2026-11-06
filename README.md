@@ -374,7 +374,12 @@ templates:
 
 SPCs get one message each, listing all their papers, sent through the message invitation of one
 of those papers: OpenReview lets SACs write only through a paper's invitation, and any of an
-SPC's papers reaches them. Reviewers get one message per paper. Templates are plain files in
+SPC's papers reaches them. In SPC messages each issue carries its color (🔴, 🟡), what its check
+verifies and a suggested action, one per check, from
+[`resources/spc_actions.txt`](aamas_review_monitor/resources/spc_actions.txt) (edit it to change
+the wording). From `reviews_urgent_days` (7) before the review deadline on, the actions on
+missing and late reviews turn urgent: press the reviewers, and start looking for emergency
+reviewers. Reviewers get one message per paper. Templates are plain files in
 [`aamas_review_monitor/resources/templates/`](aamas_review_monitor/resources/templates/):
 
 - **Header:** `Name:`, `Description:`, `Audience:` (`spcs` or `late-reviewers`), `Codes:` (the

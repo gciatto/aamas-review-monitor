@@ -1,0 +1,39 @@
+# code: action; code/urgent: the action from reviews_urgent_days before the review deadline on
+active_submission: none needed; no further review action is expected on this paper.
+no_spc: none on your side; I will look into the assignment myself.
+few_reviewers: please let me know if you can suggest further reviewers, or recruit an emergency reviewer.
+reviews_behind: please remind the reviewers who have not submitted yet of the upcoming deadline.
+missing_reviews: please remind the missing reviewers, and tell me promptly if one cannot deliver, so that an emergency reviewer can be found.
+late_reviewer: please remind this reviewer: they owe several reviews, so one message covering all of them may work best.
+reviews_behind/urgent: the review deadline is close: please press the late reviewers for a firm submission date, and start looking for emergency reviewers in case they do not deliver.
+missing_reviews/urgent: the review deadline is close: please press the missing reviewers for a firm submission date, and start looking for emergency reviewers (let me know whom you have in mind).
+late_reviewer/urgent: the review deadline is close: please press this reviewer, who owes several reviews, and start looking for emergency reviewers for their papers.
+short_review: please read the review and, if it is too thin to support a decision, ask the reviewer to expand it.
+review_chatbot_phrases: please read the flagged passage and, if it looks like leftover generated text, ask the reviewer to revise it.
+review_marker_words: please give the review a read; act only if its content, not its wording, is a concern.
+recycled_review: please compare the review with the reviewer's other ones and ask them to write one specific to this paper if needed.
+low_confidence: please check whether the reviewers' expertise fits the paper, and let me know if another reviewer is needed.
+disagreement: please invite the reviewers to discuss their differing views once the discussion opens.
+no_discussion: please start the discussion, asking the reviewers to address their disagreement.
+long_discussion: please check whether the discussion is stuck, and steer it towards a conclusion.
+missing_acknowledgement: please remind these reviewers to acknowledge the authors' rebuttal, by updating their review or commenting.
+inactive_spc: please join the discussions of your papers, even with a short note to the reviewers.
+missing_meta_review: please write and submit the meta-review before its deadline.
+short_meta_review: please expand the meta-review so that it summarises the reviews and the discussion.
+missing_recommendation: please fill in both the Proceedings and the Findings recommendations.
+meta_vs_ratings: please make sure the meta-review explains why the recommendation departs from the ratings.
+findings_consistency: please revise the Findings recommendation: the authors opted out of Findings.
+page_limit: please check the page count in the PDF; let me know if the paper exceeds the limit.
+appendix_in_paper: please check whether the appendix brings the paper beyond the page limit, and let me know.
+too_short: none needed beyond a glance at the PDF; short papers are allowed.
+page_size: please check the page size in the PDF and let me know if it differs from the template.
+fonts: please check whether the paper follows the AAMAS template; let me know if it does not.
+template: please check whether the paper uses the AAMAS 2027 template; let me know if it does not.
+anonymous_mode: please check the first page and the PDF's metadata for author names, and let me know.
+identifying_text: please check the flagged text for anything revealing the authors, and let me know.
+metadata_match: please check that the PDF is the right one for this submission, and let me know if not.
+supplementary_format: please check the supplementary material, and let me know if it breaks the rules.
+supplementary_anonymous: please check the supplementary material for anything revealing the authors, and let me know.
+code_available: none needed, unless the reviewers raise reproducibility concerns.
+chatbot_phrases: please read the flagged passage, and let me know if it looks like leftover generated text.
+marker_words: none needed; it is a weak hint, worth acting on only together with other concerns.

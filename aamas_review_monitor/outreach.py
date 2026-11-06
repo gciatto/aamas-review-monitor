@@ -21,6 +21,7 @@ from aamas_review_monitor.resources import (
     DIR_TEMPLATES,
     FILE_COMMENT,
     FILE_COMMENT_LATE_REVIEWS,
+    FILE_SPC_ACTIONS,
     FILE_VARIABLES,
 )
 
@@ -113,19 +114,49 @@ def _legend(config: dict) -> dict[str, tuple[str, str]]:
 
     entries = legend(config) + legend(config, DOCUMENT_CHECKS)
     return {code: (label, text) for code, label, text in entries}
+    # found = {}
+    # for code, label, text in entries:
+    #     for severity, icon in ICONS.items():  # "YELLOW when..." -> "🟡 when..."
+    #         text = re.sub(rf"\b{severity}\b", icon, text)
+    #     found[code] = (label, text)
+    # return found
 
 
 def _paper_line(issue: Issue) -> str:
     return f"- #{issue.number} ({issue.url}): {issue.message}"
 
 
+def _spc_line(issue: Issue) -> str:
+    return f"- {ICONS[issue.severity]} #{issue.number} ({issue.url}): {issue.message}"
+
+
+def spc_actions(config: dict | None = None, today: date | None = None) -> dict[str, str]:
+    """The action suggested to SPCs for each check, by code; from `reviews_urgent_days` before
+    the review deadline on, the `code/urgent` variants replace their check's action."""
+    lines = FILE_SPC_ACTIONS.read_text(encoding="utf-8").splitlines()
+    lines = [line for line in lines if ":" in line and not line.startswith("#")]
+    found = {k.strip(): v.strip() for k, v in (line.split(":", 1) for line in lines)}
+    actions = {k: v for k, v in found.items() if "/" not in k}
+    deadline = (config or {}).get("deadline_reviews")
+    if (
+        config
+        and deadline
+        and today
+        and ((date.fromisoformat(deadline) - today).days <= config["reviews_urgent_days"])
+    ):
+        actions |= {k.split("/")[0]: v for k, v in found.items() if k.endswith("/urgent")}
+    return actions
+
+
 def _lines(
     issues: list[Issue],
     line: Callable[[Issue], str] = _paper_line,
     explained: dict[str, tuple[str, str]] | None = None,
+    actions: dict[str, str] | None = None,
 ) -> str:
     """One line per issue; with `explained` (the legend), a paper's first issue from each
-    check is followed by what that check verifies, so readers know why it was flagged."""
+    check is followed by what that check verifies, so readers know why it was flagged, and
+    by the suggested action, if `actions` has one."""
     found, seen = [], set()
     for i in issues:
         found.append(line(i))
@@ -138,6 +169,15 @@ def _lines(
                     f"{label}: {text}", 92, initial_indent="    ", subsequent_indent="    "
                 )
             )
+            if actions and code in actions:
+                found.append(
+                    textwrap.fill(
+                        f"__Suggested action__: {actions[code]}",
+                        92,
+                        initial_indent="    * ",
+                        subsequent_indent="      ",
+                    )
+                )
     return "\n".join(found)
 
 
@@ -185,7 +225,7 @@ def compose(
             fill = values | {
                 "count": str(len(papers)),
                 "papers": ", ".join(f"#{n}" for n in papers),
-                "issues": _lines(theirs, explained=_legend(config)),
+                "issues": _lines(theirs, _spc_line, _legend(config), spc_actions(config, today)),
             }
             invitation, parent, _ = recipients(record, "spcs")
             subject = string.Template(template.subject).safe_substitute(fill)

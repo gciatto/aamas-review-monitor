@@ -7,7 +7,8 @@ Subject: AAMAS 2027: SPC actions pending ($papers)
 Dear {{fullname}},
 
 According to my automatic process checks, some SPC actions on your papers are pending or
-overdue. Each point says what the check verifies:
+overdue. Each point says what the check verifies, and suggests an action
+(🔴 needs attention soon, 🟡 worth a look):
 
 $issues
 

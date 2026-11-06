@@ -1,7 +1,7 @@
 from datetime import date
 
 from aamas_review_monitor import outreach
-from aamas_review_monitor.checks import RED, YELLOW, Issue
+from aamas_review_monitor.checks import RED, YELLOW, Issue, legend
 from aamas_review_monitor.collector import fetch
 from aamas_review_monitor.papers import deliver
 from tests.test_checks import CONFIG
@@ -34,9 +34,28 @@ def test_spc_digest_lists_every_issue_of_the_spc_and_goes_through_their_paper():
     assert draft.to == "~Spc_One1" and draft.members == [f"{SUB}7/Area_Chair_9jqi"]
     assert draft.invitation == f"{SUB}7/Area_Chairs/-/Message"
     assert draft.subject == "AAMAS 2027: status of your papers (#7)"
-    assert f"- #7 ({URL}): 2 reviews missing, 2 days left\n    Reviews on schedule: " in draft.body
-    assert f"- #7 ({URL}): ratings [3, 6]\n    Ratings within the allowed spread: " in draft.body
+    assert (
+        f"- 🔴 #7 ({URL}): 2 reviews missing, 2 days left\n    Reviews on schedule: " in draft.body
+    )
+    assert f"- 🟡 #7 ({URL}): ratings [3, 6]\n    Ratings within the allowed spread: " in draft.body
+    assert "    * __Suggested action__: the review deadline is close: please press" in draft.body
     assert draft.body.startswith("Dear {{fullname}},")  # OpenReview fills the name in
+
+
+def test_every_check_has_a_suggested_spc_action():
+    from aamas_review_monitor.documents import DOCUMENT_CHECKS
+
+    codes = {c for c, _, _ in legend(CONFIG) + legend(CONFIG, DOCUMENT_CHECKS)}
+    assert set(outreach.spc_actions()) == codes
+
+
+def test_spc_actions_turn_urgent_a_week_before_the_review_deadline():
+    calm = outreach.spc_actions(CONFIG, date(2026, 11, 5))  # 8 days left
+    urgent = outreach.spc_actions(CONFIG, date(2026, 11, 6))  # 7 days left
+    late = outreach.spc_actions(CONFIG, date(2026, 11, 20))  # overdue
+    assert "emergency" not in calm["reviews_behind"]
+    assert "emergency reviewers" in urgent["reviews_behind"] == late["reviews_behind"]
+    assert urgent["disagreement"] == calm["disagreement"] and set(urgent) == set(calm)
 
 
 def test_reviewer_reminder_goes_to_the_late_reviewers_of_each_paper():

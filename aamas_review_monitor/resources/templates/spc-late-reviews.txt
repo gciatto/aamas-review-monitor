@@ -7,7 +7,8 @@ Subject: AAMAS 2027: late reviews on your papers ($papers)
 Dear {{fullname}},
 
 According to my automatic process checks, some reviews of the papers you are supervising as
-SPC are missing or behind schedule. Each point says what the check verifies:
+SPC are missing or behind schedule. Each point says what the check verifies, and suggests an
+action (🔴 needs attention soon, 🟡 worth a look):
 
 $issues
 

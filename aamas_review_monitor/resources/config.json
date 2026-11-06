@@ -23,6 +23,7 @@
   "reviewers_min": 3,
   "reviews_warning_days": 5,
   "reviews_critical_days": 2,
+  "reviews_urgent_days": 7,
   "reviews_words_min": 150,
   "reviews_similarity_max": 0.6,
   "reviewers_late_papers_min": 2,
