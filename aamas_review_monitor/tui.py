@@ -962,9 +962,15 @@ class Monitor(App):
         try:
             with self.suspend():
                 print("Signing in to OpenReview: answer any multi-factor prompts here")
-                return core.login(self.config, *credentials)
+                # Textual resumes only if the block exits normally: a failed login (e.g. a
+                # wrong password) raised in here would leave the app suspended, stuck
+                try:
+                    return core.login(self.config, *credentials)
+                except Exception as e:
+                    error = e
         except SuspendNotSupported:  # e.g. headless: no terminal to prompt in anyway
             return core.login(self.config, *credentials)
+        raise error
 
     def ask_login(self, label: str, job: Job, done: Callable[[Any], object]) -> None:
         def signed_in(credentials: tuple[str, str] | None) -> None:

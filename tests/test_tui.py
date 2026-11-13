@@ -3,6 +3,8 @@ import contextlib
 import json
 import zipfile
 
+import pytest
+
 from textual.widgets import Static, Tree
 
 from aamas_review_monitor import core
@@ -208,6 +210,27 @@ def test_tui_signs_in_with_the_app_suspended(tmp_path, monkeypatch):
     monkeypatch.setattr(core, "login", lambda config, *creds: suspended.append(creds) or client)
     assert app.sign_in(("sac@example.org", "secret")) is client
     assert suspended == [True, ("sac@example.org", "secret"), False]
+
+
+def test_tui_resumes_after_a_failed_sign_in(tmp_path, monkeypatch):
+    """Textual resumes only when the suspended block exits normally: a wrong password must not
+    leave the app suspended."""
+    app, _, _ = cached_monitor(tmp_path, monkeypatch)
+    resumed: list[bool] = []
+
+    @contextlib.contextmanager
+    def suspend():  # like Textual's: no try/finally around the yield
+        yield
+        resumed.append(True)
+
+    def login(config, *creds):
+        raise RuntimeError("Invalid username or password")
+
+    monkeypatch.setattr(app, "suspend", suspend)
+    monkeypatch.setattr(core, "login", login)
+    with pytest.raises(RuntimeError, match="Invalid"):
+        app.sign_in(("sac@example.org", "wrong"))
+    assert resumed == [True]
 
 
 def test_tui_signs_in_and_syncs_in_background(tmp_path, monkeypatch):
