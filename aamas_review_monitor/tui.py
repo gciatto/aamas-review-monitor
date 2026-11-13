@@ -589,8 +589,10 @@ class Monitor(App):
         def compose(spcs_read: bool | None) -> None:
             if spcs_read is None:
                 return
+            latest = self.latest
+            today = date.fromisoformat(latest["taken_at"][:10]) if latest else date.today()
             found, skipped = outreach.comments(
-                self.chosen(), core.records(), set(numbers), spcs_read, self.config
+                self.chosen(), core.records(), set(numbers), spcs_read, self.config, today
             )
             if not found:
                 self.notify("\n".join([*skipped, "Nothing to comment on"]))

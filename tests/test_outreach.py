@@ -122,6 +122,7 @@ def test_each_failed_check_is_explained_once_per_paper_for_spcs_but_not_reviewer
     assert "shorter than 150 words" in draft.body
     (comment,), _ = outreach.comments(ISSUES + short, records, {7}, True, CONFIG)
     assert comment.text.count("Reviews long enough: ") == 1
+    assert comment.text.count("ask the reviewer to expand it") == 1  # suggested once, too
     (reminder,), _ = outreach.compose(
         by_key()["reviewers-deadline"], ISSUES, records, CONFIG, TODAY
     )
@@ -131,7 +132,11 @@ def test_each_failed_check_is_explained_once_per_paper_for_spcs_but_not_reviewer
 def test_comments_drop_the_explanations_when_too_long_for_openreview(monkeypatch):
     records = fetch(FakeClient(), CONFIG)
     (explained,), _ = outreach.comments(ISSUES, records, {7}, True, CONFIG)
+    assert "__Suggested action__: " in explained.text and "each other's reviews" in explained.text
     monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", len(explained.text) - 1)
+    (shorter,), _ = outreach.comments(ISSUES, records, {7}, True, CONFIG)
+    assert "Suggested action" not in shorter.text and "Reviews on schedule: " in shorter.text
+    monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", len(shorter.text) - 1)
     (bare,), _ = outreach.comments(ISSUES, records, {7}, True, CONFIG)
     assert "Reviews on schedule: " not in bare.text and "- 🔴 2 reviews missing" in bare.text
     monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", 100)

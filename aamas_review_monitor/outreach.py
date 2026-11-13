@@ -384,11 +384,17 @@ def preview(
 
 
 def comments(
-    issues: list[Issue], records: list[dict], numbers: set[int], spcs_read: bool, config: dict
+    issues: list[Issue],
+    records: list[dict],
+    numbers: set[int],
+    spcs_read: bool,
+    config: dict,
+    today: date | None = None,
 ) -> tuple[list[Comment], list[str]]:
-    """One forum comment per paper listing its open issues, each check explained once, from the
-    first comment template whose codes cover them all (the late-reviews one, else the general
-    one); also the papers that cannot get one, and why."""
+    """One forum comment per paper listing its open issues, each check explained once and
+    followed by the action suggested to the SPC, from the first comment template whose codes
+    cover them all (the late-reviews one, else the general one); also the papers that cannot
+    get one, and why."""
     choices = [
         _fields(f.read_text(encoding="utf-8")) for f in (FILE_COMMENT_LATE_REVIEWS, FILE_COMMENT)
     ]
@@ -405,9 +411,13 @@ def comments(
             url = theirs[0].url
             values = {"paper": f"#{number}", "url": url, "count": "1", "papers": f"#{number}"}
             title = string.Template(fields["title"]).safe_substitute(values)
-            # explained if it fits OpenReview's limit, else the bare list, else nothing
-            for explained in (_legend(config), None):
-                lines = _lines(theirs, lambda i: f"- {ICONS[i.severity]} {i.message}", explained)
+            # explained with actions if it fits OpenReview's limit, else explained, else the
+            # bare list, else nothing
+            legend_, actions = _legend(config), spc_actions(config, today)
+            for explained, acts in ((legend_, actions), (legend_, None), (None, None)):
+                lines = _lines(
+                    theirs, lambda i: f"- {ICONS[i.severity]} {i.message}", explained, acts
+                )
                 text = string.Template(body).safe_substitute(issues=lines).strip() + "\n"
                 if len(text) <= COMMENT_CHARS_MAX:
                     listed = tuple((i.number, i.code) for i in theirs)

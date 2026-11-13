@@ -13,7 +13,7 @@ review_chatbot_phrases: please read the flagged passage and, if it looks like le
 review_marker_words: please give the review a read; act only if its content, not its wording, is a concern.
 recycled_review: please compare the review with the reviewer's other ones and ask them to write one specific to this paper if needed.
 low_confidence: please check whether the reviewers' expertise fits the paper, and let me know if another reviewer is needed.
-disagreement: please invite the reviewers to discuss their differing views once the discussion opens.
+disagreement: please invite the reviewers to read each other's reviews and discuss their differing views once the discussion opens; if the discrepancy remains, explain in the meta-review how you weighed it.
 no_discussion: please start the discussion, asking the reviewers to address their disagreement.
 long_discussion: please check whether the discussion is stuck, and steer it towards a conclusion.
 missing_acknowledgement: please remind these reviewers to acknowledge the authors' rebuttal, by updating their review or commenting.
