@@ -46,8 +46,17 @@ def issues(p, today, *others):
     return {(i.severity, i.code) for i in check_paper(p, ctx(today, p, *others))}
 
 
-def post(role, who, day):
-    return {"role": role, "who": who, "date": day}
+def post(role, who, day, unanswered=False):
+    return {"role": role, "who": who, "date": day, "unanswered": unanswered}
+
+
+def test_unanswered_comments_to_the_sac():
+    posts = [post("spc", "~SPC_One1", "2026-11-26", True), post("reviewer", "~R_01", "2026-11-24")]
+    assert issues(paper(posts=posts[1:]), "2026-11-27") == set()
+    flagged = check_paper(paper(posts=posts + posts[:1]), ctx("2026-11-27"))
+    assert [(i.severity, i.code, i.message) for i in flagged] == [
+        (YELLOW, "unanswered_comment", "2 comments to the SAC unanswered, oldest from 2026-11-26")
+    ]
 
 
 def test_healthy_paper_has_no_issues():

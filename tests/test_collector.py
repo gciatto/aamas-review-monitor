@@ -11,8 +11,11 @@ CONFIG = json.loads(FILE_CONFIG.read_text(encoding="utf-8"))
 NOV_1 = 1793491200000  # 2026-11-01T00:00:00Z, in OpenReview's milliseconds
 
 
-def reply(kind, sig, **content):
+def reply(kind, sig, readers=(), id=None, replyto=None, **content):
     return {
+        "id": id,
+        "replyto": replyto,
+        "readers": [f"{SUB}7/{r}" if "/" not in r else r for r in readers],
         "invitations": [f"{SUB}7/-/{kind}"],
         "signatures": [f"{SUB}7/{sig}"],
         "content": {k: {"value": v} for k, v in content.items()},
@@ -122,6 +125,21 @@ def test_fetch_and_summarize_keep_only_process_metadata():
         "meta_review": True,
         "meta": {"words": 1, "proceedings": None, "findings": None},
         "comments": 1,
-        "posts": [{"who": "~Spc_One1", "role": "spc", "date": "2026-11-01"}],
+        "posts": [{"who": "~Spc_One1", "role": "spc", "date": "2026-11-01", "unanswered": False}],
         "rebuttal": None,
     }
+
+
+def test_comments_for_the_sacs_only_are_unanswered_until_a_sac_replies():
+    (record,) = fetch(FakeClient(), CONFIG)
+    chairs = ("Senior_Area_Chairs", "Area_Chairs", f"{VENUE}/Program_Chairs")
+    record["replies"] = [
+        reply("Official_Comment", "Area_Chair_9jqi", chairs, "c1", comment="to the SAC"),
+        reply("Official_Comment", "Reviewer_aB3x", chairs, "c2", comment="to the chairs"),
+        reply("Official_Comment", "Area_Chair_9jqi", (*chairs, "Reviewers"), "c3", comment="all"),
+        reply("Official_Comment", "Senior_Area_Chairs", chairs, "c4", comment="from the SAC"),
+        reply("Official_Comment", "Senior_Area_Chairs", chairs, "c5", "c2", comment="answer"),
+    ]
+    posts = summarize(record, CONFIG)["posts"]
+    assert [p["unanswered"] for p in posts] == [True, False, False, False, False]
+    assert [p["role"] for p in posts] == ["spc", "reviewer", "spc", "sac", "sac"]

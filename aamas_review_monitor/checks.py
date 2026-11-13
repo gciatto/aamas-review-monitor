@@ -322,6 +322,20 @@ def long_discussion(paper: dict, ctx: Context) -> list[Finding]:
 
 
 @paper_check
+def unanswered_comment(paper: dict, ctx: Context) -> list[Finding]:
+    """Comments to the SAC answered
+
+    YELLOW when a comment readable by the SACs but not by reviewers or authors has no SAC
+    comment replying to it.
+    """
+    found = sorted(p["date"] or "" for p in _posts(paper) if p.get("unanswered"))
+    if not found:
+        return []
+    since = f", oldest from {found[0]}" if found[0] else ""
+    return [Finding(YELLOW, f"{len(found)} comments to the SAC unanswered{since}")]
+
+
+@paper_check
 def missing_acknowledgement(paper: dict, ctx: Context) -> list[Finding]:
     """Rebuttal acknowledged
 

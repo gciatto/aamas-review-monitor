@@ -109,6 +109,9 @@ def _role(record: dict, signature: str) -> str:
         return "reviewer"
     if name.startswith(names.get("area_chairs_anon", "Area_Chair_")):
         return "spc"
+    sacs = names.get("senior_area_chairs", "Senior_Area_Chairs")
+    if name.startswith(sacs.rstrip("s")) or signature in record["groups"].get(sacs, []):
+        return "sac"  # the SACs' group, an anonymous SAC, or a SAC's profile
     return "authors" if name == "Authors" else "other"
 
 
@@ -116,11 +119,22 @@ def _value(content: dict, key: str) -> Any:
     return content.get(key, {}).get("value")
 
 
+def _to_sac(record: dict, comment: dict) -> bool:
+    """Whether a comment is for the chairs only: the paper's SACs read it, while reviewers,
+    authors and the public do not."""
+    names, prefix = record["names"], record["prefix"]
+    readers = comment.get("readers") or []
+    hidden = {"everyone", prefix + "Authors", prefix + names["reviewers"]}
+    return prefix + names["senior_area_chairs"] in readers and not hidden & set(readers)
+
+
 def summarize(record: dict, config: dict) -> dict:
     def text(content: dict) -> str:
         return " ".join(f["value"] for f in content.values() if isinstance(f.get("value"), str))
 
     meta = replies(record, "meta_review")
+    comments = replies(record, "Official_Comment")
+    by_sac = {r.get("replyto") for r in comments if _role(record, r["signatures"][0]) == "sac"}
     rebuttals = [_date(r, "cdate", "tcdate") for r in replies(record, "Rebuttal")]
     venueid = str(_value(record["content"], "venueid") or "")
     return {
@@ -159,14 +173,18 @@ def summarize(record: dict, config: dict) -> dict:
         }
         if meta
         else None,
-        "comments": len(replies(record, "Official_Comment")),
+        "comments": len(comments),
         "posts": [
             {
                 "who": person(record, r["signatures"][0]),
                 "role": _role(record, r["signatures"][0]),
                 "date": _date(r, "cdate", "tcdate"),
+                # for the SACs only, and no SAC comment replies to it
+                "unanswered": _role(record, r["signatures"][0]) != "sac"
+                and _to_sac(record, r)
+                and r.get("id") not in by_sac,
             }
-            for r in replies(record, "Official_Comment")
+            for r in comments
         ],
         "rebuttal": min((d for d in rebuttals if d), default=None),
     }

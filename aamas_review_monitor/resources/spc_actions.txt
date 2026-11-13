@@ -16,6 +16,7 @@ low_confidence: please check whether the reviewers' expertise fits the paper, an
 disagreement: please invite the reviewers to read each other's reviews and discuss their differing views once the discussion opens; if the discrepancy remains, explain in the meta-review how you weighed it.
 no_discussion: please start the discussion, asking the reviewers to address their disagreement.
 long_discussion: please check whether the discussion is stuck, and steer it towards a conclusion.
+unanswered_comment: none on your side; I will reply to the comment myself.
 missing_acknowledgement: please remind these reviewers to acknowledge the authors' rebuttal, by updating their review or commenting.
 inactive_spc: please join the discussions of your papers, even with a short note to the reviewers.
 missing_meta_review: please write and submit the meta-review before its deadline.
