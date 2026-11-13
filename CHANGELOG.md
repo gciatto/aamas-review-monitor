@@ -1,3 +1,20 @@
+## [1.10.0](https://github.com/gciatto/aamas-review-monitor/compare/1.9.0...1.10.0) (2026-11-13)
+
+### Features
+
+* **checks:** flag comments to the SAC that no SAC comment answers ([2ce3b4a](https://github.com/gciatto/aamas-review-monitor/commit/2ce3b4a821bc2061835683db63cfe7ca3b944d3d))
+* **outreach:** severity icons and suggested actions in SPC emails ([44f9bf8](https://github.com/gciatto/aamas-review-monitor/commit/44f9bf8dd1422b185687848a192079056f8b0bd1))
+* **outreach:** suggested SPC actions in forum comments too ([4eca09d](https://github.com/gciatto/aamas-review-monitor/commit/4eca09de3cc5b705e56af6c0600959119212b4c7))
+* **tui:** SPCs tab as an issue tree with per-SPC marks; bulk ignore ([8620218](https://github.com/gciatto/aamas-review-monitor/commit/8620218be8eb41e0673c66135b4882467a2833b0))
+
+### Dependency updates
+
+* **deps:** update dependency semantic-release-preconfigured-conventional-commits to v1.1.158 ([#5](https://github.com/gciatto/aamas-review-monitor/issues/5)) ([e961b58](https://github.com/gciatto/aamas-review-monitor/commit/e961b5828a6589435dc24acf5d2e13ee893a36b2))
+
+### Bug Fixes
+
+* **tui:** resume the app after a failed sign-in instead of staying suspended ([06a5ca6](https://github.com/gciatto/aamas-review-monitor/commit/06a5ca6bacc6a0e50bb408d307522b30ca80f640))
+
 ## [1.9.0](https://github.com/gciatto/aamas-review-monitor/compare/1.8.0...1.9.0) (2026-11-02)
 
 ### Features
