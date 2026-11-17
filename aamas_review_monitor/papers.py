@@ -269,6 +269,36 @@ def mentions(entry: dict, number: int, code: str, message: str) -> bool:
     return about(entry, number) and message in entry["body"]
 
 
+def reached(entry: dict, record: dict, group: str) -> bool:
+    """Whether a history entry, sent through `record`'s paper, reached one of its reviewers,
+    by their anonymous group (Reviewer_aB3x): a comment readable by that group, by all
+    reviewers, or by those who submitted once they have; an email to the group or its member."""
+    if entry["status"] != "sent" or entry["via"] != record["number"]:
+        return False
+    prefix, reviewers = record["prefix"], record["names"]["reviewers"]
+    targets = {prefix + group, prefix + reviewers, *record["groups"].get(group, [])}
+    if any(r["signatures"][0] == prefix + group for r in replies(record, "review")):
+        targets.add(f"{prefix}{reviewers}/Submitted")
+    return bool(targets & set(entry.get("recipients", [])))
+
+
+def reviewers(record: dict, config: dict) -> list[tuple[str, str]]:
+    """Each anonymous reviewer group of a paper (Reviewer_aB3x) and its state: whether its
+    review is in, whether it is an emergency reviewer (assigned from the review deadline on),
+    and when it was assigned."""
+    prefix, anonymous = record["prefix"], record["names"].get("reviewers_anon", "Reviewer_")
+    done = {r["signatures"][0].removeprefix(prefix) for r in replies(record, "review")}
+    days = assigned(record)
+    found = []
+    for group in sorted(g for g in record["groups"] if g.startswith(anonymous)):
+        day = days.get(prefix + group, "")
+        state = ["review in" if group in done else "no review yet"]
+        state += ["emergency reviewer"] if day and day >= config["deadline_reviews"] else []
+        state += [f"assigned {day}"] if day else []
+        found.append((group, ", ".join(state)))
+    return found
+
+
 def deliver(
     client: Any,
     drafts: list[Draft],

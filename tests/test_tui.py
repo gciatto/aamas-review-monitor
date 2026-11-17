@@ -1044,6 +1044,10 @@ def test_reviews_tab_replies_to_a_marked_poor_review_which_its_reviewer_reads(
             text = note.content["comment"]["value"]
             assert "Dear Reviewer_hidden," in text and "how to address it:" in text
             assert "* Reports specific weaknesses (important): Name concrete weaknesses" in text
+            table = app.query_one("#scores")
+            await done(app, pilot, lambda: table.get_row_at(0)[-1] != "")  # last sent, MM-DD
+            detail = str(app.query_one("#score-detail").render())
+            assert "comment: Could you improve your review of #7?" in detail
 
     asyncio.run(scenario())
 

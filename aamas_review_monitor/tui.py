@@ -66,6 +66,7 @@ from aamas_review_monitor.screens import (
     Review,
     Templates,
     details,
+    reached_lines,
     sent_lines,
 )
 
@@ -221,6 +222,7 @@ class Monitor(App):
         self.review_about = ""  # model, rubric version
         # each review's link and fields, by (number, Reviewer_xxxx): to read it, or open it
         self.review_notes: dict[tuple[int, str], tuple[str, list[tuple[str, str]]]] = {}
+        self.review_records: dict[int, dict] = {}  # the records the review scores come from
         self.issues: list[Issue] = []  # plus one GREEN row per paper without issues
         self.ignored: set[tuple[int, str]] = set()  # (number, code) the user ignores
         self.hide_green = False
@@ -309,7 +311,9 @@ class Monitor(App):
         )
         scores = self.query_one("#scores", DataTable)
         self.score_mark_column = scores.add_column("", width=1)
-        scores.add_columns("#", "Review", "Score", "Alerts", "Words", "Rating", "Missing")
+        scores.add_columns(
+            "#", "Review", "Score", "Alerts", "Words", "Rating", "Missing", "Last sent"
+        )
         self.query_one("#rubrics", DataTable).add_columns(
             "Code", "Copy", "Topics", "Exemplars", "Rules", "Area"
         )
@@ -427,6 +431,8 @@ class Monitor(App):
             when = e["at"][:16].replace("T", " ")
             table.add_row(ok, when, e["kind"], e["via"], e["to"], key=str(n))
         self.show_history()
+        if self.review_results:  # the Reviews tab shows what reached each reviewer
+            self.fill_reviews()
 
     @on(DataTable.RowHighlighted, "#history")
     @mounted
@@ -1419,6 +1425,7 @@ class Monitor(App):
             self.notify(f"Review rubric: {e}", severity="error")
             return
         records = core.records()
+        self.review_records = {r["number"]: r for r in records}
         for record in records:
             for note in replies(record, "review"):
                 name = note["signatures"][0].removeprefix(record["prefix"])
@@ -1479,9 +1486,15 @@ class Monitor(App):
                 str(r["words"]),
                 str(r["rating"] or "—")[:10],
                 ", ".join(missing),
+                next((e["at"][5:10] for e in self.reached(*key)), ""),
                 key=f"{key[0]}:{key[1]}",
             )
         self.show_review_row()
+
+    def reached(self, number: int, group: str) -> list[dict]:
+        """What reached a paper's reviewer (Reviewer_aB3x) from this app, newest first."""
+        record = self.review_records.get(number)
+        return [e for e in self.sent if record and papers.reached(e, record, group)]
 
     def review_row(self) -> dict | None:
         table = self.query_one("#scores", DataTable)
@@ -1508,7 +1521,10 @@ class Monitor(App):
         text.append(f" · rating {row['rating'] or '—'}\n")
         if not row.get("embedded", True):
             text.append("Judged by the rules alone: k embeds the reviews (locally)\n", "yellow")
-        text.append("Space marks it, c comments: to its reviewer, what to address and how\n\n")
+        text.append("Space marks it, c comments: to its reviewer, what to address and how\n")
+        text.append("Sent to its reviewer from this app:\n", "bold")
+        reached_lines(text, self.reached(row["number"], row["name"]))
+        text.append("\n")
         for c in self.review_rubric.get("criteria", []):
             verdict = row["criteria"].get(c["key"])
             if verdict is None:

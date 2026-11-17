@@ -366,7 +366,7 @@ which likewise offers the current tab's actions:
 | `space` / `*` | Mark or unmark the selected issue (or an SPC's or paper's issues) / everything shown |
 | `+` | Mark the shown issues (Papers or SPCs tab) by color, sent status (never commented on, emailed, or either) and check, picking several options: any option within a group, every group chosen; `None` clears the marks |
 | `a` | Action menu for the marked papers or SPCs, else the selected one |
-| Enter, `d` | Paper details: metadata, every check with its outcome, anonymous reviews |
+| Enter, `d` | Paper details: metadata, every check with its outcome, each reviewer and what reached them, anonymous reviews |
 | `o` | Open the paper on OpenReview (Reviews tab: the review) |
 | `v` | Open the paper's PDF in your default viewer, downloading it first if needed |
 | `w` | Open the paper's local data folder in Finder/Explorer |
@@ -477,7 +477,10 @@ reviews for them (cached embeddings, else the rules alone); the `review-authors`
 Every email and comment the app sends, or fails to send, is appended to
 `~/.aamas-review-monitor/history.jsonl`. It records when, through which paper, about which
 papers, to whom, the subject and body, and the template used. `history` and the History tab show
-it, and paper details and the SPCs tab show the part about each paper or SPC. Comments are
+it, and paper details and the SPCs tab show the part about each paper or SPC. Paper details
+also list each anonymous reviewer (review in or not, emergency, assigned when) with every comment
+and email that reached them, and the Reviews tab shows when its reviewer was last reached
+(`Last sent`) and, for the selected review, all of it. Comments are
 never retried automatically, so a comment can't be posted twice.
 
 Nothing goes out unreviewed, and everything can be edited first. In the terminal UI, the

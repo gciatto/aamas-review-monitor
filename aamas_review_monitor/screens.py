@@ -46,6 +46,15 @@ def sent_lines(text: Text, entries: list[dict]) -> None:
         text.append(f"  {e['status']}\n" if failed else "\n", "bold red" if failed else "")
 
 
+def reached_lines(text: Text, entries: list[dict]) -> None:
+    """Under a reviewer: what reached them (newest first), else that nothing did."""
+    if not entries:
+        text.append("    nothing sent to them from this app\n", "dim")
+    for e in entries:
+        text.append(f"    {e['at'][:16].replace('T', ' ')}  ", "dim")
+        text.append(f"{e['kind']}: {e['subject']}\n")
+
+
 def details(
     number: int,
     record: dict | None,
@@ -89,6 +98,12 @@ def details(
     section("Sent from this app" if sent else "Nothing sent from this app yet")
     sent_lines(text, sent or [])
     if record is not None:
+        found = papers.reviewers(record, config)
+        section("Reviewers, and what reached them" if found else "No anonymous reviewer groups")
+        for group, state in found:
+            text.append(f"{group}: ", "bold cyan")
+            text.append(f"{state}\n")
+            reached_lines(text, [e for e in sent or [] if papers.reached(e, record, group)])
         blocks = papers.review_blocks(record)
         section("Reviews and meta-reviews" if blocks else "No reviews yet")
         for title, items in blocks:

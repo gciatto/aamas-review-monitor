@@ -173,6 +173,35 @@ def test_comments_reach_the_late_reviewers_of_each_paper_or_any_reviewer_group()
     assert papers.readable_by(comment) == "PCs, SACs, Reviewers"
 
 
+def test_each_reviewer_shows_what_reached_them(tmp_path):
+    records = fetch(FakeClient(), CONFIG)
+    records[0]["groups"]["Reviewer_xY12"] = ["~Rev_B1"]
+    records[0]["created"]["Reviewer_xY12"] = 1793491200000 + 14 * 86400000  # 15 Nov
+    assert papers.reviewers(records[0], CONFIG) == [
+        ("Reviewer_aB3x", "review in, assigned 2026-11-01"),
+        ("Reviewer_hidden", "review in"),
+        ("Reviewer_xY12", "no review yet, emergency reviewer, assigned 2026-11-15"),
+    ]
+    history = tmp_path / "history.jsonl"
+    for readers in (("emergency-reviewers",), ("reviewers-submitted",)):
+        found, _ = outreach.comments(ISSUES, records, {7}, readers, CONFIG, TODAY)
+        papers.post_comments(FakeClient(), found, history_file=history)
+    late, submitted = papers.history(history)[::-1]  # oldest first
+    assert [papers.reached(late, records[0], g) for g in ("Reviewer_xY12", "Reviewer_aB3x")] == [
+        True,
+        False,
+    ]
+    assert [
+        papers.reached(submitted, records[0], g) for g in ("Reviewer_xY12", "Reviewer_aB3x")
+    ] == [
+        False,
+        True,
+    ]
+    (draft,), _ = outreach.direct(records, "emergency-reviewers", "Hi", "Body", "2026-11-13")
+    papers.deliver(FakeClient(), [draft], history_file=history)
+    assert papers.reached(papers.history(history)[0], records[0], "Reviewer_xY12")
+
+
 def test_emergency_reviewers_are_those_assigned_from_the_review_deadline_on():
     records = fetch(FakeClient(), CONFIG)
     records[0]["groups"]["Reviewer_xY12"] = ["~Rev_B1"]
