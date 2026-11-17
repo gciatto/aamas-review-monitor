@@ -525,6 +525,7 @@ uv run poe test            # tests (synthetic data, no network)
 uv run poe static-checks   # compile, ruff format/lint, mypy
 uv run poe install-hooks   # optional local Git hooks
 uv run poe rubrics-benchmark [--split dev|test] [--rubrics DIR] [--model M]
+uv run poe reviews-benchmark [--split dev|test] [--rubric FILE] [--model M] [--abstract-min X]
 ```
 
 `rubrics-benchmark` measures the area rubrics on 318 published AAMAS 2026 papers, labelled in
@@ -535,6 +536,17 @@ the label, overall, per channel and per area. Tune rubrics on `dev`, report `tes
 takes a folder of rubric copies that replace the shipped ones. On the test split, the shipped
 rubrics get 76% with either `nomic-embed-text` (the default) or `bge-m3`, whose embeddings
 alone do worse (65% against 69%).
+
+`reviews-benchmark` measures the review rubric on 238 public ICLR 2017 reviews from
+[PeerRead](https://github.com/allenai/PeerRead) (OpenReview's API now wants a browser check for
+anonymous reads), downloaded once to `~/.cache/aamas-reviews-benchmark`, against hand labels for
+60 of them in `scripts/iclr2017_review_labels.json` (two independent annotators, 97% agreement;
+only agreed labels kept). Margins and rules were tuned on `dev`; on `test` (115 reviews,
+`nomic-embed-text`), 10% of reviews come out poor and the criteria agree with the labels 87-100% of
+the time, except actionable, justified and novelty (72-75%) and strengths (63%: the labels ask for
+specific strengths, the alert only for any). Each paper's reviews are also checked against
+another paper's abstract: at `reviews_abstract_min` 0.6, 95% of reviews match their own paper and
+63% of the swapped ones are flagged.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/), from which
 semantic-release derives versions. Releases are GitHub releases only: the wheel and sdist are

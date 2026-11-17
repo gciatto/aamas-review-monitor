@@ -35,6 +35,9 @@ docs/             README screenshots (Textual SVGs of synthetic data only: never
 scripts/          githooks.py: installs/removes local Git hooks (poe install-hooks);
                   rubrics_benchmark.py + aamas2026_areas.json: measures the area rubrics on
                   published AAMAS 2026 papers (poe rubrics-benchmark; public data, network)
+                  reviews_benchmark.py + iclr2017_review_labels.json: measures the review
+                  rubric on public ICLR 2017 reviews (PeerRead) against hand labels
+                  (poe reviews-benchmark; public data, network, a local embedding endpoint)
 .github/workflows/
   check.yml       static-checks + coverage, then tests on ubuntu/windows/macos x Python 3.10-3.13,
                   then deploy.yml

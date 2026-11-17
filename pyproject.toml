@@ -64,6 +64,7 @@ uninstall-hooks = "python scripts/githooks.py uninstall"
 # Measures the area rubrics on published AAMAS 2026 papers (downloads them once; needs a
 # local embedding endpoint and pdftotext); options: --split, --rubrics, --model, --weight
 rubrics-benchmark = "python scripts/rubrics_benchmark.py"
+reviews-benchmark = "python scripts/reviews_benchmark.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
