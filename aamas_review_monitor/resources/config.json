@@ -49,5 +49,10 @@
   "areas_temperature": 0.02,
   "areas_temperature_rules": 0.1,
   "areas_weight_rules": 0.3,
-  "areas_include": ["title", "keywords", "abstract"]
+  "areas_include": ["title", "keywords", "abstract"],
+  "reviews_top_k": 2,
+  "reviews_margin_min": 0.0,
+  "reviews_rubric_min": 0.5,
+  "reviews_abstract_min": 0.6,
+  "reviews_margin_alert": 0.1
 }
