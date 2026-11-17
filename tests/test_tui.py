@@ -971,7 +971,7 @@ def reviews_to_score(tmp_path, monkeypatch):
     from tests.test_models import FakeEndpoint, resolves_to
     from tests.test_reviewing import GOOD, POOR
 
-    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    app, client, opened = cached_monitor(tmp_path, monkeypatch)
     FakeEndpoint(monkeypatch)
     resolves_to(monkeypatch, "127.0.0.1")
     (record,) = papers.load(core.DIR_PAPERS, [7])
@@ -980,7 +980,7 @@ def reviews_to_score(tmp_path, monkeypatch):
         review["id"], review["content"]["summary"] = f"r{i}", {"value": text}
     papers.save([record], core.DIR_PAPERS, [])
     app.config.update(reviews_margin_min=9, reviews_margin_alert=9, reviews_abstract_min=-1)
-    return app, client
+    return app, client, opened
 
 
 async def scored_reviews(app, pilot):
@@ -1000,7 +1000,7 @@ async def scored_reviews(app, pilot):
 
 
 def test_reviews_tab_scores_each_review_and_shows_why(tmp_path, monkeypatch):
-    app, _ = reviews_to_score(tmp_path, monkeypatch)
+    app, _, opened = reviews_to_score(tmp_path, monkeypatch)
 
     async def scenario():
         async with app.run_test(size=(160, 40)) as pilot:
@@ -1011,6 +1011,9 @@ def test_reviews_tab_scores_each_review_and_shows_why(tmp_path, monkeypatch):
             assert (
                 "⚠ Reports specific weaknesses" in detail and "Name concrete weaknesses" in detail
             )
+            assert "The review (o opens it" in detail and "summary: I read it all." in detail
+            await pilot.press("o")
+            assert opened == ["https://openreview.net/forum?id=abc&noteId=r1"]
             await pilot.press("space")
             assert app.review_marked == {(7, "Reviewer_hidden")}
             assert table.get_row_at(0)[0] == tui.MARK
@@ -1021,7 +1024,7 @@ def test_reviews_tab_scores_each_review_and_shows_why(tmp_path, monkeypatch):
 def test_reviews_tab_replies_to_a_marked_poor_review_which_its_reviewer_reads(
     tmp_path, monkeypatch
 ):
-    app, client = reviews_to_score(tmp_path, monkeypatch)
+    app, client, _ = reviews_to_score(tmp_path, monkeypatch)
 
     async def scenario():
         async with app.run_test(size=(160, 40)) as pilot:
@@ -1048,7 +1051,7 @@ def test_reviews_tab_replies_to_a_marked_poor_review_which_its_reviewer_reads(
 def test_review_rubric_is_edited_in_the_rubrics_tab_and_saving_rescores(tmp_path, monkeypatch):
     from textual.widgets import TextArea
 
-    app, _ = reviews_to_score(tmp_path, monkeypatch)
+    app, _, _ = reviews_to_score(tmp_path, monkeypatch)
 
     async def scenario():
         async with app.run_test(size=(160, 40)) as pilot:

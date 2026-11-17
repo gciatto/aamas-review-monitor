@@ -322,7 +322,7 @@ decision; the scores stay in your terminal and are never part of snapshots or ch
 - **Reviews:** every review against the review rubric, the poor ones first (in yellow), with
   its share of the criteria met, its alerts and the criteria it misses; beside it, each criterion
   of the selected review with the deciding sentence, the rules that held and, when missed, the
-  advice. Opening the tab lists every review at once: those not embedded yet are judged by the
+  advice, then the review's text; `o` opens the review on OpenReview. Opening the tab lists every review at once: those not embedded yet are judged by the
   rules alone (their score marked `*`), and `k` embeds them (locally). `space` marks reviews and
   `c` comments on the marked ones (else the selected one): as a reply to each review that its
   reviewer reads, listing what it misses with a suggested action for each, the alerts first
@@ -366,7 +366,7 @@ which likewise offers the current tab's actions:
 | `+` | Mark the shown issues (Papers or SPCs tab) by color, sent status (never commented on, emailed, or either) and check, picking several options: any option within a group, every group chosen; `None` clears the marks |
 | `a` | Action menu for the marked papers or SPCs, else the selected one |
 | Enter, `d` | Paper details: metadata, every check with its outcome, anonymous reviews |
-| `o` | Open the paper on OpenReview |
+| `o` | Open the paper on OpenReview (Reviews tab: the review) |
 | `v` | Open the paper's PDF in your default viewer, downloading it first if needed |
 | `w` | Open the paper's local data folder in Finder/Explorer |
 | `p` | PDF: for one paper, a dialog with its path and text (`c` shows it in Finder/Explorer, `v` opens it, `y` copies the path); for marked papers, download the missing ones |

@@ -51,6 +51,7 @@ from aamas_review_monitor.checks import (
     phase,
     summary,
 )
+from aamas_review_monitor.collector import replies
 from aamas_review_monitor.screens import (
     Actions,
     Attachment,
@@ -90,7 +91,7 @@ COMMANDS = [
     ("Mark by color, check or sent status", "The shown issues matching the chosen options, or none  [+]", "mark_some"),
     ("Actions", "What can be done on the marked papers or SPCs, else on the selected one  [a]", "actions"),
     ("Paper details", "Metadata, checks, anonymous reviews of the selected paper  [d]", "details"),
-    ("Open on OpenReview", "The selected paper's forum, in the browser  [o]", "open"),
+    ("Open on OpenReview", "The selected paper's forum (Reviews tab: the review), in the browser  [o]", "open"),
     ("Open the PDF", "The selected paper's PDF in your default viewer, downloading it if needed  [v]", "view_pdf"),
     ("Open the paper's folder", "Where its data is kept: record, PDF, supplementary, text, results  [w]", "folder"),
     ("PDF", "One paper: path, text, open; marked papers: download the missing ones  [p]", "download('field_pdf')"),
@@ -122,7 +123,7 @@ TAB_ACTIONS = {
     "spcs-tab": {"mark", "mark_all", "mark_some", "actions", "mail"},
     "history-tab": set(),
     "areas-tab": {"score_areas", "hide_areas", "label_area", "confirm_area"},
-    "scores-tab": {"score_areas", "mark", "comment"},
+    "scores-tab": {"score_areas", "mark", "comment", "open"},
     "rubrics-tab": {"save_rubric", "revert_rubric"},
 }  # fmt: skip
 EVERYWHERE = TABLE_ACTIONS - set().union(*TAB_ACTIONS.values())  # sync, legend, tab, reload
@@ -218,6 +219,8 @@ class Monitor(App):
         self.review_rows: list[dict] = []  # as shown: the poor ones first
         self.review_marked: set[tuple[int, str]] = set()  # (number, Reviewer_xxxx)
         self.review_about = ""  # model, rubric version
+        # each review's link and fields, by (number, Reviewer_xxxx): to read it, or open it
+        self.review_notes: dict[tuple[int, str], tuple[str, list[tuple[str, str]]]] = {}
         self.issues: list[Issue] = []  # plus one GREEN row per paper without issues
         self.ignored: set[tuple[int, str]] = set()  # (number, code) the user ignores
         self.hide_green = False
@@ -757,7 +760,10 @@ class Monitor(App):
         return self.issues[int(row.value or 0)]
 
     def action_open(self) -> None:
-        if issue := self.selected():
+        if self.query_one(TabbedContent).active == "scores-tab":
+            if review := self.review_row():
+                webbrowser.open(self.review_notes[(review["number"], review["name"])][0])
+        elif issue := self.selected():
             webbrowser.open(issue.url)
 
     def action_details(self) -> None:
@@ -1411,6 +1417,12 @@ class Monitor(App):
             self.notify(f"Review rubric: {e}", severity="error")
             return
         records = core.records()
+        for record in records:
+            for note in replies(record, "review"):
+                name = note["signatures"][0].removeprefix(record["prefix"])
+                url = self.config["url_forum"] + record["id"]
+                url += f"&noteId={note['id']}" if note.get("id") else ""
+                self.review_notes[(record["number"], name)] = (url, papers.fields(note["content"]))
         before = self.review_results or []
         self.review_results = before  # tried: opening the tab won't retry
 
@@ -1510,7 +1522,12 @@ class Monitor(App):
                 text.append(f"    rule: {textwrap.shorten(held, 150)}\n", "cyan")
             if not verdict["met"]:
                 text.append(f"    {textwrap.shorten(c['advice'], 200)}\n", "italic")
-        text.append(f"\n{self.review_about}", "dim")
+        _, fields = self.review_notes.get((row["number"], row["name"]), ("", []))
+        text.append("\n── The review (o opens it on OpenReview) ──\n", "bold")
+        for key, value in fields:
+            text.append(f"{key}: ", "bold")
+            text.append(f"{value}\n\n")
+        text.append(f"{self.review_about}", "dim")
         detail.update(text)
 
     def comment_reviews(self) -> None:
