@@ -18,13 +18,16 @@ aamas_review_monitor/     the package, at the repo root (renamed by rename-templ
   markers.py      signs of generated text: fixed phrase and word lists (resources/ai_*.txt), no model
   areas.py        area rubrics (YAML): extracted from the call's public page, the AC's copies
   rules.py        rubric rules: string matching on a paper's local text (any/all/near/count/cites)
+  reviewing.py    review rubric (resources/review_rubric.yaml, the AC's copy): criteria with
+                  meets/short examples + rules, per-review verdicts, poor reviews as issues
   models.py       embeddings: OpenAI-compatible client (ollama/openai presets), local-network
                   check for paper data, retries, sha512-named YAML cache
   outreach.py     email templates (resources/templates/*.txt) -> per-SPC / per-paper drafts
   tui.py          Textual app; network jobs run in worker threads behind a blocking Busy dialog
   screens.py      the TUI's screens and dialogs (details, attachment, legend, Busy, forms, Confirm)
   resources/      non-code files; `__init__.py` exposes `DIR_RESOURCES` and `FILE_*` paths
-                  (`rubrics/`: the shipped area rubrics, from the AAMAS 2027 call)
+                  (`rubrics/`: the shipped area rubrics, from the AAMAS 2027 call;
+                  `comments/`: comment templates to pick, e.g. to reviewers)
 tests/            pytest unit tests: test_core.py covers the shared services without a front end;
                   test_tui.py drives the app, and waits for a job's visible effect (`done`),
                   never for a fixed time or a quiet spell
@@ -69,13 +72,15 @@ must keep recording each message in the history (`papers.deliver`, `papers.post_
 checks deterministic; never add LLM calls or scientific judgments (generated-text checks
 stay string matching against the lists, and never report a probability).
 
-The one exception, granted by the maintainer: area adherence (`areas.py`, `models.py`) may send
-paper data to embedding models, but only to endpoints whose host resolves inside the allowed IP
+The one exception, granted by the maintainer: area adherence (`areas.py`, `models.py`) and the
+review rubric (`reviewing.py`, review text only) may send paper data to embedding models, but only to endpoints whose host resolves inside the allowed IP
 ranges (`embeddings_networks`, loopback by default). `models.embed(..., private=True)` enforces
 it: a check before connecting, then on every connection the address actually reached (so DNS,
 proxies and redirects cannot route around it), no environment proxies, no redirects. Keep every
-paper-data call `private=True`. It measures fit to areas for the AC to sort by; it never
-scores quality or suggests decisions. Rubrics hold public text only. Generative LLMs stay out.
+paper-data call `private=True`. Area adherence measures fit to areas for the AC to sort by; the
+review rubric measures how a review is written (never the paper), to spot reviews worth a
+second look. Neither scores papers or suggests decisions, and neither goes into snapshots or
+checks. Rubrics hold public text only. Generative LLMs stay out.
 
 ## Conventions
 

@@ -261,6 +261,45 @@ are the embeddings' alone. The Areas tab lists the rules each paper matched, and
 your labels is also given per channel ("embeddings alone", "rules alone": the papers some rule
 matched), so you can see whether the rules earn their weight.
 
+### Review rubric
+
+The review rubric ([`resources/review_rubric.yaml`](aamas_review_monitor/resources/review_rubric.yaml),
+your copy in `review-rubric.yaml`) lists what a helpful review does, from the AAMAS 2027 reviewer
+guidelines (reviews grounded in the submission) and common public ones (NeurIPS, ICLR): it
+summarises the paper, talks about this paper, reports strengths and specific weaknesses grounded
+in the paper, suggests improvements, asks questions, justifies the rating, positions the work
+against prior work, keeps a constructive tone, is balanced, does not merely ask for citations,
+and comments on clarity, fit to AAMAS, reproducibility, soundness and the bibliography. Each
+criterion has example sentences that meet it and that fall short of it (public text, written for
+the rubric), rules like the areas' (on the review's text), a weight and advice for the reviewer:
+
+```yaml
+- key: weaknesses
+  name: Reports specific weaknesses
+  weight: 2
+  alert: true            # missing it flags the review, whatever its score
+  advice: Name concrete weaknesses and say where they occur ...
+  meets: [The convergence proof of Theorem 2 assumes a fixed number of agents, ...]
+  short: [The paper lacks novelty., The experiments are not convincing.]
+  rules:
+  - {count: '(?i)\b(theorem|lemma|table|fig(ure)?|section)\.?\s*\d', at_least: 2}
+```
+
+A review is split into sentences, embedded **only by local endpoints** (as for areas). It meets a
+criterion when a rule holds, or, if no rule says either way, when one of its sentences is nearer
+the `meets` examples than the `short` ones by the criterion's `margin` (default
+`reviews_margin_min`; the mean of the `reviews_top_k` nearest of each). A `margin` of 2 leaves the
+rules to decide alone, which, measured on public reviews, works better for most criteria. A
+`presumed` criterion (tone, balance, citations) is met unless a rule with a negative weight holds
+(harsh words, "no weaknesses", "please cite the following") or, unless its margin is 2 (as
+shipped), a sentence is nearer its `short` examples by `reviews_margin_alert`. `compare: abstract` meets
+the criterion when a sentence comes within `reviews_abstract_min` cosine of the paper's title and
+abstract, so a summary of another paper stands out. A review is **poor** when it meets less
+than `reviews_rubric_min` (50%) of the criteria by weight, or misses an `alert` one. Every
+verdict comes with the sentence that decided it and the rules that held, so you can check it.
+Like the area scores, this measures how a review is written, never the paper, and suggests no
+decision; the scores stay in your terminal and are never part of snapshots or checks.
+
 ## Terminal UI
 
 `tui` has six tabs (`t` switches between them):
@@ -413,7 +452,7 @@ missing or late reviews selected, `spc-late-reviews`.
 Chairs. Program Chairs and SACs can always read it, and you choose who else can, as on
 OpenReview: the SPCs, all reviewers, the reviewers who submitted, each paper's late reviewers
 (their anonymous `Reviewer_xxxx` groups) or, when commenting on a single paper, any of its
-reviewers. The text comes from
+reviewers. By default the text comes from
 [`resources/comment.txt`](aamas_review_monitor/resources/comment.txt) with the paper's open issues,
 and you can edit each comment before posting. A paper whose issues are all missing or late
 reviews gets [`resources/comment-late-reviews.txt`](aamas_review_monitor/resources/comment-late-reviews.txt)
@@ -471,7 +510,7 @@ elsewhere.
   MinHash fingerprints of reviews (comparable, but the text can't be recovered from them), and
   which entries of the marker lists a review matches.
 - Paper content, reviews, PDFs, extracted text and document check results are cached in
-  `~/.aamas-review-monitor/papers/`, what the app sent in `history.jsonl` next to it, the issues you ignore in `ignored.json`, your copies of the area rubrics in `rubrics/`, your
+  `~/.aamas-review-monitor/papers/`, what the app sent in `history.jsonl` next to it, the issues you ignore in `ignored.json`, your copies of the area rubrics in `rubrics/` and of the review rubric in `review-rubric.yaml`, your
   area labels in `labels.json`, and the embeddings (with the text embedded) in `cache/embeddings/`.
 - **Run it in your own terminal, not through an AI coding assistant.** Its output and its cache
   hold submissions, reviews and the identities of reviewers and SPCs.
