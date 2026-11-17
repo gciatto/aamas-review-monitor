@@ -463,9 +463,10 @@ Instead, you can pick a comment template from
 [`resources/comments/`](aamas_review_monitor/resources/comments): it goes only to the papers with
 an open issue among its `Codes:`, readable by its `Readers:` unless you change them, titled by
 its `Title:`, and takes the email templates' placeholders. `reviewers-late` tells each paper's
-late reviewers that their review is due; `reviewers-scores` asks all reviewers of a paper whose
-ratings diverge to read each other's reviews and reconsider their scores. A paper with no
-nameable late reviewer is skipped. Add your own next to them. The two about poor reviews
+late reviewers that their review is due; `reviewers-overdue` tells them, past the deadline, that
+it is overdue and asks them to confirm whether, and by when, they can submit it;
+`reviewers-scores` asks all reviewers of a paper whose ratings diverge to read each other's
+reviews and reconsider their scores. A paper with no nameable late reviewer is skipped. Add your own next to them. The two about poor reviews
 (`Codes: poor_review`) are offered in the Reviews tab, and `comment --template` uses the cached
 review scores for them; the `review-authors` reader posts one comment per review, replying to it.
 

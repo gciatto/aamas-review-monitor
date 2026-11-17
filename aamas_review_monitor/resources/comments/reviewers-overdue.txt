@@ -1,0 +1,17 @@
+Name: Overdue reviews
+Description: To each paper's reviewers whose review is missing past the deadline: please confirm
+Codes: missing_reviews, reviews_behind, late_reviewer
+Readers: late-reviewers, spcs
+Title: Overdue review of paper $paper: please confirm
+---
+Dear reviewer,
+
+According to the Senior Area Chair's automatic checks, your review of this paper is overdue: the
+deadline was $deadline_reviews, and your review has not been submitted yet.
+
+Could you please reply to this comment as soon as possible, confirming whether you will be able
+to submit your review shortly, and by when? If you cannot complete it, please say so right away,
+so that an emergency reviewer can be found in time. The checks may lag behind OpenReview: if you
+have just submitted your review, please ignore this comment.
+
+Thank you for your work for AAMAS.

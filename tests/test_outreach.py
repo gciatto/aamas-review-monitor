@@ -232,3 +232,14 @@ def test_review_authors_get_one_reply_per_review_an_issue_names():
     papers.post_comments(client, found[:1])
     ((_, _, note),) = client.comments
     assert note.replyto == "r0" and note.forum == "abc"
+
+
+def test_the_overdue_template_asks_each_paper_s_late_reviewers_to_confirm():
+    overdue = {t.key: t for t in outreach.comment_templates()}["reviewers-overdue"]
+    records = fetch(FakeClient(), CONFIG)
+    records[0]["groups"]["Reviewer_xY12"] = ["~Rev_B1"]
+    (comment,), _ = outreach.comments(ISSUES, records, {7}, overdue.readers, CONFIG, TODAY, overdue)
+    assert comment.readers == ("Reviewer_xY12", "Area_Chairs")
+    assert comment.title == "Overdue review of paper #7: please confirm"
+    assert "the deadline was 13 November 2026" in " ".join(comment.text.split())
+    assert "confirming whether you will be able" in " ".join(comment.text.split())
