@@ -26,6 +26,9 @@ READERS = {
     "reviewers-submitted": "reviewers who submitted",
     "late-reviewers": "late reviewers",
 }
+# one comment per review an issue names (poor_review:Reviewer_aB3x), replying to it, which its
+# reviewer reads
+READER_REVIEW_AUTHORS = "review-authors"
 
 
 def _write(file: Path, data: bytes) -> None:
@@ -221,6 +224,7 @@ class Comment(NamedTuple):
     issues: tuple[tuple[int, str], ...] = ()  # (number, code) of the issues it lists
     pattern: str = ""  # the title before placeholders were filled in, e.g. "$papers late"
     values: dict[str, str] = {}  # the placeholders' values in this one, $issues aside
+    replyto: str = ""  # the note it replies to (a review), else the paper's forum
 
 
 def record_history(file: Path | None, entry: dict) -> None:
@@ -369,7 +373,7 @@ def post_comments(
                 signatures=[prefix + c.record["names"]["senior_area_chairs"]],
                 note=Note(
                     forum=c.record["id"],
-                    replyto=c.record["id"],
+                    replyto=c.replyto or c.record["id"],
                     readers=readers(c),
                     content={"title": {"value": c.title}, "comment": {"value": c.text}},
                 ),

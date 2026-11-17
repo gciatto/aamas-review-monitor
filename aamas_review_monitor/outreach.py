@@ -15,8 +15,9 @@ from pathlib import Path
 from typing import NamedTuple
 
 from aamas_review_monitor.checks import GREEN, ICONS, Issue, legend
-from aamas_review_monitor.collector import person
+from aamas_review_monitor.collector import person, replies
 from aamas_review_monitor.papers import (
+    READER_REVIEW_AUTHORS,
     Comment,
     Draft,
     late_groups,
@@ -446,6 +447,8 @@ def comments(
         ]
     by_number = {r["number"]: r for r in records}
     found, skipped = [], []
+    # (paper, its issues, extra readers, the review it replies to)
+    units: list[tuple[int, list[Issue], tuple[str, ...], dict | None]] = []
     for number in sorted(numbers):
         theirs = [i for i in issues if i.number == number and i.severity != GREEN]
         if template and template.codes:
@@ -458,42 +461,58 @@ def comments(
             )
         elif "late-reviewers" in readers and not late_groups(by_number[number]):
             skipped.append(f"#{number}: no late reviewer to read it")
+        elif READER_REVIEW_AUTHORS in readers:
+            record = by_number[number]
+            reviews = {
+                r["signatures"][0].removeprefix(record["prefix"]): r
+                for r in replies(record, "review")
+            }
+            for issue in theirs:
+                name = issue.code.partition(":")[2]
+                if name in reviews:
+                    units.append((number, [issue], (name,), reviews[name]))
+                else:
+                    skipped.append(f"#{number}: no review by {name or 'anyone'} to reply to")
         else:
-            fields, _, body = next(c for c in choices if not c[1] or _codes(theirs) <= c[1])
-            url = theirs[0].url
-            values = _values(config, day) | {
-                "paper": f"#{number}", "url": url, "count": "1", "papers": f"#{number}"
-            }  # fmt: skip
-            title = string.Template(fields["title"]).safe_substitute(values)
-            # explained with actions if it fits OpenReview's limit, else explained, else the
-            # bare list, else nothing; templates for others than SPCs: bare
-            legend_, actions = _legend(config), spc_actions(config, today)
-            variants = (
-                [(None, None)] if template else [(legend_, actions), (legend_, None), (None, None)]
+            units.append((number, theirs, (), None))
+    others = [r for r in readers if r != READER_REVIEW_AUTHORS]
+    for number, theirs, extra, review in units:
+        record = by_number[number]
+        fields, _, body = next(c for c in choices if not c[1] or _codes(theirs) <= c[1])
+        url = theirs[0].url
+        values = _values(config, day) | {
+            "paper": f"#{number}", "url": url, "count": "1", "papers": f"#{number}"
+        }  # fmt: skip
+        if extra:
+            values["review"] = extra[0]
+        title = string.Template(fields["title"]).safe_substitute(values)
+        # explained with actions if it fits OpenReview's limit, else explained, else the
+        # bare list, else nothing; templates for others than SPCs: bare
+        legend_, actions = _legend(config), spc_actions(config, today)
+        variants = (
+            [(None, None)] if template else [(legend_, actions), (legend_, None), (None, None)]
+        )
+        for explained, acts in variants:
+            lines = _lines(theirs, lambda i: f"- {ICONS[i.severity]} {i.message}", explained, acts)
+            text = string.Template(body).safe_substitute(values, issues=lines).strip() + "\n"
+            if len(text) <= COMMENT_CHARS_MAX:
+                found.append(
+                    Comment(
+                        record,
+                        title,
+                        text,
+                        tuple(dict.fromkeys(reader_groups(record, others) + extra)),
+                        tuple((i.number, i.code) for i in theirs),
+                        fields["title"],
+                        values,
+                        (review or {}).get("id") or "",
+                    )  # fmt: skip
+                )
+                break
+        else:
+            skipped.append(
+                f"#{number}: {len(text)} characters, OpenReview allows {COMMENT_CHARS_MAX}"
             )
-            for explained, acts in variants:
-                lines = _lines(
-                    theirs, lambda i: f"- {ICONS[i.severity]} {i.message}", explained, acts
-                )
-                text = string.Template(body).safe_substitute(values, issues=lines).strip() + "\n"
-                if len(text) <= COMMENT_CHARS_MAX:
-                    listed = tuple((i.number, i.code) for i in theirs)
-                    found.append(
-                        Comment(
-                            by_number[number],
-                            title,
-                            text,
-                            reader_groups(by_number[number], readers),
-                            listed,
-                            fields["title"],
-                            values,
-                        )  # fmt: skip
-                    )
-                    break
-            else:
-                skipped.append(
-                    f"#{number}: {len(text)} characters, OpenReview allows {COMMENT_CHARS_MAX}"
-                )
     return found, skipped
 
 
@@ -512,7 +531,9 @@ def review_comments(
     ]
     items = [
         Item(
-            f"Comment on #{c.record['number']}, readable by {readable_by(c)}",
+            f"Comment on #{c.record['number']}"
+            + (f" replying to {c.values.get('review')}" if c.replyto else "")
+            + f", readable by {readable_by(c)}",
             _before(e),
             c.title,
             c.text,

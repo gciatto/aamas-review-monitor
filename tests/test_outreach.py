@@ -2,7 +2,7 @@ from datetime import date
 
 from aamas_review_monitor import outreach, papers
 from aamas_review_monitor.checks import RED, YELLOW, Issue, legend
-from aamas_review_monitor.collector import fetch
+from aamas_review_monitor.collector import fetch, replies
 from aamas_review_monitor.papers import deliver
 from tests.test_checks import CONFIG
 from tests.test_collector import SUB, FakeClient
@@ -208,3 +208,27 @@ def test_the_diverging_scores_template_reaches_all_reviewers_of_papers_that_disa
     (comment,), _ = outreach.comments(ISSUES, records, {7}, scores.readers, CONFIG, TODAY, scores)
     assert papers.readers(comment)[2:] == [f"{SUB}7/Reviewers", f"{SUB}7/Area_Chairs"]
     assert comment.issues == ((7, "disagreement"),) and "each other's reviews" in comment.text
+
+
+def test_review_authors_get_one_reply_per_review_an_issue_names():
+    records = fetch(FakeClient(), CONFIG)
+    for i, review in enumerate(replies(records[0], "review")):
+        review["id"] = f"r{i}"
+    about = [
+        Issue(7, YELLOW, f"thin:{name}", f"review by {name} is thin", URL, ("~Spc_One1",))
+        for name in ("Reviewer_aB3x", "Reviewer_hidden", "Reviewer_gone")
+    ]
+    readers = (papers.READER_REVIEW_AUTHORS, "spcs")
+    found, skipped = outreach.comments(about, records, {7}, readers, CONFIG, TODAY)
+    assert skipped == ["#7: no review by Reviewer_gone to reply to"]
+    assert [c.replyto for c in found] == ["r0", "r1"]
+    assert found[0].readers == ("Area_Chairs", "Reviewer_aB3x")
+    assert found[0].values["review"] == "Reviewer_aB3x" and found[0].issues == (
+        (7, "thin:Reviewer_aB3x"),
+    )
+    _, items = outreach.review_comments(found, skipped)
+    assert items[0].heading.startswith("Comment on #7 replying to Reviewer_aB3x, readable by")
+    client = FakeClient()
+    papers.post_comments(client, found[:1])
+    ((_, _, note),) = client.comments
+    assert note.replyto == "r0" and note.forum == "abc"
