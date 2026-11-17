@@ -2,7 +2,8 @@ import copy
 
 import pytest
 
-from aamas_review_monitor import core, models, reviewing
+from aamas_review_monitor import __main__ as cli
+from aamas_review_monitor import core, models, papers, reviewing
 from aamas_review_monitor.collector import fetch, replies
 from aamas_review_monitor.resources import FILE_REVIEW_RUBRIC_DEFAULT
 from tests.test_checks import CONFIG
@@ -155,3 +156,26 @@ def test_bare_citation_requests_and_a_summary_far_from_the_abstract_raise_alerts
     assert requests_only["criteria"]["citations"]["rules"]  # what matched, as evidence
     assert about["criteria"]["about_paper"]["met"] and about["criteria"]["citations"]["met"]
     assert about["criteria"]["about_paper"]["margin"] > 0.9
+
+
+def test_cli_lists_reviews_and_shows_and_checks_the_rubric(monkeypatch, tmp_path, capsys):
+    FakeEndpoint(monkeypatch)
+    records = records_with(GOOD, POOR)
+    papers.save(records, core.DIR_PAPERS, [])
+    monkeypatch.setattr(
+        core,
+        "load_config",
+        lambda: (
+            CONFIG
+            | {"reviews_margin_min": 9, "reviews_abstract_min": -1, "reviews_margin_alert": 9}
+        ),
+    )
+    cli.main(["review-scores", "--poor"])
+    out = capsys.readouterr().out
+    assert "Reviewer_hidden" in out and "!constructive" in out and "Reviewer_aB3x" not in out
+    cli.main(["rubrics", "show", "reviews"])
+    assert capsys.readouterr().out == FILE_REVIEW_RUBRIC_DEFAULT.read_text(encoding="utf-8")
+    cli.main(["rubrics", "check", "reviews"])
+    assert "weaknesses" in capsys.readouterr().out
+    cli.main(["rubrics", "list"])
+    assert "reviews 17 criteria (shipped)" in capsys.readouterr().out

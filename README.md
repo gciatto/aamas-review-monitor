@@ -198,6 +198,8 @@ Paper lists (`N ...`) default to all your papers.
 | `rubrics check` | Validate the rubrics and embed their topics: where each area's topics land when left out of it, i.e. which areas the rubrics fail to separate |
 | `areas [N ...] [--include DATA] [--show CODES] [--sort=COLUMNS] [--csv FILE]` | Each paper's share of each area (%, summing to 100), its best area and margin over the second, reviews done/assigned, mean rating ± spread, mean confidence, meta-review recommendation. Embeds what is missing (paper data only to local endpoints). `--include` picks among `title,keywords,abstract,text,reviews,meta-reviews` (`text`: downloaded PDFs); `--sort=LEARN,-rating` sorts on several columns, a minus for descending; `--show` overrides the areas hidden in the TUI |
 | `label [N CODE] [--undo]` | Label a paper with the area you judge right, or remove its label; without arguments, list the labels |
+| `review-scores [N ...] [--poor] [--csv FILE]` | Each review against the review rubric, lowest first: its share of the criteria met, its alerts (`!`) and the criteria it misses; `--poor` only the poor ones. Embeds what is missing (reviews only to local endpoints) |
+| `rubrics show reviews` / `edit reviews` / `check reviews` | The review rubric: print it, edit your copy in `$EDITOR` (checked on save), or check how well each criterion's examples separate (each left out, judged by the others) |
 | `rubrics extract [--url URL] [--force]` | Extract the rubrics from the call's public page (`url_areas`) into your copies, keeping those you have (`--force` replaces them) |
 
 Options that come before the command apply to every OpenReview request. `--rate` caps how
@@ -208,7 +210,7 @@ limits, server errors and connection failures, honouring `Retry-After`, for read
 are 8 retries, a first wait of 1 s and a longest wait of 120 s. Email is never retried, so no
 message goes out twice.
 
-The `--embeddings-*` options set the embedding model used for area scores; each also comes from
+The `--embeddings-*` options set the embedding model used for area and review scores; each also comes from
 `AAMAS_MONITOR_EMBEDDINGS_<NAME>` (e.g. `AAMAS_MONITOR_EMBEDDINGS_API_KEY`, the only place
 besides the command line for a key), then from the config (`embeddings_*`). `--embeddings-vendor`
 picks a preset: `ollama` (`http://localhost:11434/v1`, `nomic-embed-text`, the default: `ollama pull nomic-embed-text`) or `openai`;
@@ -216,7 +218,7 @@ picks a preset: `ollama` (`http://localhost:11434/v1`, `nomic-embed-text`, the d
 **Paper data only goes to endpoints that resolve inside `--embeddings-networks`** (IP ranges,
 loopback only by default, e.g. `127.0.0.0/8,10.0.0.0/8`): every connection is checked for the
 address it actually reached before anything is sent, and such requests follow no redirects and
-use no proxies from the environment. The areas' public topics may go anywhere. Embeddings are cached in `cache/embeddings/`, one YAML file per model and text named
+use no proxies from the environment. The areas' public topics and the review rubric's examples may go anywhere. Embeddings are cached in `cache/embeddings/`, one YAML file per model and text named
 after the request's SHA-512, so reruns are identical and free; `--cache-only` never asks the
 endpoint. Retries work as above (`--embeddings-retries`, `--embeddings-backoff`,
 `--embeddings-backoff-max`).

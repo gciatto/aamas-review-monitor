@@ -14,7 +14,7 @@ import webbrowser
 from datetime import date
 from pathlib import Path
 
-from aamas_review_monitor import areas, core, documents, models, outreach, papers
+from aamas_review_monitor import areas, core, documents, models, outreach, papers, reviewing
 from aamas_review_monitor.checks import (
     Issue,
     check,
@@ -48,7 +48,7 @@ def main(argv: list[str] | None = None) -> None:
         "--backoff-max", type=float, dest="backoff_max_seconds", help="longest wait in seconds"
     )
     embeddings = parser.add_argument_group(
-        "embeddings (area scores; defaults from AAMAS_MONITOR_EMBEDDINGS_<NAME>, then the config)"
+        "embeddings (area and review scores; defaults from AAMAS_MONITOR_EMBEDDINGS_<NAME>, then the config)"
     )
     embeddings.add_argument("--embeddings-vendor", help="preset: ollama or openai")
     embeddings.add_argument("--embeddings-url", help="base URL of the OpenAI-compatible API")
@@ -114,17 +114,17 @@ def main(argv: list[str] | None = None) -> None:
     comment_cmd.add_argument("--spcs", action="store_true", help="let the papers' SPCs read it")
     comment_cmd.add_argument("--text", type=Path, help="post this file's text instead")
     comment_cmd.add_argument(
+        "--template",
+        choices=[t.key for t in outreach.comment_templates()],
+        help="a comment template (`templates` lists them), to the papers with its issues",
+    )
+    comment_cmd.add_argument(
         "--readers",
         nargs="+",
         default=[],
         metavar="WHO",
         help=f"who else reads it: {', '.join(papers.READERS)}, or a Reviewer_xxxx group"
         " (default: the template's; none without one)",
-    )
-    comment_cmd.add_argument(
-        "--template",
-        choices=[t.key for t in outreach.comment_templates()],
-        help="a comment template (`templates` lists them), to the papers with its issues",
     )
     ignore_cmd = commands.add_parser(
         "ignore", help="ignore issues of a paper (codes from `issues`); no arguments: list them"
@@ -140,10 +140,14 @@ def main(argv: list[str] | None = None) -> None:
     outreach_cmd.add_argument("template", help="a template key, from `templates`")
     outreach_cmd.add_argument("--spc", action="append", help="only this SPC (repeatable)")
     rubrics_cmd = commands.add_parser(
-        "rubrics", help="area rubrics: list, show, edit, check them, or extract them from the call"
+        "rubrics",
+        help="area rubrics and the review rubric (code: reviews): list, show, edit, check them,"
+        " or extract the areas from the call",
     )
     rubrics_cmd.add_argument("action", choices=("list", "show", "edit", "check", "extract"))
-    rubrics_cmd.add_argument("code", nargs="?", help="area code, e.g. LEARN (show, edit)")
+    rubrics_cmd.add_argument(
+        "code", nargs="?", help="area code, e.g. LEARN, or reviews (show, edit)"
+    )
     rubrics_cmd.add_argument("--url", help="page of the areas (extract; config: url_areas)")
     rubrics_cmd.add_argument(
         "--force", action="store_true", help="extract: replace your edited copies too"
@@ -160,6 +164,12 @@ def main(argv: list[str] | None = None) -> None:
         help="columns, the first deciding most, minus for descending: --sort=LEARN,-rating",
     )
     areas_cmd.add_argument("--csv", type=Path, help="also write every column to this CSV file")
+    scores_cmd = commands.add_parser(
+        "review-scores",
+        help="each review against the review rubric (embeds what is missing, locally)",
+    )
+    scores_cmd.add_argument("--poor", action="store_true", help="only the poor ones")
+    scores_cmd.add_argument("--csv", type=Path, help="also write every column to this CSV file")
     label_cmd = commands.add_parser(
         "label", help="give a paper the area you judge right (no arguments: list the labels)"
     )
@@ -171,7 +181,7 @@ def main(argv: list[str] | None = None) -> None:
             "--edit", action="store_true", help="edit each message in $EDITOR before the preview"
         )
     numbered_cmds = (download_cmd, email_cmd, inspect_cmd, outreach_cmd, comment_cmd, history_cmd)
-    for cmd in (*numbered_cmds, areas_cmd):
+    for cmd in (*numbered_cmds, areas_cmd, scores_cmd):
         cmd.add_argument("numbers", type=int, nargs="*", help="papers (default: all)")
     args = parser.parse_args(argv)
     # Only the application configures logging; importing the package leaves it alone. The TUI
@@ -365,6 +375,8 @@ def main(argv: list[str] | None = None) -> None:
         rubrics(args, config)
     elif args.command == "areas":
         areas_table(args, config)
+    elif args.command == "review-scores":
+        reviews_table(args, config)
     elif args.command == "label":
         if args.number is not None:
             codes = list(areas.files(core.DIR_RUBRICS))
@@ -387,7 +399,38 @@ def confirmed(preview: str, count: int, what: str) -> bool:
     return count > 0 and input(f"Type SEND to {what}: ").strip() == "SEND"
 
 
+def review_rubric(args: argparse.Namespace, config: dict) -> None:
+    """`rubrics show|edit|check reviews`."""
+    mine = core.FILE_REVIEW_RUBRIC
+    if args.action == "show":
+        print(reviewing.file(mine).read_text(encoding="utf-8"), end="")
+        return
+    if args.action == "check":
+        try:
+            rubric = reviewing.load(mine)
+            s = models.settings(config, **embeddings_given(args))
+            found = reviewing.check(rubric, s, core.DIR_EMBEDDINGS, config, args.cache_only)
+        except (models.NotEmbedded, PermissionError, ValueError, OSError) as e:
+            sys.exit(f"Review rubric: {e}")
+        print("Examples judged right by the others when left out, per criterion:")
+        for key, (right, total) in found.items():
+            print(f"{key:14} {right}/{total}")
+        return
+    if not mine.is_file():  # a copy of the shipped one
+        mine.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(reviewing.file(mine), mine)
+    subprocess.run([*editor(), str(mine)], check=True)
+    try:
+        reviewing.load(mine)
+    except ValueError as e:
+        sys.exit(f"{e}. Fix it with `rubrics edit reviews`")
+    print(f"Saved {mine}")
+
+
 def rubrics(args: argparse.Namespace, config: dict) -> None:
+    if args.code == "reviews" and args.action in ("show", "edit", "check"):
+        review_rubric(args, config)
+        return
     broken = None  # an unusable copy: `edit` can still repair it, `extract --force` replace it
     try:
         loaded = areas.load(core.DIR_RUBRICS)
@@ -411,6 +454,12 @@ def rubrics(args: argparse.Namespace, config: dict) -> None:
             counts = f"{len(r['topics'])} topics, {len(r['exemplars'])} exemplars"
             counts += f", {len(r['rules'])} rules"
             print(f"{code:6} {r['area']}  ({counts}; {', '.join(notes)})")
+        mine = core.FILE_REVIEW_RUBRIC
+        try:
+            criteria = f"{len(reviewing.load(mine)['criteria'])} criteria"
+        except ValueError as e:
+            criteria = str(e)
+        print(f"reviews {criteria} ({'yours' if mine.is_file() else 'shipped'})")
         return
     if args.action == "check":
         texts = {code: areas.texts(r) for code, r in loaded.items()}
@@ -567,6 +616,59 @@ def areas_table(args: argparse.Namespace, config: dict) -> None:
             writer = csv.DictWriter(file, columns, extrasaction="ignore")
             writer.writeheader()
             writer.writerows(found)
+
+
+def review_results(
+    args: argparse.Namespace, config: dict, records: list[dict], cache_only: bool = False
+) -> tuple[dict, list[dict], list[str]]:
+    """The review rubric, each review's result and the reviews not scored; exits on failure."""
+    try:
+        rubric = reviewing.load(core.FILE_REVIEW_RUBRIC)
+        s = models.settings(config, **embeddings_given(args))
+        results, failures = reviewing.score(
+            records, rubric, s, config, core.DIR_EMBEDDINGS, cache_only or args.cache_only
+        )
+    except models.NotEmbedded as e:
+        sys.exit(f"Review rubric: {e}. Run `review-scores` first")
+    except (PermissionError, ValueError, OSError) as e:
+        sys.exit(f"Review rubric: {e}")
+    return rubric, results, failures
+
+
+def reviews_table(args: argparse.Namespace, config: dict) -> None:
+    """Each review's share of the rubric's criteria met, lowest first, and what it misses."""
+    rubric, results, failures = review_results(args, config, load_records(*args.numbers))
+    shown = (
+        reviewing.poor(results, config)
+        if args.poor
+        else sorted(results, key=lambda r: (r["score"], r["number"], r["name"]))
+    )
+    print(
+        f"Review rubric {reviewing.fingerprint(rubric)}; poor below "
+        f"{config['reviews_rubric_min']:.0%}; criteria: "
+        + ", ".join(c["key"] for c in rubric["criteria"])
+    )
+    print(f"{'#':>5} {'review':16} {'score':>5} {'words':>5} {'rating':>8}  missing (! alert)")
+    for r in shown:
+        flag = "!" if r in reviewing.poor([r], config) else " "
+        missing = ", ".join(
+            ("!" if k in r["alerts"] else "") + k for k, v in r["criteria"].items() if not v["met"]
+        )
+        print(
+            f"{r['number']:>5} {r['name'][:16]:16} {r['score']:>4.0%}{flag} {r['words']:>5} "
+            f"{str(r['rating'] or '—')[:8]:>8}  {missing}"
+        )
+    if failures:
+        print("\n".join(f"Not scored: {f}" for f in failures))
+    if args.csv:
+        with args.csv.open("w", newline="", encoding="utf-8") as out:
+            writer = csv.writer(out)
+            keys = [c["key"] for c in rubric["criteria"]]
+            writer.writerow(["number", "review", "score", "alerts", "words", "rating", *keys])
+            for r in shown:
+                met = [int(r["criteria"][k]["met"]) for k in keys]
+                row = [r["number"], r["name"], r["score"], " ".join(r["alerts"]), r["words"]]
+                writer.writerow([*row, r["rating"], *met])
 
 
 def editor() -> list[str]:
