@@ -15,3 +15,6 @@ These checks are computed automatically and deterministically, on the Senior Are
 machine, over OpenReview's process data (assignments, dates, word counts, scores) and, for some
 checks, the text of the PDF or of the reviews. No generative AI is involved, and nothing about
 the submission, its authors, the PC members or the SPCs is shared with anyone.
+
+Best regards,
+Your Senior Area Chair

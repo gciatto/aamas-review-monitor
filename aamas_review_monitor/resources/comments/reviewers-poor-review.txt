@@ -21,3 +21,6 @@ embedding model compare each review's sentences with public example sentences. N
 AI is involved, nothing is shared with anyone, and the checks never judge the paper itself.
 
 Thank you for your work for AAMAS.
+
+Best regards,
+Your Senior Area Chair

@@ -243,3 +243,12 @@ def test_the_overdue_template_asks_each_paper_s_late_reviewers_to_confirm():
     assert comment.title == "Overdue review of paper #7: please confirm"
     assert "the deadline was 13 November 2026" in " ".join(comment.text.split())
     assert "confirming whether you will be able" in " ".join(comment.text.split())
+
+
+def test_every_comment_and_email_template_is_signed_by_the_senior_area_chair():
+    from aamas_review_monitor.resources import DIR_COMMENTS, DIR_TEMPLATES, FILE_COMMENT
+    from aamas_review_monitor.resources import FILE_COMMENT_LATE_REVIEWS
+
+    files = [*DIR_COMMENTS.glob("*.txt"), *DIR_TEMPLATES.glob("*.txt")]
+    for f in [*files, FILE_COMMENT, FILE_COMMENT_LATE_REVIEWS]:
+        assert f.read_text(encoding="utf-8").endswith("Best regards,\nYour Senior Area Chair\n"), f

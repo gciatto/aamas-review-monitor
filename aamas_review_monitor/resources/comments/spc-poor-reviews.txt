@@ -17,3 +17,6 @@ find a review adequate, please disregard this note.
 The rubric is computed on the Senior Area Chair's machine: string matching and a local
 embedding model compare each review's sentences with public example sentences. No generative
 AI is involved, nothing is shared with anyone, and the rubric never judges the paper itself.
+
+Best regards,
+Your Senior Area Chair
