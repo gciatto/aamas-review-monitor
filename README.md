@@ -77,6 +77,7 @@ Defaults follow the AAMAS 2027 timeline: 50% of reviews by 26 Oct, all by 13 Nov
 | Confident reviewers | 🟡 every reviewer's confidence is 2 or lower |
 | Ratings within the allowed spread | 🟡 ratings 3 or more points apart |
 | No undiscussed disagreement | 🔴 ratings 3 or more apart and no reviewer has commented, from 25 Nov |
+| Discussion going | 🟡 from 2 days after the discussion start, no comment since then from the SPC, or from any reviewer; 🔴 from neither, from 2 days before the acknowledgement deadline |
 | Discussion within the expected length | 🟡 more comments than one per reviewer plus one per SPC |
 | Comments to the SAC answered | 🟡 a comment readable by the SACs but not by reviewers or authors, with no SAC comment replying to it |
 | Rebuttal acknowledged | 🟡 reviewers who neither updated their review nor commented since the rebuttal, from 2 days before 3 Dec; 🔴 after |

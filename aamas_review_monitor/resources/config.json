@@ -34,6 +34,7 @@
   "confidence_low_max": 2,
   "acknowledgements_warning_days": 2,
   "spcs_inactive_days": 7,
+  "discussions_quiet_days": 2,
   "meta_reviews_warning_days": 2,
   "meta_reviews_words_min": 80,
   "pages_max": 8,

@@ -15,6 +15,7 @@ recycled_review: please compare the review with the reviewer's other ones and as
 low_confidence: please check whether the reviewers' expertise fits the paper, and let me know if another reviewer is needed.
 disagreement: please invite the reviewers to read each other's reviews and discuss their differing views once the discussion opens; if the discrepancy remains, explain in the meta-review how you weighed it.
 no_discussion: please start the discussion, asking the reviewers to address their disagreement in light of the rebuttal.
+quiet_discussion: please open the discussion with a comment to the reviewers, pointing them to the rebuttal and to the points to settle, and follow it until it reaches a conclusion.
 long_discussion: please check whether the discussion is stuck, and steer it towards a conclusion.
 unanswered_comment: none on your side; I will reply to the comment myself.
 missing_acknowledgement: please remind these reviewers to acknowledge the authors' rebuttal, by updating their review or commenting.

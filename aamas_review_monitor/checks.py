@@ -335,6 +335,30 @@ def no_discussion(paper: dict, ctx: Context) -> list[Finding]:
 
 
 @paper_check
+def quiet_discussion(paper: dict, ctx: Context) -> list[Finding]:
+    """Discussion going
+
+    From {discussions_quiet_days} days after the discussion start ({discussion_start}), YELLOW
+    when the SPC, or every reviewer, has posted no comment on the paper since then; RED when
+    neither has, from {acknowledgements_warning_days} days before the acknowledgement deadline
+    ({deadline_acknowledgements}) on.
+    """
+    start = ctx.config["discussion_start"]
+    if (
+        "posts" not in paper
+        or -_days(ctx, "discussion_start") < ctx.config["discussions_quiet_days"]
+    ):
+        return []
+    roles = {p["role"] for p in _posts(paper) if (p["date"] or "") >= start}
+    silent = [who for role, who in (("spc", "SPC"), ("reviewer", "reviewers")) if role not in roles]
+    if not silent:
+        return []
+    late = _days(ctx, "deadline_acknowledgements") <= ctx.config["acknowledgements_warning_days"]
+    severity = RED if len(silent) == 2 and late else YELLOW
+    return [Finding(severity, f"no comment from the {' or the '.join(silent)} since {start}")]
+
+
+@paper_check
 def long_discussion(paper: dict, ctx: Context) -> list[Finding]:
     """Discussion within the expected length
 

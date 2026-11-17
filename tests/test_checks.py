@@ -125,6 +125,22 @@ def test_recycled_reviews_and_low_confidence():
     assert (YELLOW, "low_confidence") in issues(one, "2026-10-19")
 
 
+def test_quiet_discussion():
+    assert issues(paper(), "2026-11-28") == set()  # old snapshots: no posts, no verdict
+    assert issues(paper(posts=[]), "2026-11-26") == set()  # too early
+    assert issues(paper(posts=[]), "2026-11-28") == {(YELLOW, "quiet_discussion")}
+    assert issues(paper(posts=[]), "2026-12-01") == {(RED, "quiet_discussion")}
+    before = [post("spc", "~SPC_One1", "2026-11-20")]  # before the discussion: doesn't count
+    assert (RED, "quiet_discussion") in issues(paper(posts=before), "2026-12-01")
+    spc = [post("spc", "~SPC_One1", "2026-11-25")]
+    flagged = check_paper(paper(posts=spc), ctx("2026-12-01"))
+    assert [(i.severity, i.message) for i in flagged] == [
+        (YELLOW, "no comment from the reviewers since 2026-11-25")
+    ]
+    both = spc + [post("reviewer", "~R_01", "2026-11-26")]
+    assert issues(paper(posts=both), "2026-12-01") == set()
+
+
 def test_long_discussion():
     posts = [post("reviewer", "~R_01", "2026-11-26")] * 5  # 3 reviewers + 1 SPC expected
     assert issues(paper(posts=posts[:4]), "2026-11-26") == set()

@@ -1,7 +1,7 @@
 Name: Late SPCs
 Description: SPCs with overdue or stalled SPC work: meta-reviews, discussions, acknowledgements
 Audience: spcs
-Codes: missing_meta_review, short_meta_review, missing_recommendation, no_discussion, inactive_spc, missing_acknowledgement, findings_consistency
+Codes: missing_meta_review, short_meta_review, missing_recommendation, no_discussion, quiet_discussion, inactive_spc, missing_acknowledgement, findings_consistency
 Subject: AAMAS 2027: SPC actions pending ($papers)
 ---
 Dear {{fullname}},
