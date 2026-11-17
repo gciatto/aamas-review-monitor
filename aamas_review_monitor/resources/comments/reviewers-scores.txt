@@ -1,0 +1,23 @@
+Name: Diverging scores
+Description: To all reviewers of each paper whose ratings are too far apart
+Codes: disagreement
+Readers: reviewers, spcs
+Title: Diverging scores on paper $paper
+---
+Dear reviewers,
+
+The ratings given to this paper diverge considerably.
+
+Please __read each other's reviews__, and discuss here the points on which your assessments differ.
+
+- If the discussion changes your view:
+    * please update your review and your score accordingly,
+    possibly informing the SPc/Area Chair of the change via an official comment;
+- if it does not:
+    * confirm your opinion explicitly via an official comment,
+    so that the SPC can weigh the different opinions in the meta-review.
+
+Thank you for your work for AAMAS.
+
+Best regards,
+your senior area chair.

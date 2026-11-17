@@ -414,8 +414,9 @@ Instead, you can pick a comment template from
 [`resources/comments/`](aamas_review_monitor/resources/comments): it goes only to the papers with
 an open issue among its `Codes:`, readable by its `Readers:` unless you change them, titled by
 its `Title:`, and takes the email templates' placeholders. `reviewers-late` tells each paper's
-late reviewers that their review is due; a paper with no nameable late reviewer is skipped. Add
-your own there.
+late reviewers that their review is due; `reviewers-scores` asks all reviewers of a paper whose
+ratings diverge to read each other's reviews and reconsider their scores. A paper with no
+nameable late reviewer is skipped. Add your own next to them.
 
 Every email and comment the app sends, or fails to send, is appended to
 `~/.aamas-review-monitor/history.jsonl`. It records when, through which paper, about which

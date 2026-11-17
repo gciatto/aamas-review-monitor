@@ -200,3 +200,11 @@ def test_the_late_reviewers_template_reaches_each_paper_s_late_reviewers():
     assert comment.readers == ("Reviewer_xY12", "Area_Chairs")
     assert comment.title == "Your review of paper #7" and "$" not in comment.text
     assert comment.issues == ((7, "missing_reviews"),)
+
+
+def test_the_diverging_scores_template_reaches_all_reviewers_of_papers_that_disagree():
+    scores = {t.key: t for t in outreach.comment_templates()}["reviewers-scores"]
+    records = fetch(FakeClient(), CONFIG)
+    (comment,), _ = outreach.comments(ISSUES, records, {7}, scores.readers, CONFIG, TODAY, scores)
+    assert papers.readers(comment)[2:] == [f"{SUB}7/Reviewers", f"{SUB}7/Area_Chairs"]
+    assert comment.issues == ((7, "disagreement"),) and "each other's reviews" in comment.text

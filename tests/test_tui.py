@@ -930,3 +930,28 @@ def test_comment_form_lets_each_reviewer_of_one_paper_read_it(tmp_path, monkeypa
             assert note.readers[-1].endswith("Submission7/Reviewer_aB3x")
 
     asyncio.run(scenario())
+
+
+def test_comment_form_template_presets_its_readers(tmp_path, monkeypatch):
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.press("c")
+            form = app.screen
+            assert isinstance(form, tui.CommentForm)
+            form.query_one("#comment-template").value = "reviewers-scores"
+            reviewers = form.query_one("#reader-reviewers")
+            await until(pilot, lambda: reviewers.value)  # the template's readers
+            await pilot.click("#comment-post")
+            review = await reviewing(app, pilot)
+            assert review.items[0].heading == (
+                "Comment on #7, readable by PCs, SACs, Area_Chairs, Reviewers"
+            )
+            review.query_one("#confirm").focus()
+            await confirm(app, pilot, "SEND")
+            await done(app, pilot, lambda: bool(app.sent))
+            ((_, _, note),) = client.comments
+            assert note.content["title"]["value"] == "Diverging scores on paper #7"
+
+    asyncio.run(scenario())
