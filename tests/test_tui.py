@@ -992,7 +992,7 @@ async def scored_reviews(app, pilot):
     await done(app, pilot, lambda: app.review_results is not None)
     assert [r["embedded"] for r in app.review_results] == [False, False]
     table = app.query_one("#scores")
-    assert table.row_count == 2 and str(table.get_row_at(0)[3]).endswith("*")
+    assert table.row_count == 2 and str(table.get_row_at(0)[4]).endswith("*")
     detail = str(app.query_one("#score-detail").render())
     assert "Judged by the rules alone" in detail
     await pilot.press("k")
@@ -1006,7 +1006,7 @@ def test_reviews_tab_scores_each_review_and_shows_why(tmp_path, monkeypatch):
         async with app.run_test(size=(160, 40)) as pilot:
             await scored_reviews(app, pilot)
             table = app.query_one("#scores")
-            assert table.get_row_at(0)[2] == "Reviewer_hidden"  # the poor one first
+            assert table.get_row_at(0)[3] == "Reviewer_hidden"  # the poor one first
             detail = str(app.query_one("#score-detail").render())
             assert (
                 "⚠ Reports specific weaknesses" in detail and "Name concrete weaknesses" in detail
@@ -1045,7 +1045,7 @@ def test_reviews_tab_replies_to_a_marked_poor_review_which_its_reviewer_reads(
             assert "Dear Reviewer_hidden," in text and "how to address it:" in text
             assert "* Reports specific weaknesses (important): Name concrete weaknesses" in text
             table = app.query_one("#scores")
-            await done(app, pilot, lambda: table.get_row_at(0)[-1] != "")  # last sent, MM-DD
+            await done(app, pilot, lambda: table.get_row_at(0)[2] != "")  # last sent, MM-DD
             detail = str(app.query_one("#score-detail").render())
             assert "comment: Could you improve your review of #7?" in detail
 

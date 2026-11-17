@@ -312,7 +312,7 @@ class Monitor(App):
         scores = self.query_one("#scores", DataTable)
         self.score_mark_column = scores.add_column("", width=1)
         scores.add_columns(
-            "#", "Review", "Score", "Alerts", "Words", "Rating", "Missing", "Last sent"
+            "#", "Last sent", "Review", "Score", "Alerts", "Words", "Rating", "Missing"
         )
         self.query_one("#rubrics", DataTable).add_columns(
             "Code", "Copy", "Topics", "Exemplars", "Rules", "Area"
@@ -1476,6 +1476,7 @@ class Monitor(App):
             table.add_row(
                 MARK if key in self.review_marked else "",
                 str(r["number"]),
+                next((e["at"][5:10] for e in self.reached(*key)), ""),
                 r["name"],
                 # *: judged by the rules alone, not embedded yet
                 Text(
@@ -1486,7 +1487,6 @@ class Monitor(App):
                 str(r["words"]),
                 str(r["rating"] or "—")[:10],
                 ", ".join(missing),
-                next((e["at"][5:10] for e in self.reached(*key)), ""),
                 key=f"{key[0]}:{key[1]}",
             )
         self.show_review_row()
