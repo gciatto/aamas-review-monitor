@@ -33,6 +33,7 @@ FILE_TOKEN = DIR_DATA / "token"
 FILE_HISTORY = DIR_DATA / "history.jsonl"  # what the app sent: emails and comments
 FILE_IGNORED = DIR_DATA / "ignored.json"  # issues the user chose to ignore: [number, code]
 DIR_RUBRICS = DIR_DATA / "rubrics"  # the AC's copies of the area rubrics
+FILE_REVIEW_RUBRIC = DIR_DATA / "review-rubric.yaml"  # the AC's copy of the review rubric
 DIR_EMBEDDINGS = DIR_DATA / "cache" / "embeddings"  # one YAML per model and text
 FILE_AREAS_VIEW = DIR_DATA / "areas-view.json"  # areas hidden from the view, its sort order
 FILE_LABELS = DIR_DATA / "labels.json"  # the area the AC gives each paper: {number: code}

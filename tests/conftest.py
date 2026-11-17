@@ -36,6 +36,7 @@ def private_data(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(core, "FILE_HISTORY", data / "history.jsonl")
     monkeypatch.setattr(core, "FILE_IGNORED", data / "ignored.json")
     monkeypatch.setattr(core, "DIR_RUBRICS", data / "rubrics")
+    monkeypatch.setattr(core, "FILE_REVIEW_RUBRIC", data / "review-rubric.yaml")
     monkeypatch.setattr(core, "DIR_EMBEDDINGS", data / "cache" / "embeddings")
     monkeypatch.setattr(core, "FILE_AREAS_VIEW", data / "areas-view.json")
     monkeypatch.setattr(core, "FILE_LABELS", data / "labels.json")

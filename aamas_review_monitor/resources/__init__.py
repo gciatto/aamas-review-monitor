@@ -10,4 +10,5 @@ FILE_VARIABLES = DIR_RESOURCES / "variables.txt"  # what each template placehold
 FILE_SPC_ACTIONS = DIR_RESOURCES / "spc_actions.txt"  # suggested SPC action, per check code
 FILE_AI_PHRASES = DIR_RESOURCES / "ai_phrases.txt"
 FILE_AI_WORDS = DIR_RESOURCES / "ai_words.txt"
+FILE_REVIEW_RUBRIC_DEFAULT = DIR_RESOURCES / "review_rubric.yaml"  # what a helpful review does
 DIR_RUBRICS_DEFAULT = DIR_RESOURCES / "rubrics"  # areas of the AAMAS 2027 call, one YAML each

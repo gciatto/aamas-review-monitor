@@ -1,0 +1,443 @@
+# What a helpful review does. Public guidance only: AAMAS 2027 asks for reviews grounded in the
+# submission and written by the reviewer; the criteria follow common reviewer guidelines (NeurIPS,
+# ICLR). A review meets a criterion when its rules score above 0, or, when no rule says either way,
+# when one of its sentences is nearer the `meets` examples than the `short` ones by `margin`
+# (default: reviews_margin_min). A `presumed` criterion is met unless a negative rule holds or a
+# sentence is nearer its `short` examples by `margin` (default: reviews_margin_alert); a margin of
+# 2 or more leaves the rules to decide alone. `compare: abstract` measures how near the review's
+# sentences come to the paper's title and abstract (reviews_abstract_min). A review missing an
+# `alert` criterion is poor, whatever its score.
+# The margins and rules were calibrated with nomic-embed-text on public ICLR 2017 reviews
+# (PeerRead), hand-labelled: see scripts/reviews_benchmark.py. Another model needs other margins.
+name: What a helpful review does
+sources:
+- https://warwick.ac.uk/fac/sci/dcs/aamas2027/calls/reviewer-guidelines/
+- https://neurips.cc/Conferences/2025/ReviewerGuidelines
+- https://iclr.cc/Conferences/2025/ReviewerGuide
+criteria:
+- key: summary
+  name: Summarises the contribution
+  weight: 1
+  margin: 2
+  advice: Summarise, in your own words, the problem the paper addresses, its approach and its main results,
+    so the authors can see what you understood.
+  meets:
+  - The paper proposes a decentralised auction protocol for task allocation among robots and proves that
+    it converges to an allocation within a factor of two of the optimum.
+  - The authors study coalition formation under uncertainty and introduce a Bayesian model in which agents
+    learn the types of their partners over repeated interactions.
+  - This submission presents a multi-agent reinforcement learning method that factorises the joint value
+    function, evaluated on StarCraft micromanagement benchmarks.
+  - The work extends the BDI architecture with norms, giving an operational semantics and an implementation
+    in Jason, then evaluates it on a traffic scenario.
+  - The main contribution is a polynomial-time algorithm for computing a core-stable outcome in a restricted
+    class of hedonic games, together with a hardness result for the general case.
+  short:
+  - The paper is about multi-agent systems.
+  - This is an interesting paper on an important topic.
+  - The paper is well written and easy to follow.
+  - I am not an expert in this area.
+  - The authors propose a new method.
+  rules:
+  - count: '(?i)\b(this|the) (paper|work|submission|manuscript|article|study)\b[^.]{0,80}?\b(propos|present|introduc|describ|stud|investigat|explor|consider|develop|show|address|appl|train|extend|refram|purport|focus|tackl|use|provid|analy[sz]|examin|evaluat|learn|demonstrat|aim|attempt|tr(y|ies))|\bthe
+      authors?\b[^.]{0,40}?\b(propos|present|introduc|describ|stud|investigat|explor|consider|develop|show|address|appl|train|extend|refram|purport|focus|tackl|use|provid|analy[sz]|examin|evaluat|learn|demonstrat|aim|attempt|tr(y|ies))|\b(summary|contributions?)\s*:'
+- key: about_paper
+  name: Talks about this paper (its summary matches the abstract)
+  weight: 1
+  alert: true
+  compare: abstract
+  advice: Make sure your summary describes this submission; a review whose sentences all stay far from
+    the paper's abstract may concern another paper or say nothing specific.
+  meets: []
+  short: []
+  rules: []
+- key: strengths
+  name: Reports strengths
+  weight: 1
+  alert: true
+  margin: 2
+  advice: Say what is good about the paper, specifically enough that the authors and the SPC know
+    which parts to keep.
+  meets:
+  - A strength is the clean reduction in Section 4, which makes the hardness proof short and easy to verify.
+  - The experiments are thorough, covering three environments and comparing against the four most relevant
+    baselines with confidence intervals.
+  - The negotiation model elegantly captures partial information, and the case study shows it scales to
+    fifty agents.
+  - The user study is well designed, with a preregistered hypothesis and a sample of 120 participants.
+  short:
+  - The paper has some merits.
+  - Strengths are the topic and the writing.
+  - The idea is good.
+  - Interesting paper.
+  rules:
+  - count: (?i)\b(pros|strengths?|positives?)\s*:|^\s*[+]
+  - count: (?i)\b(strength|strong|good|great|nice|interesting|novel|elegant|solid|impressive|thorough|convincing|well[- ](motivated|written|executed|designed|presented)|clean|promising|useful|valuable|important|clever|insightful|appreciate|like the|liked|enjoyed|merit|contribution is|significant (improvement|contribution)|outperform|state[- ]of[- ]the[- ]art)
+- key: weaknesses
+  name: Reports specific weaknesses
+  weight: 2
+  alert: true
+  advice: Name concrete weaknesses and say where they occur (section, theorem, experiment), rather than
+    general verdicts such as "lacks novelty" or "experiments not convincing".
+  meets:
+  - The convergence proof of Theorem 2 assumes a fixed number of agents, yet the experiments in Section
+    5 vary it from 10 to 100, so the guarantee does not cover the reported results.
+  - The baselines in Table 3 are run with default hyperparameters while the proposed method is tuned,
+    which makes the comparison unfair.
+  - The mechanism is claimed to be strategy-proof, but the proof only considers unilateral deviations
+    by a single agent and ignores coalitions.
+  - Only one random seed is reported for each experiment, so the differences in Figure 4 may well be noise.
+  - The user study has no control condition, so the reported increase in trust cannot be attributed to
+    the explanations.
+  short:
+  - The paper lacks novelty.
+  - The experiments are not convincing.
+  - Some parts are unclear.
+  - The presentation could be improved.
+  - The contribution is incremental.
+  - There are some weaknesses in the evaluation.
+  rules:
+  - count: (?i)\b(cons|weakness(es)?|concerns?|limitations?|drawbacks?|downsides?|shortcomings?|however|unfortunately|unclear|not
+      clear|missing|lacks?|lacking|fails?|unconvincing|insufficient|questionable|doubt|confus|though|although|not
+      sure|would have (been|liked)|underwhelming|not (novel|new|convinc|clear)|only (a|one|two|on|consider)|no
+      (novelty|comparison|baseline|ablation))
+- key: grounded
+  name: Grounded in the submission
+  weight: 2
+  advice: Point to specific parts of the paper (sections, figures, tables, equations, theorems, experiments)
+    to back your assessment, as the AAMAS 2027 reviewer guidelines require reviews grounded in the submission.
+  meets:
+  - In Equation 7 the expectation is taken over the wrong distribution.
+  - Figure 3 shows the reward dropping after 200 episodes, which the text does not discuss.
+  - Lemma 1 seems to need the valuations to be additive, which is not stated in Section 3.2.
+  - The second row of Table 2 reports a lower variance than the first, contradicting the claim in the
+    discussion.
+  short:
+  - The paper has several issues.
+  - The method is not well motivated.
+  - The results are not significant.
+  - Overall I think the paper is not ready.
+  rules:
+  - count: (?i)\b(tables?|fig(ure)?s?|eq(uation)?s?|sections?|sec|appendix|theorems?|lemmas?|propositions?|algorithms?|pages?|lines?|footnotes?)\.?\s*\(?[A-Z]?\d
+  - count: (?i)\b(in|on|from) the (experiments?|results|evaluation|ablations?|proofs?|appendix|derivation|analysis)\b|\b(experiments?|results)
+      (on|with) [A-Z]
+  - count: \b(?:[A-Z][a-z]*[A-Z0-9]|[A-Z]{2,})[A-Za-z0-9-]*\b
+    at_least: 4
+- key: actionable
+  name: Suggests how to improve
+  weight: 1
+  margin: -0.03
+  advice: For the main weaknesses, suggest what would address them (an experiment, a proof, a clarification,
+    a reference), so that the authors can act on the review.
+  meets:
+  - Adding a comparison with QMIX on the same benchmark would show whether the factorisation brings a
+    real advantage.
+  - The authors could state the additivity assumption explicitly and discuss whether the result extends
+    to submodular valuations.
+  - I suggest reporting means and standard deviations over at least five seeds.
+  - It would help to move the definition of stability before the main theorem and give an example.
+  short:
+  - The paper needs more work.
+  - The authors should improve the paper.
+  - The evaluation should be better.
+  - Please fix the issues.
+  rules:
+  - count: (?i)\b(i (would )?(suggest|recommend|encourage)|would be (nice|good|interesting|helpful|useful|great|better|valuable|important)|it
+      would help|(should|could|might) (also )?(be )?(compare|report|include|discuss|add|show|evaluate|consider|explain|clarif|provid|test|try|run|use|mention|state|cite|investigat|analy|explor|demonstrat|improv|extend)|would
+      (like|love) to see|i'?d like to see|need(s)? to (be )?(compare|show|evaluate|discuss|explain|provide|include|add|clarif|demonstrat))
+- key: questions
+  name: Asks questions the rebuttal can answer
+  weight: 1
+  margin: 2
+  advice: Ask the questions whose answers could change your assessment, so the authors can address them
+    in the rebuttal.
+  meets:
+  - How does the algorithm behave when agents join or leave during the auction?
+  - Could the authors clarify whether the reward in Equation 3 is shared or individual?
+  - What is the runtime of the solver for the largest instances in Table 2?
+  - Does the hardness result still hold when the number of agent types is bounded?
+  short:
+  - I have no questions.
+  - None.
+  - Not applicable.
+  - The paper is clear enough.
+  rules:
+  - count: \?
+    at_least: 1
+- key: justified
+  name: Justifies the rating
+  weight: 2
+  margin: 0.11
+  advice: Explain how the strengths and weaknesses lead to your rating, saying which points weigh most
+    and what would change your mind.
+  meets:
+  - I lean towards rejection because the main theorem does not cover the experimental setting, although
+    the problem is relevant; a corrected proof would make me raise my score.
+  - Given the solid theory and the limited but adequate experiments, I recommend acceptance.
+  - The flaw in the strategy-proofness argument is the main reason for my score; the other issues are
+    minor.
+  - My rating reflects that the contribution is sound but incremental with respect to prior work on coalition
+    formation.
+  short:
+  - Weak reject.
+  - Overall, I recommend rejection.
+  - See above.
+  - I give a borderline score.
+  rules:
+  - count: (?i)\b(i (would )?(recommend|vote|lean|support|argue|suggest|tend)\b[^.]{0,30}\b(accept|reject)|my
+      (score|rating|recommendation|vote|evaluation|assessment)|(overall|in summary|to summari[sz]e|in
+      conclusion|all in all|in short)\b|therefore|for (these|this|the above) reasons?|(main|major|primary)
+      (reason|concern|issue|weakness|problem)|borderline|(below|above) the (acceptance )?(threshold|bar)|not
+      ready|marginal|(accept|reject)(ance|ion|ed)?\b)
+- key: novelty
+  name: Positions the work against related work
+  weight: 1
+  margin: 2
+  advice: Relate the contribution to prior work; when you judge it not novel, cite the work that anticipates
+    it.
+  meets:
+  - The bidding scheme is very close to the one by Zlot and Stentz (2006), which the paper does not cite;
+    the difference should be explained.
+  - Compared with previous work on norm-aware BDI agents, the novelty is the operational semantics, which
+    is a useful addition.
+  - Similar convergence results exist for potential games, e.g. Marden et al. 2009, so the contribution
+    is the extension to partial observability.
+  - The related work section misses recent work on mean-field multi-agent reinforcement learning, such
+    as Yang et al. (2018).
+  short:
+  - The novelty is limited.
+  - This has been done before.
+  - The related work is incomplete.
+  - The idea is not new.
+  rules:
+  - count: (?i)\bet al\b|\(\s*(19|20)\d\d[a-z]?\s*\)|\b(19|20)\d\d\b
+  - count: (?i)\b(novel|novelty|original|originality|incremental|not new|been (done|proposed|studied|explored|shown|used|applied)|prior
+      work|previous work|related work|existing (work|methods|approaches|literature)|similar to|close to|builds?
+      on|extension of|variant of|compared to (previous|prior|existing)|in the literature)\b
+- key: constructive
+  name: Constructive and professional tone, never harsh
+  weight: 1
+  alert: true
+  presumed: true
+  margin: 2
+  advice: Keep the tone respectful and focused on the paper, never on the authors, even when the assessment
+    is negative.
+  meets:
+  - Although I have concerns about the evaluation, the problem is important and I hope the authors find
+    the comments useful.
+  - The proof sketch is hard to follow; adding intermediate steps would help readers like me.
+  - I appreciate the effort put into the implementation.
+  - These comments are meant to help strengthen the paper.
+  short:
+  - The authors clearly do not understand the field.
+  - This is a waste of the reviewers' time.
+  - The paper is nonsense.
+  - Anyone could have done this in an afternoon.
+  rules:
+  - any:
+    - nonsense
+    - waste of time
+    - waste of my time
+    - ridiculous
+    - absurd
+    - stupid
+    - laughable
+    - amateurish
+    - clearly incompetent
+    - incompetent
+    - embarrassing
+    - garbage
+    - rubbish
+    - worthless
+    - pointless
+    - useless paper
+    - junk
+    - shameful
+    - insulting
+    - should not have been submitted
+    - no idea what
+    - have no clue
+    - joke
+    - pathetic
+    - terrible paper
+    - awful
+    weight: -1
+- key: balanced
+  name: Balanced, neither excessively positive nor negative
+  weight: 1
+  alert: true
+  presumed: true
+  margin: 2
+  advice: Weigh both sides; an assessment with no weakness at all, or with nothing positive at all, gives
+    the SPC little to go on.
+  meets:
+  - While the theoretical results are solid, the experimental evaluation is limited to small instances.
+  - The approach is promising, but its assumptions restrict its applicability.
+  - The paper has clear strengths in modelling, although the comparison with prior work is incomplete.
+  - Despite these concerns, the contribution is valuable for the community.
+  short:
+  - This is an excellent paper with no weaknesses.
+  - The paper is perfect and should be accepted as is.
+  - I found nothing of value in this paper.
+  - The paper has no merit whatsoever.
+  - Everything about this work is flawed.
+  rules:
+  - all:
+    - strength
+    - weakness
+  - any:
+    - no weaknesses
+    - no weakness
+    - flawless
+    - perfect paper
+    - nothing to criticise
+    - nothing to criticize
+    - no strengths
+    - nothing of value
+    - no merit
+    - no redeeming
+    weight: -1
+- key: citations
+  name: Does not merely ask to cite works
+  weight: 1
+  alert: true
+  presumed: true
+  margin: 2
+  advice: Ask to cite a work only when it matters to the paper's contribution, saying why; a review that
+    mostly asks for citations, rather than discussing the paper, may be self-serving.
+  meets:
+  - The bidding scheme is close to Zlot and Stentz (2006), whose relation to this work should be explained
+    because it anticipates the main theorem.
+  - The comparison should include the method of Rashid et al., which solves the same benchmark.
+  short:
+  - The authors should cite the following papers.
+  - Please add the references below.
+  - The related work misses several important papers that must be cited.
+  - The authors must cite these works.
+  rules:
+  - any:
+    - should cite
+    - must cite
+    - please cite
+    - need to cite
+    - needs to cite
+    - cite the following
+    - add the following references
+    - following references
+    - following papers
+    - consider citing
+    - missing references
+    - missing citations
+    - add references
+    - add citations
+    weight: -1
+  - count: (?i)\b(theorem|lemma|proposition|table|fig(ure)?|eq(uation)?|section|algorithm)\.?\s*\(?\d
+    at_least: 2
+- key: clarity
+  name: Comments on clarity
+  weight: 0.5
+  margin: 2
+  advice: Say whether the paper is clear and well organised, and point to the passages that are not.
+  meets:
+  - The paper is clearly written, but the notation in Section 3 is overloaded and hard to follow.
+  - The presentation is hard to follow because the main algorithm is only described informally.
+  - The motivation is well explained and the running example helps.
+  short:
+  - The paper is about agents.
+  - The proof of Theorem 2 is correct.
+  rules:
+  - count: (?i)\b(clarity|clearly written|well[- ]written|poorly written|badly written|well[- ]organi[sz]ed|hard
+      to (follow|read|understand|parse)|difficult to (follow|read|understand)|easy to (follow|read|understand)|readab|typos?|grammar|notation|presentation|writing|exposition|confusing|well[-
+      ]presented|clearly (presented|explained|described)|(is|are) (very )?clear\b|lucid|polish)
+- key: venue
+  name: Comments on the fit to AAMAS
+  weight: 0.5
+  margin: 2
+  advice: Say whether the paper fits AAMAS and its area, i.e. whether agents or multi-agent systems are
+    central to it.
+  meets:
+  - The multi-agent aspect is central, making the paper a good fit for AAMAS.
+  - Agents play a minor role here, so the paper would fit a machine learning venue better.
+  - The work is relevant to the AAMAS community interested in coordination.
+  short:
+  - The experiments use three environments.
+  - The proof is correct.
+  rules:
+  - any:
+    - aamas
+    - fit for
+    - good fit
+    - poor fit
+    - in scope
+    - out of scope
+    - scope of the conference
+    - this venue
+    - the venue
+    - relevant to the community
+    - multi-agent community
+    - agents community
+    - suited for
+- key: reproducibility
+  name: Comments on reproducibility
+  weight: 0.5
+  margin: 2
+  advice: Say whether the results could be reproduced (code, data, parameters, seeds), and what is missing.
+  meets:
+  - The code is not released and the hyperparameters are not reported, so the results cannot be reproduced.
+  - The appendix gives all parameters and the code is available, which makes the experiments reproducible.
+  - It is unclear how many random seeds were used.
+  short:
+  - The paper is well written.
+  - The contribution is novel.
+  rules:
+  - any:
+    - reproducib
+    - replicab
+    - code is available
+    - code available
+    - release the code
+    - source code
+    - hyperparameter
+    - hyper-parameter
+    - random seed
+    - random seeds
+    - implementation details
+    - the code
+- key: soundness
+  name: Comments on soundness
+  weight: 0.5
+  margin: 0.02
+  advice: Say whether the claims are supported, i.e. whether proofs are correct and experiments well designed.
+  meets:
+  - The proofs appear correct, and the experimental design supports the claims.
+  - The claimed guarantee does not follow from the lemma, since it ignores coalitional deviations.
+  - The statistical analysis is flawed because the samples are not independent.
+  short:
+  - The paper is well written.
+  - The topic is interesting.
+  rules:
+  - count: (?i)\b(sound|soundness|correct(ness)?|incorrect|wrong|flaw(ed|s)?|rigou?r(ous)?|proofs?|valid(ity)?|convincing|unconvincing|justif|support(s|ed)?
+      (the|their|its) claims?|significan(t|ce)|baselines?|ablations?|error bars?|variance|confidence intervals?|overfit|cherry[-
+      ]pick|fair comparison|unfair)
+- key: references
+  name: Comments on the bibliography
+  weight: 0.5
+  margin: 2
+  advice: Say whether the references are adequate and up to date, naming any key work that is missing.
+  meets:
+  - The bibliography is thorough and up to date.
+  - The references omit the recent work on mean-field games, e.g. Yang et al. (2018).
+  - Several references are outdated, and the most recent related work from 2025 is missing.
+  short:
+  - The method is interesting.
+  - The experiments are convincing.
+  rules:
+  - any:
+    - bibliography
+    - references
+    - reference list
+    - cited works
+    - citations
+    - literature review
+    - up to date
+    - outdated references
