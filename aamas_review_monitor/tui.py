@@ -71,6 +71,7 @@ from aamas_review_monitor.screens import (
 IGNORED, GRAY = "⚪", "grey50"  # how ignored issues look
 RANKS = {ICONS[RED]: 0, ICONS[YELLOW]: 1, ICONS[GREEN]: 2, IGNORED: 3}
 MARK = "✔"
+REVIEWS = "reviews"  # the review rubric's row in the Rubrics tab
 Job = Callable[[Any, Callable[[int, int], None]], Any]  # (client, progress) -> result
 
 
@@ -1515,7 +1516,7 @@ class Monitor(App):
         scope = f"{len(chosen)} reviews of {numbered(numbers)}"
         self.push_screen(CommentForm(scope, about_reviews=True), compose)
 
-    # The Rubrics tab: one YAML rubric per area, edited in place
+    # The Rubrics tab: one YAML rubric per area, edited in place; then the review rubric
 
     def fill_rubrics(self) -> None:
         table, note = self.query_one("#rubrics", DataTable), self.query_one("#rubric-note", Static)
@@ -1530,18 +1531,37 @@ class Monitor(App):
             copy = ("yours" if code in yours else "shipped") + (", edited" * areas.edited(r))
             counts = (len(r["topics"]), len(r["exemplars"]), len(r["rules"]))
             table.add_row(code, copy, *counts, r["area"], key=code)
-        if self.rubric_code in self.rubrics:  # stay on the rubric being edited
-            table.move_cursor(row=list(self.rubrics).index(self.rubric_code))
+        try:
+            self.review_rubric = reviewing.load(core.FILE_REVIEW_RUBRIC)
+        except ValueError as e:
+            note.update(Text(str(e), "red"))
+        else:
+            criteria = self.review_rubric["criteria"]
+            copy = "yours" if core.FILE_REVIEW_RUBRIC.is_file() else "shipped"
+            examples = sum(len(c["meets"]) + len(c["short"]) for c in criteria)
+            rules_ = sum(len(c["rules"]) for c in criteria)
+            name = f"{len(criteria)} criteria: {self.review_rubric['name']}"
+            table.add_row(REVIEWS, copy, "—", examples, rules_, name, key=REVIEWS)
+        codes = [*self.rubrics, REVIEWS]
+        if self.rubric_code in codes:  # stay on the rubric being edited
+            table.move_cursor(row=codes.index(self.rubric_code))
+
+    def rubric_text(self, code: str) -> str:
+        """A rubric as saved, in YAML."""
+        return areas.dump(self.review_rubric if code == REVIEWS else self.rubrics[code])
+
+    def has_rubric(self, code: str | None) -> bool:
+        return code in self.rubrics or (code == REVIEWS and bool(self.review_rubric))
 
     @on(DataTable.RowHighlighted, "#rubrics")
     @mounted
     def show_rubric(self, event: DataTable.RowHighlighted) -> None:
         code = str(event.row_key.value)
-        if code == self.rubric_code or code not in self.rubrics:
+        if code == self.rubric_code or not self.has_rubric(code):
             return
         self.rubric_code = code
         editor = self.query_one("#rubric-editor", TextArea)
-        editor.load_text(self.rubric_drafts.get(code) or areas.dump(self.rubrics[code]))
+        editor.load_text(self.rubric_drafts.get(code) or self.rubric_text(code))
         draft = " (unsaved edits)" if code in self.rubric_drafts else ""
         self.query_one("#rubric-note", Static).update(
             f"{code}{draft}: ctrl+s checks and saves it, then shows what it changed; ctrl+r reverts"
@@ -1550,9 +1570,9 @@ class Monitor(App):
     @on(TextArea.Changed, "#rubric-editor")
     def rubric_changed(self, event: TextArea.Changed) -> None:
         code = self.rubric_code
-        if code is None or code not in self.rubrics:
+        if code is None or not self.has_rubric(code):
             return
-        if event.text_area.text != areas.dump(self.rubrics[code]):
+        if event.text_area.text != self.rubric_text(code):
             self.rubric_drafts[code] = event.text_area.text
         else:
             self.rubric_drafts.pop(code, None)
@@ -1566,13 +1586,16 @@ class Monitor(App):
         if (code := self.rubric_code) is None:
             return
         self.rubric_drafts.pop(code, None)
-        self.query_one("#rubric-editor", TextArea).load_text(areas.dump(self.rubrics[code]))
+        self.query_one("#rubric-editor", TextArea).load_text(self.rubric_text(code))
         self.query_one("#rubric-note", Static).update(f"{code}: reverted to the saved rubric")
 
     def action_save_rubric(self) -> None:
         if (code := self.rubric_code) is None:
             return
         note = self.query_one("#rubric-note", Static)
+        if code == REVIEWS:
+            self.save_review_rubric()
+            return
         try:
             rubric = areas.read(self.query_one("#rubric-editor", TextArea).text, code)
         except ValueError as e:
@@ -1613,3 +1636,31 @@ class Monitor(App):
             note.update("\n".join([f"{code} saved. What the edit changed:", *lines]))
 
         self.online(f"Checking the edit of {code}…", job, done, offline=True)
+
+    def save_review_rubric(self) -> None:
+        """Checks and saves the edited review rubric; once reviews were scored, rescores them
+        and says which became poor, or stopped being."""
+        note = self.query_one("#rubric-note", Static)
+        try:
+            rubric = reviewing.read(self.query_one("#rubric-editor", TextArea).text)
+        except ValueError as e:
+            note.update(Text(f"{REVIEWS} not saved: {e}", "red"))
+            return
+        changed = rubric != self.review_rubric
+        reviewing.save(rubric, core.FILE_REVIEW_RUBRIC)
+        self.rubric_drafts.pop(REVIEWS, None)
+        self.fill_rubrics()
+        note.update(f"{REVIEWS} saved")
+        if not changed or not self.review_results:
+            return
+
+        def then(before: set, after: set) -> None:
+            listed = lambda keys: ", ".join(f"#{n} {name}" for n, name in sorted(keys))  # noqa: E731
+            lines = [f"{REVIEWS} saved. Poor reviews: {len(before)} -> {len(after)}"]
+            if after - before:
+                lines.append(f"Now poor: {listed(after - before)}")
+            if before - after:
+                lines.append(f"No longer poor: {listed(before - after)}")
+            note.update("\n".join(lines))
+
+        self.score_reviews(cache_only=self.cache_only, then=then)

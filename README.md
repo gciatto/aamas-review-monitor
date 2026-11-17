@@ -287,7 +287,8 @@ matched), so you can see whether the rules earn their weight.
   and `c` comments on the marked ones (else the selected one): to each paper's SPC
   (`spc-poor-reviews`), or as a reply to each review that its reviewer reads
   (`reviewers-poor-review`), reviewed and editable before you type `SEND`.
-- **Rubrics:** the area rubrics, one YAML editor each. `ctrl+s` checks and saves your copy, then
+- **Rubrics:** the area rubrics, one YAML editor each, and the review rubric (`reviews`, last;
+  saving it rescores the reviews and says which became poor, or stopped being). `ctrl+s` checks and saves your copy, then
   shows what the edit changed: how many of the area's topics are nearest to it when left out,
   and how many labelled papers get their label as best area, before and after, naming the
   papers it fixed and broke. `ctrl+r` drops unsaved edits; edits of other areas are kept while

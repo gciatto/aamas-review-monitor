@@ -1035,3 +1035,31 @@ def test_reviews_tab_replies_to_a_marked_poor_review_which_its_reviewer_reads(
             assert note.replyto == "r1" and note.readers[-1].endswith("/Reviewer_hidden")
 
     asyncio.run(scenario())
+
+
+def test_review_rubric_is_edited_in_the_rubrics_tab_and_saving_rescores(tmp_path, monkeypatch):
+    from textual.widgets import TextArea
+
+    app, _ = reviews_to_score(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(160, 40)) as pilot:
+            await scored_reviews(app, pilot)
+            await pilot.press("t")  # Rubrics: the review rubric is the last row
+            rubrics = app.query_one("#rubrics")
+            rubrics.focus()
+            rubrics.move_cursor(row=rubrics.row_count - 1)
+            await until(pilot, lambda: app.rubric_code == "reviews")
+            editor = app.query_one("#rubric-editor", TextArea)
+            assert "key: weaknesses" in editor.text
+            editor.load_text(editor.text.replace("weight: 2", "weight: -2", 1))
+            await pilot.press("ctrl+s")
+            assert "not saved" in str(app.query_one("#rubric-note").render())
+            editor.load_text(editor.text.replace("weight: -2", "weight: 20", 1))
+            await pilot.press("ctrl+s")
+            note = app.query_one("#rubric-note")
+            await done(app, pilot, lambda: "Poor reviews: " in str(note.render()))
+            assert core.FILE_REVIEW_RUBRIC.is_file()
+            assert rubrics.get_row_at(rubrics.row_count - 1)[1] == "yours"
+
+    asyncio.run(scenario())
