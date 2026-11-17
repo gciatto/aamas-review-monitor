@@ -1,3 +1,48 @@
+## [1.11.0](https://github.com/gciatto/aamas-review-monitor/compare/1.10.0...1.11.0) (2026-11-17)
+
+### Features
+
+* **checks:** flag papers whose discussion has not started ([f94c7e8](https://github.com/gciatto/aamas-review-monitor/commit/f94c7e8e2ab44f9b233a7434a93529eaa13df402))
+* **comments:** choose who else reads a forum comment, reviewers included ([7f297dd](https://github.com/gciatto/aamas-review-monitor/commit/7f297dd8673c62596f2631f831c5a067eeeb0d5f))
+* **comments:** pick a comment template, which presets its readers ([78a3587](https://github.com/gciatto/aamas-review-monitor/commit/78a358720ce297e3686e3c182878849d24970c3f))
+* **comments:** reply to a review, readable by its reviewer ([f45dca5](https://github.com/gciatto/aamas-review-monitor/commit/f45dca5eed347cf3806bc6e08ce58bb9737c9c66))
+* **comments:** template asking reviewers to reconcile diverging scores ([c73c6c2](https://github.com/gciatto/aamas-review-monitor/commit/c73c6c278ae27017c416f9124a33afd1ae0b5034))
+* **comments:** template telling each paper's late reviewers their review is due ([3566715](https://github.com/gciatto/aamas-review-monitor/commit/3566715ed044dccbffb05df494d99ae62ac4a260))
+* **comments:** template telling late reviewers their review is overdue ([5a5014e](https://github.com/gciatto/aamas-review-monitor/commit/5a5014ea67a0124cc7763a89ce2a1d69ed2d7e20))
+* **outreach:** sign every comment and email template as Your Senior Area Chair ([ea3bcac](https://github.com/gciatto/aamas-review-monitor/commit/ea3bcac8d8722499b68dd88d1a7883da79f3f8b2))
+* **reviews:** ask the SPC, or the reviewer directly, to improve poor reviews ([d621915](https://github.com/gciatto/aamas-review-monitor/commit/d621915fb3bc84ab026ba43bd1cbdab314e9abaf))
+* **reviews:** judge each review against the rubric, on local embeddings ([33796c9](https://github.com/gciatto/aamas-review-monitor/commit/33796c92530e1cd5acc112cf2e2276f490864c32))
+* **reviews:** review rubric of what a helpful review does ([c4bbf75](https://github.com/gciatto/aamas-review-monitor/commit/c4bbf7538bc0b5742e1a3398a8b9a4fa4ee5bb57))
+* **reviews:** review-scores command, and rubrics show/edit/check reviews ([60c29ac](https://github.com/gciatto/aamas-review-monitor/commit/60c29ac8157594fe4fd1c3ebffcc2c114aa1e671))
+* **reviews:** tell each reviewer what their review misses, and how to address it ([65508bd](https://github.com/gciatto/aamas-review-monitor/commit/65508bdbdd22fbac942e4b846d37631258674269))
+* **reviews:** tell emergency reviewers apart, with their own deadline and recipients ([6323bce](https://github.com/gciatto/aamas-review-monitor/commit/6323bcea20c4f28b6c1983409cb6c2edb3b6373f))
+* **tui:** edit the review rubric in the Rubrics tab ([848dd52](https://github.com/gciatto/aamas-review-monitor/commit/848dd52504e3f013b391bef476d07675d7cde356))
+* **tui:** read each review in the Reviews tab, and open it on OpenReview ([96ce99e](https://github.com/gciatto/aamas-review-monitor/commit/96ce99eaa008f2f794bf36694308c65c4df0975c))
+* **tui:** Reviews tab, each review against the review rubric ([9881d6e](https://github.com/gciatto/aamas-review-monitor/commit/9881d6e9b4d0aabf59265a24f460e34fe06d5fa9))
+* **tui:** show what reached each reviewer, in paper details and the Reviews tab ([4ec55f4](https://github.com/gciatto/aamas-review-monitor/commit/4ec55f4e400fd3ed036d5a97f2b3ed720b64a12d))
+
+### Dependency updates
+
+* **deps:** update dependency semantic-release-preconfigured-conventional-commits to v1.1.159 ([#6](https://github.com/gciatto/aamas-review-monitor/issues/6)) ([3c8c538](https://github.com/gciatto/aamas-review-monitor/commit/3c8c538760b42da93ab96b1f6a637231c2ef7ea5))
+
+### Bug Fixes
+
+* **comments:** improve messages for poor reviews ([f29d142](https://github.com/gciatto/aamas-review-monitor/commit/f29d1427445ddf831b7b0157d83a50f75fb56e74))
+* **reviews:** list every review in the Reviews tab, by the rules alone until embedded ([a463834](https://github.com/gciatto/aamas-review-monitor/commit/a463834f3fb546cad75a2cf02791ac8ad2f80557))
+* **tui:** date only the comments on each review in the Reviews tab ([9679c38](https://github.com/gciatto/aamas-review-monitor/commit/9679c381781fd4f1607df2928f89854e0549f75c))
+
+### Documentation
+
+* the review rubric, and its local-models exception for agents ([e045f50](https://github.com/gciatto/aamas-review-monitor/commit/e045f50b6d2167146902a81dbbf4d161725be8c4))
+
+### General maintenance
+
+* **scripts:** measure the review rubric on public ICLR 2017 reviews ([aa14ece](https://github.com/gciatto/aamas-review-monitor/commit/aa14ecef8e5ea0f564750354b87822b427ac62df))
+
+### Style improvements
+
+* **tui:** show the Last sent column right after the paper number in the Reviews tab ([125e309](https://github.com/gciatto/aamas-review-monitor/commit/125e309e87772b03291423cb25dce3ac4cccf54d))
+
 ## [1.10.0](https://github.com/gciatto/aamas-review-monitor/compare/1.9.0...1.10.0) (2026-11-13)
 
 ### Features
