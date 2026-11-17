@@ -1162,7 +1162,9 @@ class Monitor(App):
             if not form:
                 return
             try:
-                drafts, unreachable = outreach.direct(core.records(*numbers), **form)
+                drafts, unreachable = outreach.direct(
+                    core.records(*numbers), **form, since=self.config["deadline_reviews"]
+                )
             except FileNotFoundError as e:
                 self.notify(f"Not cached: {e.filename}. Press s to sync", severity="error")
                 return

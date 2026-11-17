@@ -1,25 +1,25 @@
 # code: action; code/urgent: the action from reviews_urgent_days before the review deadline on
 active_submission: none needed; no further review action is expected on this paper.
 no_spc: none on your side; I will look into the assignment myself.
-few_reviewers: please let me know if you can suggest further reviewers, or recruit an emergency reviewer.
+few_reviewers: please let me know if you can suggest a qualified reviewer willing to review it (name and OpenReview profile ID), as the emergency reviewer pool is exhausted.
 reviews_behind: please remind the reviewers who have not submitted yet of the upcoming deadline.
-missing_reviews: please remind the missing reviewers, and tell me promptly if one cannot deliver, so that an emergency reviewer can be found.
+missing_reviews: please remind the missing reviewers, asking them to reply by an Official Comment on OpenReview, and tell me promptly if one cannot deliver; if a review is still missing after $deadline_reviews_emergency (23:59 GMT), you must write it yourself by $deadline_reviews_spc, 12:00 GMT: no further emergency reviewers are available.
 late_reviewer: please remind this reviewer: they owe several reviews, so one message covering all of them may work best.
-reviews_behind/urgent: the review deadline is close: please press the late reviewers for a firm submission date, and start looking for emergency reviewers in case they do not deliver.
-missing_reviews/urgent: the review deadline is close: please press the missing reviewers for a firm submission date, and start looking for emergency reviewers (let me know whom you have in mind).
-late_reviewer/urgent: the review deadline is close: please press this reviewer, who owes several reviews, and start looking for emergency reviewers for their papers.
-short_review: please read the review and, if it is too thin to support a decision, ask the reviewer to expand it.
+reviews_behind/urgent: the review deadline is close: please press the late reviewers for a firm submission date; if a review is still missing after $deadline_reviews_emergency (23:59 GMT), you must write it yourself by $deadline_reviews_spc, 12:00 GMT: no further emergency reviewers are available.
+missing_reviews/urgent: please press the missing reviewers for a firm submission date, asking them to reply by an Official Comment on OpenReview; if a review is still missing after $deadline_reviews_emergency (23:59 GMT), you must write it yourself by $deadline_reviews_spc, 12:00 GMT: no further emergency reviewers are available.
+late_reviewer/urgent: please press this reviewer, who owes several reviews, for a firm submission date; if a review is still missing after $deadline_reviews_emergency (23:59 GMT), you must write it yourself by $deadline_reviews_spc, 12:00 GMT: no further emergency reviewers are available.
+short_review: please read the review and, if it is too thin to support a decision, ask the reviewer to expand it before the rebuttal opens, with concrete justifications and questions the authors can answer.
 review_chatbot_phrases: please read the flagged passage and, if it looks like leftover generated text, ask the reviewer to revise it.
 review_marker_words: please give the review a read; act only if its content, not its wording, is a concern.
 recycled_review: please compare the review with the reviewer's other ones and ask them to write one specific to this paper if needed.
 low_confidence: please check whether the reviewers' expertise fits the paper, and let me know if another reviewer is needed.
 disagreement: please invite the reviewers to read each other's reviews and discuss their differing views once the discussion opens; if the discrepancy remains, explain in the meta-review how you weighed it.
-no_discussion: please start the discussion, asking the reviewers to address their disagreement.
+no_discussion: please start the discussion, asking the reviewers to address their disagreement in light of the rebuttal.
 long_discussion: please check whether the discussion is stuck, and steer it towards a conclusion.
 unanswered_comment: none on your side; I will reply to the comment myself.
 missing_acknowledgement: please remind these reviewers to acknowledge the authors' rebuttal, by updating their review or commenting.
 inactive_spc: please join the discussions of your papers, even with a short note to the reviewers.
-missing_meta_review: please write and submit the meta-review before its deadline.
+missing_meta_review: please write and submit the meta-review by $deadline_meta_reviews, 23:59 GMT: this deadline will not be extended.
 short_meta_review: please expand the meta-review so that it summarises the reviews and the discussion.
 missing_recommendation: please fill in both the Proceedings and the Findings recommendations.
 meta_vs_ratings: please make sure the meta-review explains why the recommendation departs from the ratings.

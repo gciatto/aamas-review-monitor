@@ -393,7 +393,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "email":
         body = args.body.read_text(encoding="utf-8")
         drafts, unreachable = outreach.direct(
-            load_records(*args.numbers), args.role, args.subject, body
+            load_records(*args.numbers), args.role, args.subject, body, config["deadline_reviews"]
         )
         send(config, drafts, unreachable, core.load_snapshots()[0], args.edit)
 

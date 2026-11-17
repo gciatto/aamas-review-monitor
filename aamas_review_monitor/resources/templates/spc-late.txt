@@ -12,8 +12,9 @@ overdue. Each point says what the check verifies, and suggests an action
 
 $issues
 
-The meta-review deadline is $deadline_meta_reviews ($days_meta_reviews days from now). Could you
-please:
+Reviewers must acknowledge the rebuttal by $deadline_acknowledgements. The meta-review deadline,
+$deadline_meta_reviews at 23:59 GMT ($days_meta_reviews days from now), is absolutely firm: it will
+not be extended. Could you please:
 - double-check these points on OpenReview: automatic checks can be wrong, and I would be glad
   to hear when one is;
 - take care of the actual ones as soon as possible, involving the papers' PC members where

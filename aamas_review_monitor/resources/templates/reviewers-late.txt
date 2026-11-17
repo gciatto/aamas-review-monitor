@@ -7,7 +7,9 @@ Subject: AAMAS 2027: your review of paper $paper
 Dear {{fullname}},
 
 According to my automatic checks, your review of AAMAS 2027 paper $paper ($url) has not been
-submitted yet. Reviews are due on $deadline_reviews ($days_reviews days from now).
+submitted yet. Reviews were due on $deadline_reviews; emergency reviews are due on
+$deadline_reviews_emergency, 23:59 GMT. That is the final, hard deadline for every review: it
+will not be extended, and the SPC will have to write any review still missing then.
 
 If something prevents you from completing it, please let us know as soon as possible, so that
 we can make other arrangements in time. The check may lag behind OpenReview: if you have

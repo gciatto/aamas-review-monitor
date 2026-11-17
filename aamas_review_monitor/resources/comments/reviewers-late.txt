@@ -7,11 +7,16 @@ Title: Your review of paper $paper
 Dear reviewer,
 
 According to the Senior Area Chair's automatic checks, your review of this paper has not been
-submitted yet. Reviews are due on $deadline_reviews ($days_reviews days from now).
+submitted yet. Reviews were due on $deadline_reviews; emergency reviews are due on
+$deadline_reviews_emergency, 23:59 GMT. That is the final, hard deadline for every review: it
+will not be extended, and the SPC will have to write any review still missing then.
 
 Please submit it as soon as possible. If something prevents you from completing it, please
-reply here right away, so that other arrangements can be made in time. The checks may lag
-behind OpenReview: if you have already submitted your review, please ignore this comment.
+say so right away. Please __reply by posting an Official Comment on OpenReview__, not by answering the
+notification email: replies to that email reach the Program Chairs, not us.
+
+The checks may lag behind OpenReview: if you have already submitted your review, please ignore
+this comment.
 
 Thank you for your work for AAMAS.
 

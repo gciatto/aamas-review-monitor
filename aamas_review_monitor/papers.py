@@ -15,16 +15,19 @@ from pathlib import Path, PurePosixPath
 from typing import Any, NamedTuple
 
 from aamas_review_monitor import logger
-from aamas_review_monitor.collector import person, replies
+from aamas_review_monitor.collector import assigned, person, replies
 
-ROLES = ("reviewers", "late-reviewers", "spcs")
+# reviewers still owing a review: assigned before the review deadline, or from it on (emergency)
+LATE = ("late-reviewers", "emergency-reviewers")
+ROLES = ("reviewers", *LATE, "spcs")
 # who else may read a comment, besides PCs and SACs; a paper's anonymous reviewer groups
 # (Reviewer_aB3x) can be named too
 READERS = {
     "spcs": "SPCs",
     "reviewers": "all reviewers",
     "reviewers-submitted": "reviewers who submitted",
-    "late-reviewers": "late reviewers",
+    "late-reviewers": "late reviewers (originally assigned)",
+    "emergency-reviewers": "emergency reviewers without a review",
 }
 # one comment per review an issue names (poor_review:Reviewer_aB3x), replying to it, which its
 # reviewer reads
@@ -184,16 +187,24 @@ def contents(path: Path) -> str:
     return f"No preview for {path.suffix} files"
 
 
-def recipients(record: dict, role: str) -> tuple[str, str, list[str]]:
-    """Message invitation, parent group and recipients for one paper and role."""
+def recipients(record: dict, role: str, since: str = "") -> tuple[str, str, list[str]]:
+    """Message invitation, parent group and recipients for one paper and role; reviewers
+    assigned on or after `since` (the review deadline) are emergency ones, else none is."""
     names, prefix = record["names"], record["prefix"]
     group = names["area_chairs"] if role == "spcs" else names["reviewers"]
     invitation = f"{prefix}{group}/-/Message" if role == "spcs" else f"{prefix}-/Message"
     members = record["groups"].get(group, [])
-    if role == "late-reviewers":
+    if role in LATE:
         done = {r["signatures"][0] for r in replies(record, "review")}
         done |= {person(record, s) for s in done}
-        members = [m for m in members if m not in done and person(record, m) not in done]
+        days = assigned(record)
+        members = [
+            m
+            for m in members
+            if m not in done
+            and person(record, m) not in done
+            and (bool(since) and days.get(m, "") >= since) == (role == "emergency-reviewers")
+        ]
     return invitation, prefix + group, members
 
 
@@ -300,10 +311,10 @@ def deliver(
     return failures
 
 
-def late_groups(record: dict) -> list[str]:
+def late_groups(record: dict, role: str = "late-reviewers", since: str = "") -> list[str]:
     """The anonymous groups (Reviewer_aB3x, after the paper's prefix) of reviewers owing a
-    review."""
-    _, _, late = recipients(record, "late-reviewers")
+    review, in a `LATE` role (see `recipients`)."""
+    _, _, late = recipients(record, role, since)
     prefix, anonymous = record["prefix"], record["names"].get("reviewers_anon", "Reviewer_")
     return [
         g
@@ -312,9 +323,9 @@ def late_groups(record: dict) -> list[str]:
     ]
 
 
-def reader_groups(record: dict, readers: Collection[str]) -> tuple[str, ...]:
+def reader_groups(record: dict, readers: Collection[str], since: str = "") -> tuple[str, ...]:
     """The paper's groups (after its prefix) that `readers` name: `READERS` keys, or its
-    anonymous reviewer groups as they are."""
+    anonymous reviewer groups as they are; `since`: as in `recipients`."""
     names, found = record["names"], []
     for key in readers:
         if key == "spcs":
@@ -323,8 +334,8 @@ def reader_groups(record: dict, readers: Collection[str]) -> tuple[str, ...]:
             found.append(names["reviewers"])
         elif key == "reviewers-submitted":
             found.append(names["reviewers"] + "/Submitted")
-        elif key == "late-reviewers":
-            found += late_groups(record)
+        elif key in LATE:
+            found += late_groups(record, key, since)
         else:
             found.append(key)
     return tuple(dict.fromkeys(found))

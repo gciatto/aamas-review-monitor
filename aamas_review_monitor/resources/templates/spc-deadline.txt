@@ -6,7 +6,9 @@ Subject: AAMAS 2027: meta-reviews due $deadline_meta_reviews
 ---
 Dear {{fullname}},
 
-A friendly reminder: meta-reviews are due on $deadline_meta_reviews, in $days_meta_reviews days.
+A friendly reminder: meta-reviews are due on $deadline_meta_reviews, 23:59 GMT, in
+$days_meta_reviews days. The Program Chairs stress that this deadline is absolutely firm: it will
+not be extended under any circumstances.
 According to my automatic process checks, these papers still need one
 (🔴 needs attention soon, 🟡 worth a look):
 

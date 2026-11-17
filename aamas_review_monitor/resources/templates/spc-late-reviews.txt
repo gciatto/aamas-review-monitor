@@ -12,15 +12,20 @@ action (🔴 needs attention soon, 🟡 worth a look):
 
 $issues
 
-Reviews are due on $deadline_reviews ($days_reviews days from now).
-As SPC, **it is your responsibility to remind these papers' PC members of their pending reviews**,
-and to follow up until they are in.
+Reviews were due on $deadline_reviews; emergency reviews are due on $deadline_reviews_emergency,
+23:59 GMT, a hard deadline. Every paper needs at least $reviews_min reviews when the author
+rebuttal opens. As SPC, **it is your responsibility to remind these papers' PC members of their
+pending reviews**, and to follow up until they are in. No further emergency reviewers are
+available: **if a paper still lacks a review after $deadline_reviews_emergency, you must write
+it yourself by $deadline_reviews_spc, 12:00 GMT** (a hard deadline, too).
 
 So, could you please:
 - double-check these points on OpenReview: automatic checks can lag behind it;
-- remind the reviewers concerned as soon as possible;
-- let me and general chairs know if a reviewer does not respond or cannot complete their review,
-  so that we can find a replacement in time.
+- remind the reviewers concerned as soon as possible, asking them to reply by posting an
+  Official Comment on OpenReview (replies to the notification email reach the Program Chairs,
+  not us);
+- let me know if a reviewer does not respond or cannot complete their review, and plan to
+  write the missing review yourself.
 
 How these checks work: they are computed automatically and deterministically, by a script
 I run on my own machine over what OpenReview shows me: process data (assignments, dates, word

@@ -17,7 +17,9 @@ from typing import NamedTuple
 from aamas_review_monitor.checks import GREEN, ICONS, Issue, legend
 from aamas_review_monitor.collector import person, replies
 from aamas_review_monitor.papers import (
+    LATE,
     READER_REVIEW_AUTHORS,
+    READERS,
     Comment,
     Draft,
     late_groups,
@@ -34,7 +36,7 @@ from aamas_review_monitor.resources import (
     FILE_VARIABLES,
 )
 
-AUDIENCES = ("spcs", "late-reviewers")
+AUDIENCES = ("spcs", *LATE)
 COMMENT_CHARS_MAX = 5000  # OpenReview's Official_Comment limit
 COMMENT_LIMITS = (500, COMMENT_CHARS_MAX)  # title, text
 
@@ -43,7 +45,7 @@ class Template(NamedTuple):
     key: str  # the file name without extension, e.g. "spc-digest"
     name: str
     description: str
-    audience: str  # "spcs": one draft per SPC; "late-reviewers": one per paper
+    audience: str  # "spcs": one draft per SPC; papers.LATE roles: one per paper
     codes: frozenset[str]  # issue codes it is about; empty for all
     subject: str
     body: str
@@ -138,12 +140,14 @@ def _day(iso: str) -> str:
 
 def _values(config: dict, today: date) -> dict[str, str]:
     values = {}
-    for key in ("reviews", "meta_reviews", "acknowledgements"):
+    for key in ("reviews", "reviews_emergency", "reviews_spc", "meta_reviews", "acknowledgements"):
         deadline = config.get(f"deadline_{key}", "")
         values[f"deadline_{key}"] = _day(deadline)
         values[f"days_{key}"] = (
             str((date.fromisoformat(deadline) - today).days) if deadline else "?"
         )
+    values["discussion_start"] = _day(config.get("discussion_start", ""))
+    values["reviews_min"] = str(config.get("reviews_min", "?"))
     return values
 
 
@@ -171,7 +175,8 @@ def _spc_line(issue: Issue) -> str:
 
 def spc_actions(config: dict | None = None, today: date | None = None) -> dict[str, str]:
     """The action suggested to SPCs for each check, by code; from `reviews_urgent_days` before
-    the review deadline on, the `code/urgent` variants replace their check's action."""
+    the review deadline on, the `code/urgent` variants replace their check's action. With a
+    `config` and `today`, `$deadline_*`/`$days_*` placeholders are filled in."""
     lines = FILE_SPC_ACTIONS.read_text(encoding="utf-8").splitlines()
     lines = [line for line in lines if ":" in line and not line.startswith("#")]
     found = {k.strip(): v.strip() for k, v in (line.split(":", 1) for line in lines)}
@@ -184,6 +189,9 @@ def spc_actions(config: dict | None = None, today: date | None = None) -> dict[s
         and ((date.fromisoformat(deadline) - today).days <= config["reviews_urgent_days"])
     ):
         actions |= {k.split("/")[0]: v for k, v in found.items() if k.endswith("/urgent")}
+    if config and today:
+        values = _values(config, today)
+        actions = {k: string.Template(v).safe_substitute(values) for k, v in actions.items()}
     return actions
 
 
@@ -294,9 +302,10 @@ def compose(
             paper = by_number[number]
             if spcs is not None and not set(theirs[0].spcs) & spcs:
                 continue
-            invitation, parent, members = recipients(paper, "late-reviewers")
+            since = config.get("deadline_reviews", "")
+            invitation, parent, members = recipients(paper, template.audience, since)
             if not members:
-                unreachable.append(f"#{number}: no late reviewer to write to")
+                unreachable.append(f"#{number}: no {READERS[template.audience]} to write to")
                 continue
             fill = values | {
                 "paper": f"#{number}",
@@ -307,7 +316,7 @@ def compose(
             }
             subject = string.Template(template.subject).safe_substitute(fill)
             body = string.Template(template.body).safe_substitute(fill)
-            to = f"late reviewers of #{number} ({len(members)})"
+            to = f"{READERS[template.audience]} of #{number} ({len(members)})"
             listed = tuple((i.number, i.code) for i in theirs)
             drafts.append(
                 Draft(
@@ -329,14 +338,14 @@ def compose(
 
 
 def direct(
-    records: list[dict], role: str, subject: str, body: str
+    records: list[dict], role: str, subject: str, body: str, since: str = ""
 ) -> tuple[list[Draft], list[str]]:
     """The same message, written by the user, to `role` of each paper; also the papers with no
-    one to write to."""
+    one to write to. `since`: as in `papers.recipients`."""
     drafts, unreachable = [], []
     for record in records:
         number = record["number"]
-        invitation, parent, members = recipients(record, role)
+        invitation, parent, members = recipients(record, role, since)
         if not members:
             unreachable.append(f"#{number}: no {role} to write to")
             continue
@@ -447,6 +456,7 @@ def comments(
         ]
     by_number = {r["number"]: r for r in records}
     found, skipped = [], []
+    since, late = config.get("deadline_reviews", ""), [r for r in readers if r in LATE]
     # (paper, its issues, extra readers, the review it replies to)
     units: list[tuple[int, list[Issue], tuple[str, ...], dict | None]] = []
     for number in sorted(numbers):
@@ -459,8 +469,8 @@ def comments(
             skipped.append(
                 f"#{number}: no open issues" + (f" for {template.name}" if template else "")
             )
-        elif "late-reviewers" in readers and not late_groups(by_number[number]):
-            skipped.append(f"#{number}: no late reviewer to read it")
+        elif late and not any(late_groups(by_number[number], r, since) for r in late):
+            skipped.append(f"#{number}: no {' or '.join(READERS[r] for r in late)} to read it")
         elif READER_REVIEW_AUTHORS in readers:
             record = by_number[number]
             reviews = {
@@ -501,7 +511,7 @@ def comments(
                         record,
                         title,
                         text,
-                        tuple(dict.fromkeys(reader_groups(record, others) + extra)),
+                        tuple(dict.fromkeys(reader_groups(record, others, since) + extra)),
                         tuple((i.number, i.code) for i in theirs),
                         fields["title"],
                         values,

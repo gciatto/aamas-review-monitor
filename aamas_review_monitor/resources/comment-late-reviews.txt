@@ -8,8 +8,13 @@ $issues
 
 As the paper's SPC, **it is your responsibility to remind its PC members of their pending reviews**,
 and to follow up until they are in. Please double-check on OpenReview first, since
-automatic checks can lag behind it, and reply here if a reviewer does not respond or cannot
-complete their review, so that a replacement can be found in time.
+automatic checks can lag behind it, and ask the reviewers to reply by posting an Official
+Comment on OpenReview (replies to the notification email reach the Program Chairs, not us).
+
+Emergency reviews are due on $deadline_reviews_emergency, 23:59 GMT, and no further emergency
+reviewers are available: **if this paper still lacks a review after that, you must write it
+yourself by $deadline_reviews_spc, 12:00 GMT** (a hard deadline). Please reply here if a
+reviewer does not respond or cannot complete their review.
 
 These checks are computed automatically and deterministically, on the Senior Area Chair's
 machine, over OpenReview's process data (assignments, dates, word counts, scores) and, for some

@@ -35,10 +35,11 @@ def test_spc_digest_lists_every_issue_of_the_spc_and_goes_through_their_paper():
     assert draft.invitation == f"{SUB}7/Area_Chairs/-/Message"
     assert draft.subject == "AAMAS 2027: status of your papers (#7)"
     assert (
-        f"- 🔴 #7 ({URL}): 2 reviews missing, 2 days left\n    Reviews on schedule: " in draft.body
+        f"- 🔴 #7 ({URL}): 2 reviews missing, 2 days left\n    Enough reviews on schedule: "
+        in draft.body
     )
     assert f"- 🟡 #7 ({URL}): ratings [3, 6]\n    Ratings within the allowed spread: " in draft.body
-    assert "    * __Suggested action__: the review deadline is close: please press" in draft.body
+    assert "    * __Suggested action__: please press the missing reviewers" in draft.body
     assert draft.body.startswith("Dear {{fullname}},")  # OpenReview fills the name in
 
 
@@ -126,7 +127,7 @@ def test_each_failed_check_is_explained_once_per_paper_for_spcs_but_not_reviewer
     (reminder,), _ = outreach.compose(
         by_key()["reviewers-deadline"], ISSUES, records, CONFIG, TODAY
     )
-    assert "Reviews on schedule: " not in reminder.body
+    assert "Enough reviews on schedule: " not in reminder.body
 
 
 def test_comments_drop_the_explanations_when_too_long_for_openreview(monkeypatch):
@@ -135,10 +136,10 @@ def test_comments_drop_the_explanations_when_too_long_for_openreview(monkeypatch
     assert "__Suggested action__: " in explained.text and "each other's reviews" in explained.text
     monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", len(explained.text) - 1)
     (shorter,), _ = outreach.comments(ISSUES, records, {7}, ("spcs",), CONFIG)
-    assert "Suggested action" not in shorter.text and "Reviews on schedule: " in shorter.text
+    assert "Suggested action" not in shorter.text and "Enough reviews on schedule: " in shorter.text
     monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", len(shorter.text) - 1)
     (bare,), _ = outreach.comments(ISSUES, records, {7}, ("spcs",), CONFIG)
-    assert "Reviews on schedule: " not in bare.text and "- 🔴 2 reviews missing" in bare.text
+    assert "Enough reviews on schedule: " not in bare.text and "- 🔴 2 reviews missing" in bare.text
     monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", 100)
     found, skipped = outreach.comments(ISSUES, records, {7}, ("spcs",), CONFIG)
     assert found == [] and skipped[0].endswith("OpenReview allows 100")
@@ -159,7 +160,9 @@ def test_late_reviews_alone_get_their_own_comment_and_suggested_spc_template():
 def test_comments_reach_the_late_reviewers_of_each_paper_or_any_reviewer_group():
     records = fetch(FakeClient(), CONFIG)
     found, skipped = outreach.comments(ISSUES, records, {7}, ("late-reviewers",), CONFIG, TODAY)
-    assert found == [] and skipped == ["#7: no late reviewer to read it"]  # no anonymous group
+    assert found == [] and skipped == [
+        "#7: no late reviewers (originally assigned) to read it"
+    ]  # no anonymous group
     records[0]["groups"]["Reviewer_xY12"] = ["~Rev_B1"]
     (comment,), _ = outreach.comments(
         ISSUES, records, {7}, ("late-reviewers", "spcs"), CONFIG, TODAY
@@ -168,6 +171,19 @@ def test_comments_reach_the_late_reviewers_of_each_paper_or_any_reviewer_group()
     (comment,), _ = outreach.comments(ISSUES, records, {7}, ("reviewers",), CONFIG, TODAY)
     assert papers.readers(comment)[2:] == [f"{SUB}7/Reviewers"]
     assert papers.readable_by(comment) == "PCs, SACs, Reviewers"
+
+
+def test_emergency_reviewers_are_those_assigned_from_the_review_deadline_on():
+    records = fetch(FakeClient(), CONFIG)
+    records[0]["groups"]["Reviewer_xY12"] = ["~Rev_B1"]
+    records[0]["created"]["Reviewer_xY12"] = 1793491200000 + 14 * 86400000  # 15 Nov
+    late = outreach.comments(ISSUES, records, {7}, ("late-reviewers",), CONFIG, TODAY)
+    assert late == ([], ["#7: no late reviewers (originally assigned) to read it"])
+    (comment,), _ = outreach.comments(ISSUES, records, {7}, ("emergency-reviewers",), CONFIG, TODAY)
+    assert comment.readers == ("Reviewer_xY12",)
+    (draft,), _ = outreach.direct(records, "emergency-reviewers", "Hi", "Body", "2026-11-13")
+    assert draft.members == ["~Rev_B1"]
+    assert outreach.direct(records, "emergency-reviewers", "Hi", "Body")[0] == []  # no deadline
 
 
 def test_a_comment_template_goes_to_the_papers_with_its_issues_with_its_readers(tmp_path):
@@ -194,7 +210,9 @@ def test_the_late_reviewers_template_reaches_each_paper_s_late_reviewers():
     late = {t.key: t for t in outreach.comment_templates()}["reviewers-late"]
     records = fetch(FakeClient(), CONFIG)
     found, skipped = outreach.comments(ISSUES, records, {7}, late.readers, CONFIG, TODAY, late)
-    assert found == [] and skipped == ["#7: no late reviewer to read it"]  # no anonymous group
+    assert found == [] and skipped == [
+        "#7: no late reviewers (originally assigned) to read it"
+    ]  # no anonymous group
     records[0]["groups"]["Reviewer_xY12"] = ["~Rev_B1"]
     (comment,), _ = outreach.comments(ISSUES, records, {7}, late.readers, CONFIG, TODAY, late)
     assert comment.readers == ("Reviewer_xY12", "Area_Chairs")
@@ -240,9 +258,11 @@ def test_the_overdue_template_asks_each_paper_s_late_reviewers_to_confirm():
     records[0]["groups"]["Reviewer_xY12"] = ["~Rev_B1"]
     (comment,), _ = outreach.comments(ISSUES, records, {7}, overdue.readers, CONFIG, TODAY, overdue)
     assert comment.readers == ("Reviewer_xY12", "Area_Chairs")
-    assert comment.title == "Overdue review of paper #7: please confirm"
-    assert "the deadline was 13 November 2026" in " ".join(comment.text.split())
-    assert "confirming whether you will be able" in " ".join(comment.text.split())
+    assert comment.title == "Missing review of paper #7: please confirm"
+    text = " ".join(comment.text.split())
+    assert "Reviews were due on 13 November 2026; emergency reviews are due on 19 November" in text
+    assert "__confirm__ whether you will be able" in text
+    assert "posting an Official Comment on OpenReview__" in text
 
 
 def test_every_comment_and_email_template_is_signed_by_the_senior_area_chair():

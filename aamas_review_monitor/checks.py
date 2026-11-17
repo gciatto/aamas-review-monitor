@@ -132,7 +132,7 @@ def reviews_behind(paper: dict, ctx: Context) -> list[Finding]:
 
     YELLOW when, past a review milestone ({reviews_milestones}), fewer of the paper's reviews are
     in than that share, until the last {reviews_warning_days} days before the review deadline
-    (then "Reviews on schedule" applies).
+    (then "Enough reviews on schedule" applies).
     """
     if _days(ctx, "deadline_reviews") <= ctx.config["reviews_warning_days"]:
         return []
@@ -148,21 +148,40 @@ def reviews_behind(paper: dict, ctx: Context) -> list[Finding]:
     return []
 
 
+def _short(paper: dict, ctx: Context) -> bool:
+    """Whether fewer than `reviews_min` reviews are in: with that many, a paper is covered."""
+    return len(paper["reviews"]) < ctx.config["reviews_min"]
+
+
+def _emergency(paper: dict, ctx: Context, reviewer: str) -> bool:
+    """Whether a reviewer was assigned on or after the review deadline, as emergency reviewers
+    were; old snapshots lack assignment days, so everyone counts as originally assigned."""
+    return (paper.get("assigned", {}).get(reviewer) or "") >= ctx.config["deadline_reviews"]
+
+
 @paper_check
 def missing_reviews(paper: dict, ctx: Context) -> list[Finding]:
-    """Reviews on schedule
+    """Enough reviews on schedule
 
-    Counts assigned reviewers without a submitted review. From {reviews_warning_days} days
-    before the review deadline ({deadline_reviews}) it is YELLOW, from {reviews_critical_days}
-    days before and once overdue RED.
+    Counts the paper's missing reviews while fewer than {reviews_min} are in. Reviewers assigned
+    before the review deadline ({deadline_reviews}) owe theirs by then; emergency reviewers,
+    assigned from that day on, by {deadline_reviews_emergency} (a separate finding). From
+    {reviews_warning_days} days before a deadline it is YELLOW, from {reviews_critical_days}
+    days before and once overdue RED. Reviews still missing after that are the SPC's to write,
+    by {deadline_reviews_spc}.
     """
-    return _deadline(
-        max(len(paper["reviewers"]) - len(paper["reviews"]), 0),
-        "reviews",
-        _days(ctx, "deadline_reviews"),
-        ctx.config["reviews_warning_days"],
-        ctx.config["reviews_critical_days"],
-    )
+    if not _short(paper, ctx):
+        return []
+    pending = _pending(paper)
+    emergency = sum(_emergency(paper, ctx, m) for m in pending)
+    original = max(len(paper["reviewers"]) - len(paper["reviews"]), 0) - emergency
+    warning, critical = ctx.config["reviews_warning_days"], ctx.config["reviews_critical_days"]
+    found = _deadline(original, "reviews", _days(ctx, "deadline_reviews"), warning, critical)
+    for f in _deadline(
+        emergency, "emergency reviews", _days(ctx, "deadline_reviews_emergency"), warning, critical
+    ):
+        found.append(f._replace(detail="emergency"))
+    return found
 
 
 @paper_check
@@ -170,14 +189,20 @@ def late_reviewer(paper: dict, ctx: Context) -> list[Finding]:
     """No reviewer behind on several papers
 
     YELLOW for each reviewer of this paper who, past the first review milestone, still owes
-    reviews on {reviewers_late_papers_min} or more of your papers: one reminder covers them all.
+    reviews on {reviewers_late_papers_min} or more of your papers lacking {reviews_min}
+    reviews: one reminder covers them all.
     """
-    if not ctx.config["reviews_milestones"] or str(ctx.today) < min(
-        ctx.config["reviews_milestones"]
+    if (
+        not ctx.config["reviews_milestones"]
+        or str(ctx.today) < min(ctx.config["reviews_milestones"])
+        or not _short(paper, ctx)
     ):
         return []
     owed = Counter(
-        m for p in ctx.papers if p.get("status", "active") == "active" for m in _pending(p)
+        m
+        for p in ctx.papers
+        if p.get("status", "active") == "active" and _short(p, ctx)
+        for m in _pending(p)
     )
     return [
         Finding(YELLOW, f"{m} owes reviews on {owed[m]} of your papers", m)
@@ -497,6 +522,7 @@ def passed(issues: list[Issue], checks: list | None = None) -> list[str]:
 
 PHASES = (  # (the setting ending a phase, the phase, what happens then)
     ("deadline_reviews", "Reviewing", "reviews due"),
+    ("deadline_reviews_emergency", "Recovery", "emergency reviews due"),
     ("discussion_start", "Rebuttal", "discussion starts"),
     ("deadline_acknowledgements", "Discussion", "acknowledgements due"),
     ("deadline_meta_reviews", "Meta-reviews", "meta-reviews due"),

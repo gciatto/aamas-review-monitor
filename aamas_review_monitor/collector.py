@@ -82,6 +82,8 @@ def fetch(
                 "content": note.content,
                 "replies": (note.details or {}).get("replies", []),
                 "groups": {g.id.removeprefix(paper): g.members for g in groups},
+                # when each group was created: an anonymous reviewer group's is the assignment's
+                "created": {g.id.removeprefix(paper): getattr(g, "cdate", None) for g in groups},
             }
         )
     return records
@@ -93,6 +95,18 @@ def _date(reply: dict, *keys: str) -> str | None:
         if reply.get(key):
             return datetime.fromtimestamp(reply[key] / 1000, timezone.utc).date().isoformat()
     return None
+
+
+def assigned(record: dict) -> dict[str, str]:
+    """Day each reviewer was assigned (their anonymous group's creation), keyed by both the
+    anonymous group's id and its members; records cached before groups had dates lack it."""
+    anonymous = record["names"].get("reviewers_anon", "Reviewer_")
+    found: dict[str, str] = {}
+    for g, ms in record.get("created", {}).items():
+        if g.startswith(anonymous) and ms:
+            day = _date({"cdate": ms}, "cdate") or ""
+            found |= {record["prefix"] + g: day} | dict.fromkeys(record["groups"].get(g, []), day)
+    return found
 
 
 def fingerprint(text: str, size: int = 32) -> list[int]:
@@ -148,6 +162,7 @@ def summarize(record: dict, config: dict) -> dict:
         "reviewers": [
             person(record, m) for m in record["groups"].get(record["names"]["reviewers"], [])
         ],
+        "assigned": {person(record, k): day for k, day in assigned(record).items() if "/" in k},
         "reviews": [
             {
                 "reviewer": person(record, r["signatures"][0]),

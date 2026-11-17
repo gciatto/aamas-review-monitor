@@ -10,9 +10,11 @@ the authors and the SPC enough to work with:
 $issues
 
 As the paper's SPC, please read these reviews and, where you agree, ask their reviewers to
-expand them: to point to specific parts of the paper, to name concrete weaknesses and how to
-address them, to ask questions the rebuttal can answer, and to explain their rating. If you
-find a review adequate, please disregard this note.
+expand them before the author rebuttal opens on $deadline_reviews_spc: to point to specific
+parts of the paper, to name concrete weaknesses and how to address them, to ask questions the
+rebuttal can answer, and to explain their rating. Ask them to reply by posting an Official
+Comment on OpenReview: replies to the notification email reach the Program Chairs, not us. If
+you find a review adequate, please disregard this note.
 
 The rubric is computed on the Senior Area Chair's machine: string matching and a local
 embedding model compare each review's sentences with public example sentences. No generative

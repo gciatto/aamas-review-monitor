@@ -6,19 +6,27 @@ Title: Could you improve your review of $paper?
 ---
 Dear $review,
 
-Thank you for your review. The Senior Area Chair's checks of the reviews suggest that it could
-give the authors and the SPC more to work with. These are the points it misses, each with a
-suggested action:
+Thank you for your review.
+
+The Senior Area Chair's checks of the reviews suggest that it could
+give the authors and the SPC more to work with.
+
+These are the points it misses, each with a suggested action:
 
 $issues
 
-Could you please revise your review to address them, especially those marked important, and
-reply here once done? If you believe your review already covers some of these points, please
-disregard them, or tell us why.
+Could you please __edit__ your review to address them, especially those marked important, and
+__reply__ here once done, before the author rebuttal opens on $deadline_reviews_spc?
 
-The checks are computed on the Senior Area Chair's machine: string matching and a local
-embedding model compare each review's sentences with public example sentences. No generative
-AI is involved, nothing is shared with anyone, and the checks never judge the paper itself.
+Please __reply by posting an Official Comment on OpenReview__, not by answering the
+notification email: replies to that email reach the Program Chairs, not us.
+
+If you believe your review already covers some of these points, please
+disregard them, and tell us why.
+
+For the __SPC__ reading this: please read the review and its issues,
+as well as the reviewer's reply or edits,
+and take them into account in your __meta-review__.
 
 Thank you for your work for AAMAS.
 

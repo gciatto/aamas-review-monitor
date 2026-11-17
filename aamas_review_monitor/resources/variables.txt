@@ -3,8 +3,14 @@ url: that paper's forum on OpenReview
 papers: the papers it is about, e.g. #7, #9
 count: how many papers it is about
 deadline_reviews: the review deadline
+deadline_reviews_emergency: the deadline for emergency reviews (and the last one for any review)
+deadline_reviews_spc: the deadline for SPCs to write the reviews still missing
 deadline_meta_reviews: the meta-review deadline
 deadline_acknowledgements: the deadline for acknowledging rebuttals
+discussion_start: the day the reviewers' discussion opens
+reviews_min: the reviews each paper needs
 days_reviews: days left until the review deadline
+days_reviews_emergency: days left until the emergency review deadline
+days_reviews_spc: days left until the SPCs' review deadline
 days_meta_reviews: days left until the meta-review deadline
 days_acknowledgements: days left until the acknowledgement deadline

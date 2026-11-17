@@ -1,0 +1,26 @@
+Name: Emergency reviews
+Description: To each paper's emergency reviewers whose review is not in yet: the hard deadline
+Codes: missing_reviews
+Readers: emergency-reviewers, spcs
+Title: Your emergency review of paper $paper
+---
+Dear reviewer,
+
+Thank you for taking on this emergency review at short notice.
+
+According to the Senior Area Chair's automatic checks, your review of this paper has __not been
+submitted yet__. Emergency reviews are due on __$deadline_reviews_emergency, 23:59 GMT__: this
+is a __hard deadline__, and it will not be extended. The author rebuttal opens right after, and
+the authors need your review to answer it.
+
+If something prevents you from completing it, please say so right away. Please __reply by
+posting an Official Comment on OpenReview__, not by answering the notification email: replies
+to that email reach the Program Chairs, not us.
+
+The checks may lag behind OpenReview: if you have just submitted your review, please ignore
+this comment.
+
+Thank you for your work for AAMAS.
+
+Best regards,
+Your Senior Area Chair

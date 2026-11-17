@@ -68,8 +68,8 @@ Defaults follow the AAMAS 2027 timeline: 50% of reviews by 26 Oct, all by 13 Nov
 | SPC assigned | 🔴 no SPC |
 | Enough reviewers assigned | 🔴 fewer than 3 reviewers |
 | Reviews on track with the milestones | 🟡 fewer than 50% of the reviews in after 26 Oct |
-| Reviews on schedule | 🟡 reviews missing in the last 5 days before the deadline; 🔴 in the last 2 days and once overdue |
-| No reviewer behind on several papers | 🟡 a reviewer who owes reviews on 2 or more of your papers |
+| Enough reviews on schedule | while fewer than 3 reviews are in: 🟡 reviews missing in the last 5 days before the deadline; 🔴 in the last 2 days and once overdue. Original reviewers are due 13 Nov; emergency reviewers (assigned from that day on, by their anonymous group's creation date) 19 Nov, as a separate finding |
+| No reviewer behind on several papers | 🟡 a reviewer who owes reviews on 2 or more of your papers lacking 3 reviews |
 | Reviews long enough | 🟡 a review under 150 words |
 | Reviews written for this paper | 🟡 a review that shares 60% or more of its phrases with the same reviewer's review of another paper |
 | No leftover chatbot phrases in reviews | 🟡 a review containing a phrase like "as an AI language model" or "here is a review of" |
@@ -188,10 +188,10 @@ Paper lists (`N ...`) default to all your papers.
 | `download [N ...] [--supplementary]` | Download PDFs or supplementary material, skipping current copies |
 | `attachment N [--supplementary] [--contents] [--open] [--reveal]` | A paper's PDF or zip, downloaded if needed: its path, its text or file list, open it, or show it in Finder/Explorer |
 | `inspect [N ...]` | Run the document checks, downloading what is missing |
-| `email ROLE [N ...] --subject S --body FILE [--edit]` | Email `reviewers`, `late-reviewers` or `spcs`, one message per paper, after you type `SEND` (`--edit`: edit each first) |
+| `email ROLE [N ...] --subject S --body FILE [--edit]` | Email `reviewers`, `late-reviewers` (originally assigned), `emergency-reviewers` (assigned from the review deadline on) or `spcs`, one message per paper, after you type `SEND` (`--edit`: edit each first) |
 | `templates` | List the email and comment templates |
 | `outreach TEMPLATE [N ...] [--spc ID ...] [--edit]` | Compose templated emails from the current issues, preview every draft (`--edit`: edit each first), send after you type `SEND` |
-| `comment [N ...] [--template KEY] [--readers WHO ...] [--spcs] [--text FILE] [--edit]` | Post each paper's open issues (or a comment template, or the file's text) as a comment on its forum, readable by PCs and SACs and by `--readers` (`spcs`, `reviewers`, `reviewers-submitted`, `late-reviewers`, or a `Reviewer_xxxx` group; default: the template's), after you type `SEND` (`--edit`: edit each first) |
+| `comment [N ...] [--template KEY] [--readers WHO ...] [--spcs] [--text FILE] [--edit]` | Post each paper's open issues (or a comment template, or the file's text) as a comment on its forum, readable by PCs and SACs and by `--readers` (`spcs`, `reviewers`, `reviewers-submitted`, `late-reviewers`, `emergency-reviewers`, or a `Reviewer_xxxx` group; default: the template's), after you type `SEND` (`--edit`: edit each first) |
 | `history [N ...] [--full]` | Emails and comments sent from the app, newest first, optionally only about some papers |
 | `ignore [N CODE ...] [--undo]` | Ignore issues of a paper (codes are in brackets in `issues N`), or count them again; without arguments, list the ignored ones |
 | `rubrics list` / `show CODE` / `edit CODE` | The area rubrics (one YAML file per area of the call: topics, description, exemplars, rules): list them, print one, or edit your copy in `$EDITOR` (checked on save; then what the edit changed, as in the Rubrics tab) |
@@ -435,13 +435,14 @@ reviewers. A comment too long for OpenReview drops the actions first, then the
 explanations. Reviewers get one message per paper. Templates are plain files in
 [`aamas_review_monitor/resources/templates/`](aamas_review_monitor/resources/templates/):
 
-- **Header:** `Name:`, `Description:`, `Audience:` (`spcs` or `late-reviewers`), `Codes:` (the
+- **Header:** `Name:`, `Description:`, `Audience:` (`spcs`, `late-reviewers` or `emergency-reviewers`), `Codes:` (the
   issue codes it covers, or `*` for all) and `Subject:`.
 - **Body:** after a `---` line. Placeholders are `$issues` (in SPC messages and comments, each
   paper's first issue from a check is followed by that check's legend entry, so the reader
   knows what it verifies), `$papers`, `$count`, and per paper
-  `$paper`/`$url`, plus `$deadline_reviews`, `$deadline_meta_reviews`,
-  `$deadline_acknowledgements` and the `$days_...` left for each. OpenReview fills in
+  `$paper`/`$url`, plus `$deadline_reviews`, `$deadline_reviews_emergency`,
+  `$deadline_reviews_spc`, `$deadline_meta_reviews`, `$deadline_acknowledgements` and the
+  `$days_...` left for each, `$discussion_start` and `$reviews_min`. OpenReview fills in
   `{{fullname}}`.
 
 Edit them, or add your own next to them. In the terminal UI, the picker suggests (and

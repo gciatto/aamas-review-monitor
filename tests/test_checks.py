@@ -52,8 +52,8 @@ def post(role, who, day, unanswered=False):
 
 def test_unanswered_comments_to_the_sac():
     posts = [post("spc", "~SPC_One1", "2026-11-26", True), post("reviewer", "~R_01", "2026-11-24")]
-    assert issues(paper(posts=posts[1:]), "2026-11-27") == set()
-    flagged = check_paper(paper(posts=posts + posts[:1]), ctx("2026-11-27"))
+    assert issues(paper(posts=posts[1:]), "2026-11-26") == set()
+    flagged = check_paper(paper(posts=posts + posts[:1]), ctx("2026-11-26"))
     assert [(i.severity, i.code, i.message) for i in flagged] == [
         (YELLOW, "unanswered_comment", "2 comments to the SAC unanswered, oldest from 2026-11-26")
     ]
@@ -77,6 +77,18 @@ def test_missing_reviews_escalate_towards_deadline():
     assert issues(p, "2026-11-08") == {(YELLOW, "missing_reviews")}
     assert issues(p, "2026-11-11") == {(RED, "missing_reviews")}
     assert issues(p, "2026-11-20") == {(RED, "missing_reviews")}
+
+
+def test_enough_reviews_suffice_and_emergency_reviewers_have_their_own_deadline():
+    extra = {"reviewers": [f"~R_{i}1" for i in range(5)]}
+    assert issues(paper(**extra), "2026-11-16") == set()  # 3 of 5 in: covered
+    late = paper(reviews=1, **extra, assigned={"~R_31": "2026-11-15", "~R_41": "2026-11-15"})
+    flagged = {(i.severity, i.code, i.message) for i in check_paper(late, ctx("2026-11-16"))}
+    assert flagged == {
+        (RED, "missing_reviews", "2 reviews missing, 3 days overdue"),
+        (YELLOW, "missing_reviews:emergency", "2 emergency reviews missing, 3 days left"),
+    }
+    assert (RED, "missing_reviews:emergency") in issues(late, "2026-11-20")
 
 
 def test_reviewer_late_on_several_papers():
@@ -138,7 +150,7 @@ def test_inactive_spc():
 
 
 def test_meta_review_checks():
-    active = [post("spc", "~SPC_One1", "2026-12-07")]
+    active = [post("spc", "~SPC_One1", "2026-12-07"), post("reviewer", "~R_01", "2026-12-07")]
     assert issues(paper(posts=active), "2026-12-08") == {(RED, "missing_meta_review")}
     meta = {"words": 20, "proceedings": "Reject", "findings": None}
     done = paper(meta_review=True, meta=meta, posts=active)
@@ -179,7 +191,7 @@ def test_legend_comes_from_the_check_docstrings():
         "Enough reviewers assigned",
         "RED when fewer than 3 reviewers are assigned.",
     )
-    assert "deadline (2026-11-13) it is YELLOW" in entries["missing_reviews"][1]
+    assert "review deadline (2026-11-13) owe theirs by then" in entries["missing_reviews"][1]
     assert all(
         label and text and "{" not in text.replace("{'", "") for label, text in entries.values()
     )

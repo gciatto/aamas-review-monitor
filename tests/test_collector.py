@@ -45,7 +45,7 @@ class FakeClient:
             NS(id=f"{SUB}7/Area_Chairs", members=[f"{SUB}7/Area_Chair_9jqi"]),
             NS(id=f"{SUB}7/Area_Chair_9jqi", members=["~Spc_One1"]),
             NS(id=f"{SUB}7/Reviewers", members=[f"{SUB}7/Reviewer_aB3x", "~Rev_B1", "~Rev_C1"]),
-            NS(id=f"{SUB}7/Reviewer_aB3x", members=["~Rev_A1"]),
+            NS(id=f"{SUB}7/Reviewer_aB3x", members=["~Rev_A1"], cdate=NOV_1),
             NS(id=f"{SUB}7/Reviewer_hidden", members=[]),
         ]
 
@@ -98,6 +98,7 @@ def test_fetch_and_summarize_keep_only_process_metadata():
         "findings_opt_in": "No",
         "spcs": ["~Spc_One1"],
         "reviewers": ["~Rev_A1", "~Rev_B1", "~Rev_C1"],
+        "assigned": {"~Rev_A1": "2026-11-01"},
         "reviews": [
             {
                 "reviewer": "~Rev_A1",

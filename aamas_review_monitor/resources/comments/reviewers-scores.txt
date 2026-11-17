@@ -8,14 +8,18 @@ Dear reviewers,
 
 The ratings given to this paper diverge considerably.
 
-Please __read each other's reviews__, and discuss here the points on which your assessments differ.
+Once the discussion opens on $discussion_start, after the author rebuttal, please
+__read each other's reviews__ and the rebuttal, and discuss here the points on which your assessments differ.
 
 - If the discussion changes your view:
     * please update your review and your score accordingly,
-    possibly informing the SPc/Area Chair of the change via an official comment;
+    possibly informing the SPC of the change via an official comment;
 - if it does not:
     * confirm your opinion explicitly via an official comment,
     so that the SPC can weigh the different opinions in the meta-review.
+
+Please __reply by posting an Official Comment on OpenReview__, not by answering the
+notification email: replies to that email reach the Program Chairs, not us.
 
 Thank you for your work for AAMAS.
 
