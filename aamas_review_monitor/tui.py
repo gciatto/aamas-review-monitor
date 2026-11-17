@@ -121,7 +121,7 @@ TAB_ACTIONS = {
     "spcs-tab": {"mark", "mark_all", "mark_some", "actions", "mail"},
     "history-tab": set(),
     "areas-tab": {"score_areas", "hide_areas", "label_area", "confirm_area"},
-    "scores-tab": {"score_areas", "mark"},
+    "scores-tab": {"score_areas", "mark", "comment"},
     "rubrics-tab": {"save_rubric", "revert_rubric"},
 }  # fmt: skip
 EVERYWHERE = TABLE_ACTIONS - set().union(*TAB_ACTIONS.values())  # sync, legend, tab, reload
@@ -608,10 +608,23 @@ class Monitor(App):
         self.review_then(review, "Subject", None, "Sent", go)
 
     def action_comment(self) -> None:
+        if self.query_one(TabbedContent).active == "scores-tab":
+            self.comment_reviews()
+            return
         if not (numbers := self.scope()):
             return
-
         records = core.records()
+        # one paper: its reviewers can be picked one by one, as on OpenReview
+        one = [r for r in records if [r["number"]] == list(numbers)]
+        anonymous = one[0]["names"].get("reviewers_anon", "Reviewer_") if one else None
+        reviewers = sorted(g for g in one[0]["groups"] if g.startswith(anonymous)) if one else []
+        compose = self.commenter(self.chosen(), records, numbers)
+        self.push_screen(CommentForm(numbered(numbers), reviewers), compose)
+
+    def commenter(
+        self, issues: list[Issue], records: list[dict], numbers: list[int]
+    ) -> "Callable[[tuple[outreach.CommentTemplate | None, list[str]] | None], None]":
+        """What composes, reviews and posts the comments once CommentForm says how."""
 
         def compose(chosen: "tuple[outreach.CommentTemplate | None, list[str]] | None") -> None:
             if chosen is None:
@@ -620,7 +633,7 @@ class Monitor(App):
             latest = self.latest
             today = date.fromisoformat(latest["taken_at"][:10]) if latest else date.today()
             found, skipped = outreach.comments(
-                self.chosen(), records, set(numbers), readers, self.config, today, template
+                issues, records, set(numbers), readers, self.config, today, template
             )
             if not found:
                 self.notify("\n".join([*skipped, "Nothing to comment on"]))
@@ -639,11 +652,7 @@ class Monitor(App):
             review = outreach.review_comments(found, skipped, self.sent, self.notes())
             self.review_then(review, "Title", outreach.COMMENT_LIMITS, "Posted", go)
 
-        # one paper: its reviewers can be picked one by one, as on OpenReview
-        one = [r for r in records if [r["number"]] == list(numbers)]
-        anonymous = one[0]["names"].get("reviewers_anon", "Reviewer_") if one else None
-        reviewers = sorted(g for g in one[0]["groups"] if g.startswith(anonymous)) if one else []
-        self.push_screen(CommentForm(numbered(numbers), reviewers), compose)
+        return compose
 
     def action_mail(self) -> None:
         by_spc: dict[str, list[Issue]] = {}
@@ -1466,7 +1475,7 @@ class Monitor(App):
         if (row := self.review_row()) is None:
             note = (
                 "k scores each review against the review rubric (reviews only go to local "
-                "endpoints); space marks reviews"
+                "endpoints); space marks reviews, c comments on them"
             )
             detail.update(f"{self.review_about}\n{note}")
             return
@@ -1490,6 +1499,21 @@ class Monitor(App):
                 text.append(f"    {textwrap.shorten(c['advice'], 200)}\n", "italic")
         text.append(f"\n{self.review_about}", "dim")
         detail.update(text)
+
+    def comment_reviews(self) -> None:
+        """Comments on the marked reviews, else the selected one: to the SPC, or replying to
+        each review."""
+        chosen = [r for r in self.review_rows if (r["number"], r["name"]) in self.review_marked]
+        if not chosen and (row := self.review_row()):
+            chosen = [row]
+        if not chosen:
+            return
+        records = core.records()
+        issues = reviewing.issues(chosen, self.review_rubric, records, self.latest, self.config)
+        numbers = sorted({r["number"] for r in chosen})
+        compose = self.commenter(issues, records, numbers)
+        scope = f"{len(chosen)} reviews of {numbered(numbers)}"
+        self.push_screen(CommentForm(scope, about_reviews=True), compose)
 
     # The Rubrics tab: one YAML rubric per area, edited in place
 

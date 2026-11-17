@@ -1,0 +1,24 @@
+Name: Review to improve (to its reviewer)
+Description: A reply to each review the review rubric finds thin, readable by its reviewer
+Codes: poor_review
+Readers: review-authors, spcs
+Title: Could you expand your review of $paper?
+---
+Dear $review,
+
+Thank you for your review. To make it as useful as possible to the authors and to the SPC,
+could you please expand it? In particular, a helpful review:
+
+- summarises the paper's contribution in your own words;
+- names specific strengths and weaknesses, pointing to the sections, theorems, figures or
+  experiments concerned;
+- suggests how the main weaknesses could be addressed;
+- asks the questions whose answers could change your assessment;
+- relates the work to prior work, citing it when judging novelty;
+- explains how these points lead to your rating.
+
+$issues
+
+If you believe your review already covers these points, please disregard this comment.
+
+Thank you for your work for AAMAS.

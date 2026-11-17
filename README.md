@@ -283,7 +283,10 @@ matched), so you can see whether the rules earn their weight.
 - **Reviews:** every review against the review rubric, the poor ones first (in yellow), with
   its share of the criteria met, its alerts and the criteria it misses; beside it, each criterion
   of the selected review with the deciding sentence, the rules that held and, when missed, the
-  advice. Opening the tab shows cached scores only; `k` embeds the rest; `space` marks reviews.
+  advice. Opening the tab shows cached scores only; `k` embeds the rest. `space` marks reviews
+  and `c` comments on the marked ones (else the selected one): to each paper's SPC
+  (`spc-poor-reviews`), or as a reply to each review that its reviewer reads
+  (`reviewers-poor-review`), reviewed and editable before you type `SEND`.
 - **Rubrics:** the area rubrics, one YAML editor each. `ctrl+s` checks and saves your copy, then
   shows what the edit changed: how many of the area's topics are nearest to it when left out,
   and how many labelled papers get their label as best area, before and after, naming the
@@ -422,7 +425,9 @@ an open issue among its `Codes:`, readable by its `Readers:` unless you change t
 its `Title:`, and takes the email templates' placeholders. `reviewers-late` tells each paper's
 late reviewers that their review is due; `reviewers-scores` asks all reviewers of a paper whose
 ratings diverge to read each other's reviews and reconsider their scores. A paper with no
-nameable late reviewer is skipped. Add your own next to them.
+nameable late reviewer is skipped. Add your own next to them. The two about poor reviews
+(`Codes: poor_review`) are offered in the Reviews tab, and `comment --template` uses the cached
+review scores for them; the `review-authors` reader posts one comment per review, replying to it.
 
 Every email and comment the app sends, or fails to send, is appended to
 `~/.aamas-review-monitor/history.jsonl`. It records when, through which paper, about which

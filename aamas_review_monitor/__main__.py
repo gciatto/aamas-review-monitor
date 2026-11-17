@@ -315,8 +315,13 @@ def main(argv: list[str] | None = None) -> None:
         records = load_records(*args.numbers)
         template = {t.key: t for t in outreach.comment_templates()}.get(args.template)
         readers = args.readers or (template.readers if template else [])
+        about = state.active
+        if template and reviewing.CODE in template.codes:  # from the cached review scores
+            rubric, results, _ = review_results(args, config, records, cache_only=True)
+            poor = reviewing.poor(results, config)
+            about = reviewing.issues(poor, rubric, records, state.latest, config)
         to_post, skipped = outreach.comments(
-            state.active,
+            about,
             records,
             {r["number"] for r in records},
             [*readers, *(["spcs"] if args.spcs else [])],

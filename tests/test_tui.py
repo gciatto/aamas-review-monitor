@@ -1011,3 +1011,27 @@ def test_reviews_tab_scores_each_review_and_shows_why(tmp_path, monkeypatch):
             assert table.get_row_at(0)[0] == tui.MARK
 
     asyncio.run(scenario())
+
+
+def test_reviews_tab_replies_to_a_marked_poor_review_which_its_reviewer_reads(
+    tmp_path, monkeypatch
+):
+    app, client = reviews_to_score(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(160, 40)) as pilot:
+            await scored_reviews(app, pilot)
+            await pilot.press("space", "c")
+            form = app.screen
+            assert isinstance(form, tui.CommentForm)
+            assert form.query_one("#reader-review-authors").value  # the template's default
+            await pilot.click("#comment-post")
+            review = await reviewing(app, pilot)
+            assert review.items[0].heading.startswith("Comment on #7 replying to Reviewer_hidden")
+            review.query_one("#confirm").focus()
+            await confirm(app, pilot, "SEND")
+            await done(app, pilot, lambda: bool(app.sent))
+            ((_, _, note),) = client.comments
+            assert note.replyto == "r1" and note.readers[-1].endswith("/Reviewer_hidden")
+
+    asyncio.run(scenario())

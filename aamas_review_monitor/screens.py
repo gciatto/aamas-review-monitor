@@ -31,7 +31,7 @@ from textual.widgets import (
 )
 from textual.widgets.option_list import Option
 
-from aamas_review_monitor import core, documents, outreach, papers
+from aamas_review_monitor import core, documents, outreach, papers, reviewing
 from aamas_review_monitor.checks import GREEN, ICONS, RED, YELLOW, Issue, legend, passed
 
 DIALOG_CSS = "align: center middle; & > Vertical { border: thick $accent; background: $surface;"
@@ -422,26 +422,40 @@ class Email(Screen[dict | None]):
 
 class CommentForm(ModalScreen["tuple[outreach.CommentTemplate | None, list[str]] | None"]):
     """Template and readers of the comments; each is reviewed, and can be edited, before
-    posting. `reviewers`: the anonymous reviewer groups of a single paper, to pick one by one."""
+    posting. `reviewers`: the anonymous reviewer groups of a single paper, to pick one by one;
+    `about_reviews`: comments on reviews (Reviews tab), from the templates about them, which
+    can reply to each review, else on issues, the SPC's open-issues comment first."""
 
     DEFAULT_CSS = "CommentForm {" + DIALOG_CSS + " width: 90%; height: auto; padding: 1 2; } }"
     BINDINGS = [("escape", "dismiss", "Cancel")]
 
-    def __init__(self, scope: str, reviewers: Collection[str] = ()) -> None:
+    def __init__(
+        self, scope: str, reviewers: Collection[str] = (), about_reviews: bool = False
+    ) -> None:
         super().__init__()
         self.scope = scope
-        self.choices = {t.key: t for t in outreach.comment_templates()}
-        self.readers = {**papers.READERS, **{r: r for r in reviewers}}
+        self.about_reviews = about_reviews
+        self.choices = {
+            t.key: t
+            for t in outreach.comment_templates()
+            if (reviewing.CODE in t.codes) == about_reviews
+        }
+        extra = (
+            {papers.READER_REVIEW_AUTHORS: "the reviewer of each review"} if about_reviews else {}
+        )
+        self.readers = {**papers.READERS, **extra, **{r: r for r in reviewers}}
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static(f"Comment on {self.scope}, signed as the paper's SACs.")
-            options = [("Open issues, for the SPC", "")]
+            options = [] if self.about_reviews else [("Open issues, for the SPC", "")]
             options += [(f"{t.name}: {t.description}", k) for k, t in self.choices.items()]
-            yield Select(options, value="", allow_blank=False, id="comment-template")
+            first = options[0][1]
+            yield Select(options, value=first, allow_blank=False, id="comment-template")
             yield Static("PCs and SACs read it, and also:")
+            chosen = self.choices[first].readers if first else ("spcs",)
             for key, label in self.readers.items():
-                yield Checkbox(label, value=key == "spcs", id=f"reader-{key}")
+                yield Checkbox(label, value=key in chosen, id=f"reader-{key}")
             yield Button("Review and post", id="comment-post", variant="primary")
 
     @on(Select.Changed, "#comment-template")

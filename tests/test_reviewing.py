@@ -1,12 +1,13 @@
 import copy
+import json
 
 import pytest
 
 from aamas_review_monitor import __main__ as cli
-from aamas_review_monitor import core, models, papers, reviewing
+from aamas_review_monitor import core, models, outreach, papers, reviewing
 from aamas_review_monitor.collector import fetch, replies
 from aamas_review_monitor.resources import FILE_REVIEW_RUBRIC_DEFAULT
-from tests.test_checks import CONFIG
+from tests.test_checks import CONFIG, paper
 from tests.test_collector import FakeClient
 from tests.test_models import CONFIG as EMBEDDINGS, FakeEndpoint
 
@@ -156,6 +157,59 @@ def test_bare_citation_requests_and_a_summary_far_from_the_abstract_raise_alerts
     assert requests_only["criteria"]["citations"]["rules"]  # what matched, as evidence
     assert about["criteria"]["about_paper"]["met"] and about["criteria"]["citations"]["met"]
     assert about["criteria"]["about_paper"]["margin"] > 0.9
+
+
+def test_poor_reviews_get_a_reply_their_reviewer_reads_or_a_comment_to_the_spc(
+    monkeypatch, tmp_path
+):
+    FakeEndpoint(monkeypatch)
+    records = records_with(POOR, POOR)
+    config = CONFIG | {
+        "reviews_margin_min": 9,
+        "reviews_abstract_min": -1,
+        "reviews_margin_alert": 9,
+    }
+    results, _ = reviewing.score(records, rubric(), models.settings(EMBEDDINGS), config, tmp_path)
+    issues = reviewing.issues(results, rubric(), records, None, config)
+    assert issues[0].code == "poor_review:Reviewer_aB3x" and "missing: " in issues[0].message
+    templates = {t.key: t for t in outreach.comment_templates()}
+    direct, spc = templates["reviewers-poor-review"], templates["spc-poor-reviews"]
+    found, skipped = outreach.comments(issues, records, {7}, direct.readers, config, None, direct)
+    assert skipped == [] and [c.replyto for c in found] == ["r0", "r1"]
+    assert found[0].readers == ("Area_Chairs", "Reviewer_aB3x")
+    assert found[0].text.startswith("Dear Reviewer_aB3x,")
+    header, items = outreach.review_comments(found, skipped)
+    assert items[0].heading.startswith("Comment on #7 replying to Reviewer_aB3x, readable by")
+    client = FakeClient()
+    papers.post_comments(client, found[:1])
+    ((_, _, note),) = client.comments
+    assert note.replyto == "r0" and note.forum == "abc"
+    (comment,), _ = outreach.comments(issues, records, {7}, spc.readers, config, None, spc)
+    assert comment.replyto == "" and comment.text.count("poor") == 0  # one per paper, listed
+    assert comment.text.count("review by Reviewer_") == 2
+
+
+def test_cli_comments_on_the_poor_reviews_from_their_cached_scores(monkeypatch, capsys):
+    FakeEndpoint(monkeypatch)
+    records = records_with(GOOD, POOR)
+    papers.save(records, core.DIR_PAPERS, [])
+    config = CONFIG | {
+        "reviews_margin_min": 9,
+        "reviews_margin_alert": 9,
+        "reviews_abstract_min": -1,
+    }
+    monkeypatch.setattr(core, "load_config", lambda: config)
+    snapshot = {"taken_at": "2026-11-11T08:00:00", "papers": [paper(7)]}
+    core.DIR_SNAPSHOTS.mkdir(parents=True)
+    (core.DIR_SNAPSHOTS / "a.json").write_text(json.dumps(snapshot))
+    with pytest.raises(SystemExit, match="Run `review-scores` first"):
+        cli.main(["comment", "7", "--template", "spc-poor-reviews"])
+    cli.main(["review-scores"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": "no")
+    cli.main(["comment", "7", "--template", "spc-poor-reviews"])
+    out = capsys.readouterr().out
+    assert "review by Reviewer_hidden meets" in out and "review by Reviewer_aB3x" not in out
+    assert out.rstrip().endswith("Nothing posted")
 
 
 def test_cli_lists_reviews_and_shows_and_checks_the_rubric(monkeypatch, tmp_path, capsys):

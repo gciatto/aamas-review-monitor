@@ -25,6 +25,7 @@ import yaml
 
 from aamas_review_monitor import models, rules
 from aamas_review_monitor.areas import dump, similarity
+from aamas_review_monitor.checks import YELLOW, Issue
 from aamas_review_monitor.collector import replies
 from aamas_review_monitor.papers import fields
 from aamas_review_monitor.resources import FILE_REVIEW_RUBRIC_DEFAULT
@@ -35,6 +36,7 @@ KEYS_CRITERION = ("key", "name", "weight", "advice", "meets", "short", "rules")
 # margin: this criterion's own threshold, in place of reviews_margin_min (or, presumed,
 # reviews_margin_alert; compared, reviews_abstract_min); 2 or more: its rules decide alone
 KEYS_OPTIONAL = ("alert", "compare", "presumed", "margin")
+CODE = "poor_review"  # the issue code of a poor review, with ":Reviewer_xxxx"
 PATTERN_PIECES = re.compile(r"(?<=[.?!;])\s+|\n+")
 WORDS_PIECE_MIN = 4  # shorter pieces join the next one
 
@@ -273,6 +275,31 @@ def poor(results: list[dict], config: dict) -> list[dict]:
 def missing(result: dict, rubric: dict) -> list[str]:
     """The names of the criteria a review does not meet."""
     return [c["name"] for c in rubric["criteria"] if not result["criteria"][c["key"]]["met"]]
+
+
+def issues(
+    results: list[dict], rubric: dict, records: list[dict], snapshot: dict | None, config: dict
+) -> list[Issue]:
+    """An issue per review given, for comments: `poor_review:Reviewer_xxxx`."""
+    by_number = {r["number"]: r for r in records}
+    spcs = {p["number"]: tuple(p.get("spcs", [])) for p in (snapshot or {}).get("papers", [])}
+    found = []
+    for r in results:
+        met = sum(v["met"] for v in r["criteria"].values())
+        names = {c["key"]: c["name"].lower() for c in rubric["criteria"]}
+        alerts = [names[k] for k in r.get("alerts", [])]
+        message = (
+            f"review by {r['name']} meets {met} of {len(r['criteria'])} criteria of the review "
+            f"rubric; missing: {', '.join(missing(r, rubric)).lower() or 'none'}"
+            + (f" (alerts: {', '.join(alerts)})" if alerts else "")
+        )
+        url = config["url_forum"] + by_number[r["number"]]["id"]
+        found.append(
+            Issue(
+                r["number"], YELLOW, f"{CODE}:{r['name']}", message, url, spcs.get(r["number"], ())
+            )
+        )
+    return found
 
 
 def check(

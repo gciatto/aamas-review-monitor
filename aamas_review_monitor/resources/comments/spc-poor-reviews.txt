@@ -1,0 +1,19 @@
+Name: Reviews to improve (to the SPC)
+Description: To the SPC of each paper with reviews the review rubric finds thin
+Codes: poor_review
+Readers: spcs
+Title: Reviews of $paper that could be more helpful
+---
+The Senior Area Chair's review rubric suggests that some reviews of this paper may not give
+the authors and the SPC enough to work with:
+
+$issues
+
+As the paper's SPC, please read these reviews and, where you agree, ask their reviewers to
+expand them: to point to specific parts of the paper, to name concrete weaknesses and how to
+address them, to ask questions the rebuttal can answer, and to explain their rating. If you
+find a review adequate, please disregard this note.
+
+The rubric is computed on the Senior Area Chair's machine: string matching and a local
+embedding model compare each review's sentences with public example sentences. No generative
+AI is involved, nothing is shared with anyone, and the rubric never judges the paper itself.
