@@ -25,6 +25,7 @@ from aamas_review_monitor.papers import (
     recipients,
 )
 from aamas_review_monitor.resources import (
+    DIR_COMMENTS,
     DIR_TEMPLATES,
     FILE_COMMENT,
     FILE_COMMENT_LATE_REVIEWS,
@@ -69,6 +70,36 @@ def parse(key: str, text: str) -> Template:
         key, fields["name"], fields["description"], fields["audience"], frozenset(codes),
         fields["subject"], body.strip() + "\n",
     )  # fmt: skip
+
+
+class CommentTemplate(NamedTuple):
+    key: str  # the file name without extension, e.g. "reviewers-late"
+    name: str
+    description: str
+    codes: frozenset[str]  # a paper gets the comment if it has an open issue of these
+    readers: tuple[str, ...]  # who reads it by default, besides PCs and SACs: papers.READERS
+    title: str
+    body: str
+
+
+def comment_templates(directory: Path = DIR_COMMENTS) -> list[CommentTemplate]:
+    """Comment templates to pick from: like email templates, with `Readers` and `Title`."""
+    found = []
+    for f in sorted(directory.glob("*.txt")):
+        fields, codes, body = _fields(f.read_text(encoding="utf-8"))
+        readers = tuple(r.strip() for r in fields.get("readers", "").split(",") if r.strip())
+        found.append(
+            CommentTemplate(
+                f.stem,
+                fields["name"],
+                fields["description"],
+                codes,
+                readers,
+                fields["title"],
+                body.strip() + "\n",
+            )  # fmt: skip
+        )
+    return found
 
 
 def _shown(fill: dict[str, str]) -> dict[str, str]:
@@ -397,38 +428,54 @@ def comments(
     readers: Sequence[str],
     config: dict,
     today: date | None = None,
+    template: CommentTemplate | None = None,
 ) -> tuple[list[Comment], list[str]]:
-    """One forum comment per paper listing its open issues, each check explained once and
-    followed by the action suggested to the SPC, from the first comment template whose codes
-    cover them all (the late-reviews one, else the general one), also readable by `readers`
-    (`papers.READERS` keys or anonymous reviewer groups); also the papers that cannot get one,
-    and why."""
-    choices = [
-        _fields(f.read_text(encoding="utf-8")) for f in (FILE_COMMENT_LATE_REVIEWS, FILE_COMMENT)
-    ]
+    """One forum comment per paper, also readable by `readers` (`papers.READERS` keys or
+    anonymous reviewer groups); also the papers that cannot get one, and why. Without a
+    `template`, it lists the paper's open issues for its SPC, each check explained once and
+    followed by the suggested action, from the first SPC comment whose codes cover them all
+    (the late-reviews one, else the general one). With one, only papers with an open issue
+    of its codes get it, `$issues` listing just those, bare."""
+    day = today or date.today()
+    if template:
+        choices = [({"title": template.title}, template.codes, template.body)]
+    else:
+        choices = [
+            _fields(f.read_text(encoding="utf-8"))
+            for f in (FILE_COMMENT_LATE_REVIEWS, FILE_COMMENT)
+        ]
     by_number = {r["number"]: r for r in records}
     found, skipped = [], []
     for number in sorted(numbers):
         theirs = [i for i in issues if i.number == number and i.severity != GREEN]
+        if template and template.codes:
+            theirs = [i for i in theirs if i.code.split(":")[0] in template.codes]
         if number not in by_number:
             skipped.append(f"#{number}: not cached")
         elif not theirs:
-            skipped.append(f"#{number}: no open issues")
+            skipped.append(
+                f"#{number}: no open issues" + (f" for {template.name}" if template else "")
+            )
         elif "late-reviewers" in readers and not late_groups(by_number[number]):
             skipped.append(f"#{number}: no late reviewer to read it")
         else:
             fields, _, body = next(c for c in choices if not c[1] or _codes(theirs) <= c[1])
             url = theirs[0].url
-            values = {"paper": f"#{number}", "url": url, "count": "1", "papers": f"#{number}"}
+            values = _values(config, day) | {
+                "paper": f"#{number}", "url": url, "count": "1", "papers": f"#{number}"
+            }  # fmt: skip
             title = string.Template(fields["title"]).safe_substitute(values)
             # explained with actions if it fits OpenReview's limit, else explained, else the
-            # bare list, else nothing
+            # bare list, else nothing; templates for others than SPCs: bare
             legend_, actions = _legend(config), spc_actions(config, today)
-            for explained, acts in ((legend_, actions), (legend_, None), (None, None)):
+            variants = (
+                [(None, None)] if template else [(legend_, actions), (legend_, None), (None, None)]
+            )
+            for explained, acts in variants:
                 lines = _lines(
                     theirs, lambda i: f"- {ICONS[i.severity]} {i.message}", explained, acts
                 )
-                text = string.Template(body).safe_substitute(issues=lines).strip() + "\n"
+                text = string.Template(body).safe_substitute(values, issues=lines).strip() + "\n"
                 if len(text) <= COMMENT_CHARS_MAX:
                     listed = tuple((i.number, i.code) for i in theirs)
                     found.append(

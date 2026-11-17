@@ -5,6 +5,7 @@ FILE_CONFIG = DIR_RESOURCES / "config.json"
 DIR_TEMPLATES = DIR_RESOURCES / "templates"
 FILE_COMMENT = DIR_RESOURCES / "comment.txt"
 FILE_COMMENT_LATE_REVIEWS = DIR_RESOURCES / "comment-late-reviews.txt"
+DIR_COMMENTS = DIR_RESOURCES / "comments"  # comment templates to pick from, e.g. to reviewers
 FILE_VARIABLES = DIR_RESOURCES / "variables.txt"  # what each template placeholder means
 FILE_SPC_ACTIONS = DIR_RESOURCES / "spc_actions.txt"  # suggested SPC action, per check code
 FILE_AI_PHRASES = DIR_RESOURCES / "ai_phrases.txt"

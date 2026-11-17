@@ -420,9 +420,9 @@ class Email(Screen[dict | None]):
         self.dismiss({"role": self.query_one(Select).value, "subject": subject, "body": body})
 
 
-class CommentForm(ModalScreen["list[str] | None"]):
-    """Who else reads the comments; each is reviewed, and can be edited, before posting.
-    `reviewers`: the anonymous reviewer groups of a single paper, to pick one by one."""
+class CommentForm(ModalScreen["tuple[outreach.CommentTemplate | None, list[str]] | None"]):
+    """Template and readers of the comments; each is reviewed, and can be edited, before
+    posting. `reviewers`: the anonymous reviewer groups of a single paper, to pick one by one."""
 
     DEFAULT_CSS = "CommentForm {" + DIALOG_CSS + " width: 90%; height: auto; padding: 1 2; } }"
     BINDINGS = [("escape", "dismiss", "Cancel")]
@@ -430,20 +430,32 @@ class CommentForm(ModalScreen["list[str] | None"]):
     def __init__(self, scope: str, reviewers: Collection[str] = ()) -> None:
         super().__init__()
         self.scope = scope
+        self.choices = {t.key: t for t in outreach.comment_templates()}
         self.readers = {**papers.READERS, **{r: r for r in reviewers}}
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static(f"Comment on {self.scope}, signed as the paper's SACs.")
+            options = [("Open issues, for the SPC", "")]
+            options += [(f"{t.name}: {t.description}", k) for k, t in self.choices.items()]
+            yield Select(options, value="", allow_blank=False, id="comment-template")
             yield Static("PCs and SACs read it, and also:")
             for key, label in self.readers.items():
                 yield Checkbox(label, value=key == "spcs", id=f"reader-{key}")
-            yield Static("Each paper gets its own open issues, from the comment template.")
             yield Button("Review and post", id="comment-post", variant="primary")
+
+    @on(Select.Changed, "#comment-template")
+    def defaults(self, event: Select.Changed) -> None:
+        template = self.choices.get(str(event.value))
+        chosen = template.readers if template else ("spcs",)
+        for key in self.readers:
+            self.query_one(f"#reader-{key}", Checkbox).value = key in chosen
 
     @on(Button.Pressed, "#comment-post")
     def submit(self) -> None:
-        self.dismiss([k for k in self.readers if self.query_one(f"#reader-{k}", Checkbox).value])
+        template = self.choices.get(str(self.query_one(Select).value))
+        chosen = [k for k in self.readers if self.query_one(f"#reader-{k}", Checkbox).value]
+        self.dismiss((template, chosen))
 
 
 class Templates(ModalScreen["outreach.Template | None"]):

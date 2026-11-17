@@ -168,3 +168,23 @@ def test_comments_reach_the_late_reviewers_of_each_paper_or_any_reviewer_group()
     (comment,), _ = outreach.comments(ISSUES, records, {7}, ("reviewers",), CONFIG, TODAY)
     assert papers.readers(comment)[2:] == [f"{SUB}7/Reviewers"]
     assert papers.readable_by(comment) == "PCs, SACs, Reviewers"
+
+
+def test_a_comment_template_goes_to_the_papers_with_its_issues_with_its_readers(tmp_path):
+    (tmp_path / "scores.txt").write_text(
+        "Name: Scores\nDescription: to reviewers\nCodes: disagreement\n"
+        "Readers: reviewers, spcs\nTitle: Scores of $paper\n---\n"
+        "Reviews are due on $deadline_reviews.\n$issues\n"
+    )
+    (template,) = outreach.comment_templates(tmp_path)
+    assert template.key == "scores" and template.readers == ("reviewers", "spcs")
+    records = fetch(FakeClient(), CONFIG)
+    (comment,), _ = outreach.comments(
+        ISSUES, records, {7}, template.readers, CONFIG, TODAY, template
+    )
+    assert comment.title == "Scores of #7" and comment.issues == ((7, "disagreement"),)
+    assert "$" not in comment.text and "ratings [3, 6]" in comment.text
+    assert "Suggested action" not in comment.text  # bare: not to the SPC
+    assert comment.readers == ("Reviewers", "Area_Chairs")
+    _, skipped = outreach.comments(ISSUES[:1], records, {7}, (), CONFIG, TODAY, template)
+    assert skipped == ["#7: no open issues for Scores"]

@@ -588,13 +588,14 @@ class Monitor(App):
 
         records = core.records()
 
-        def compose(readers: list[str] | None) -> None:
-            if readers is None:
+        def compose(chosen: "tuple[outreach.CommentTemplate | None, list[str]] | None") -> None:
+            if chosen is None:
                 return
+            template, readers = chosen
             latest = self.latest
             today = date.fromisoformat(latest["taken_at"][:10]) if latest else date.today()
             found, skipped = outreach.comments(
-                self.chosen(), records, set(numbers), readers, self.config, today
+                self.chosen(), records, set(numbers), readers, self.config, today, template
             )
             if not found:
                 self.notify("\n".join([*skipped, "Nothing to comment on"]))

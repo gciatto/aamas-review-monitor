@@ -107,7 +107,7 @@ def main(argv: list[str] | None = None) -> None:
     email_cmd.add_argument("role", choices=papers.ROLES)
     email_cmd.add_argument("--subject", required=True)
     email_cmd.add_argument("--body", type=Path, required=True, help="text file; {{fullname}} works")
-    commands.add_parser("templates", help="list the email templates")
+    commands.add_parser("templates", help="list the email and comment templates")
     comment_cmd = commands.add_parser(
         "comment", help="post each paper's open issues as a forum comment: preview, then SEND"
     )
@@ -118,7 +118,13 @@ def main(argv: list[str] | None = None) -> None:
         nargs="+",
         default=[],
         metavar="WHO",
-        help=f"who else reads it: {', '.join(papers.READERS)}, or a Reviewer_xxxx group",
+        help=f"who else reads it: {', '.join(papers.READERS)}, or a Reviewer_xxxx group"
+        " (default: the template's; none without one)",
+    )
+    comment_cmd.add_argument(
+        "--template",
+        choices=[t.key for t in outreach.comment_templates()],
+        help="a comment template (`templates` lists them), to the papers with its issues",
     )
     ignore_cmd = commands.add_parser(
         "ignore", help="ignore issues of a paper (codes from `issues`); no arguments: list them"
@@ -274,6 +280,8 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "templates":
         for t in outreach.templates():
             print(f"{t.key:20} {t.name} (to {t.audience}): {t.description}")
+        for c in outreach.comment_templates():
+            print(f"{c.key:20} {c.name} (comment, read by {', '.join(c.readers)}): {c.description}")
     elif args.command == "outreach":
         chosen = {t.key: t for t in outreach.templates()}.get(args.template)
         state = core.current(config)
@@ -295,13 +303,16 @@ def main(argv: list[str] | None = None) -> None:
         if state.latest is None:
             sys.exit("Run `sync` first")
         records = load_records(*args.numbers)
+        template = {t.key: t for t in outreach.comment_templates()}.get(args.template)
+        readers = args.readers or (template.readers if template else [])
         to_post, skipped = outreach.comments(
             state.active,
             records,
             {r["number"] for r in records},
-            [*args.readers, *(["spcs"] if args.spcs else [])],
+            [*readers, *(["spcs"] if args.spcs else [])],
             config,
             date.fromisoformat(state.latest["taken_at"][:10]),
+            template,
         )
         if args.text:
             text = args.text.read_text(encoding="utf-8")

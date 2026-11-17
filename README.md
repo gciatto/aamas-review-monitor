@@ -189,9 +189,9 @@ Paper lists (`N ...`) default to all your papers.
 | `attachment N [--supplementary] [--contents] [--open] [--reveal]` | A paper's PDF or zip, downloaded if needed: its path, its text or file list, open it, or show it in Finder/Explorer |
 | `inspect [N ...]` | Run the document checks, downloading what is missing |
 | `email ROLE [N ...] --subject S --body FILE [--edit]` | Email `reviewers`, `late-reviewers` or `spcs`, one message per paper, after you type `SEND` (`--edit`: edit each first) |
-| `templates` | List the email templates |
+| `templates` | List the email and comment templates |
 | `outreach TEMPLATE [N ...] [--spc ID ...] [--edit]` | Compose templated emails from the current issues, preview every draft (`--edit`: edit each first), send after you type `SEND` |
-| `comment [N ...] [--readers WHO ...] [--spcs] [--text FILE] [--edit]` | Post each paper's open issues (or the file's text) as a comment on its forum, readable by PCs and SACs and by `--readers` (`spcs`, `reviewers`, `reviewers-submitted`, `late-reviewers`, or a `Reviewer_xxxx` group; `--spcs` adds the SPCs), after you type `SEND` (`--edit`: edit each first) |
+| `comment [N ...] [--template KEY] [--readers WHO ...] [--spcs] [--text FILE] [--edit]` | Post each paper's open issues (or a comment template, or the file's text) as a comment on its forum, readable by PCs and SACs and by `--readers` (`spcs`, `reviewers`, `reviewers-submitted`, `late-reviewers`, or a `Reviewer_xxxx` group; default: the template's), after you type `SEND` (`--edit`: edit each first) |
 | `history [N ...] [--full]` | Emails and comments sent from the app, newest first, optionally only about some papers |
 | `ignore [N CODE ...] [--undo]` | Ignore issues of a paper (codes are in brackets in `issues N`), or count them again; without arguments, list the ignored ones |
 | `rubrics list` / `show CODE` / `edit CODE` | The area rubrics (one YAML file per area of the call: topics, description, exemplars, rules): list them, print one, or edit your copy in `$EDITOR` (checked on save; then what the edit changed, as in the Rubrics tab) |
@@ -322,7 +322,7 @@ which likewise offers the current tab's actions:
 | `u` | Supplementary material: the same dialog, showing the zip's file tree |
 | `i` | Run the document checks, downloading what is missing |
 | `m` | Templated email to the SPCs (SPCs tab) or to the papers' people, reviewed and editable before you type `SEND` |
-| `c` | Comment on each paper's forum with its issues, choosing who else reads it (SPCs, reviewers, late reviewers; on one paper, each reviewer), reviewed and editable before you type `SEND` |
+| `c` | Comment on each paper's forum with its issues, or with a comment template, choosing who else reads it (SPCs, reviewers, late reviewers; on one paper, each reviewer), reviewed and editable before you type `SEND` |
 | `e` | Free-form email to reviewers, late reviewers or SPCs, reviewed and editable before you type `SEND` |
 | `k` | Score the papers' areas, choosing what to embed (title, keywords, abstract, PDF text, reviews, meta-reviews); paper data only goes to local endpoints |
 | `h` | Choose the areas the Areas tab shows (kept with the sort order in `areas-view.json`) |
@@ -409,6 +409,11 @@ and you can edit each comment before posting. A paper whose issues are all missi
 reviews gets [`resources/comment-late-reviews.txt`](aamas_review_monitor/resources/comment-late-reviews.txt)
 instead (its `Codes:` header says which), reminding the SPC that chasing reviewers is up to them:
 let SPCs read it, or it reaches no one who can act.
+
+Instead, you can pick a comment template from
+[`resources/comments/`](aamas_review_monitor/resources/comments): it goes only to the papers with
+an open issue among its `Codes:`, readable by its `Readers:` unless you change them, titled by
+its `Title:`, and takes the email templates' placeholders. Add your own there.
 
 Every email and comment the app sends, or fails to send, is appended to
 `~/.aamas-review-monitor/history.jsonl`. It records when, through which paper, about which
