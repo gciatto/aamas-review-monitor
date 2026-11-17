@@ -322,7 +322,8 @@ decision; the scores stay in your terminal and are never part of snapshots or ch
 - **Reviews:** every review against the review rubric, the poor ones first (in yellow), with
   its share of the criteria met, its alerts and the criteria it misses; beside it, each criterion
   of the selected review with the deciding sentence, the rules that held and, when missed, the
-  advice. Opening the tab shows cached scores only; `k` embeds the rest. `space` marks reviews
+  advice. Opening the tab lists every review at once: those not embedded yet are judged by the
+  rules alone (their score marked `*`), and `k` embeds them (locally). `space` marks reviews
   and `c` comments on the marked ones (else the selected one): to each paper's SPC
   (`spc-poor-reviews`), or as a reply to each review that its reviewer reads
   (`reviewers-poor-review`), reviewed and editable before you type `SEND`.
@@ -467,8 +468,8 @@ late reviewers that their review is due; `reviewers-overdue` tells them, past th
 it is overdue and asks them to confirm whether, and by when, they can submit it;
 `reviewers-scores` asks all reviewers of a paper whose ratings diverge to read each other's
 reviews and reconsider their scores. A paper with no nameable late reviewer is skipped. Add your own next to them. The two about poor reviews
-(`Codes: poor_review`) are offered in the Reviews tab, and `comment --template` uses the cached
-review scores for them; the `review-authors` reader posts one comment per review, replying to it.
+(`Codes: poor_review`) are offered in the Reviews tab, and `comment --template` judges the
+reviews for them (cached embeddings, else the rules alone); the `review-authors` reader posts one comment per review, replying to it.
 
 Every email and comment the app sends, or fails to send, is appended to
 `~/.aamas-review-monitor/history.jsonl`. It records when, through which paper, about which

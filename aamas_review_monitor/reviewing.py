@@ -163,19 +163,28 @@ def exemplar_vectors(
 
 def judge(
     rubric: dict,
-    exemplars: dict[str, tuple[list[list[float]], list[list[float]]]],
+    exemplars: dict[str, tuple[list[list[float]], list[list[float]]]] | None,
     parts: list[str],
-    vectors: list[list[float]],
+    vectors: list[list[float]] | None,
     config: dict,
     paper: list[float] | None = None,
 ) -> dict[str, dict]:
     """Each criterion's verdict on one review: met, the best sentence's margin (or, comparing
-    with the abstract, its similarity to `paper`) and the sentence, the rules that held."""
+    with the abstract, its similarity to `paper`) and the sentence, the rules that held. Not
+    embedded yet (`vectors` None): the rules alone, a criterion that needs them to hold unmet,
+    a presumed or compared one met unless they rule it out."""
     k, threshold = config["reviews_top_k"], config["reviews_margin_min"]
     whole = "\n".join(parts)
     found_texts = {f: rules._normal(whole) for f in rules.FIELDS} | {"raw": whole}
     verdicts = {}
     for c in rubric["criteria"]:
+        value, held = rules.score(c["rules"], found_texts)
+        if vectors is None or exemplars is None:
+            met = value >= 0 if (c.get("presumed") or "compare" in c) else value > 0
+            verdicts[c["key"]] = {
+                "met": met, "margin": None, "evidence": "", "rules": held, "rule": value
+            }  # fmt: skip
+            continue
         meets, short = exemplars[c["key"]]
         if "compare" in c:  # no abstract: nothing to compare with, so no alert
             margins = [similarity(v, [paper], 1) for v in vectors] if paper else []
@@ -186,7 +195,6 @@ def judge(
         pick = min if c.get("presumed") else max
         best = pick(range(len(margins)), key=margins.__getitem__, default=None)
         margin = round(margins[best], 4) if best is not None else None
-        value, held = rules.score(c["rules"], found_texts)
         if c.get("presumed"):
             alert = c.get("margin", config["reviews_margin_alert"])
             ruled_out = margin is not None and margin <= -alert
@@ -213,9 +221,13 @@ def score(
     progress: Callable[[int, int], None] | None = None,
 ) -> tuple[list[dict], list[str]]:
     """One result per review of the cached papers: paper, its anonymous name and id, words,
-    rating, the criteria's verdicts and the weighted share met; also the reviews not scored, and
-    why. The reviews' sentences only go to local endpoints."""
-    exemplars = exemplar_vectors(rubric, s, cache, cache_only)
+    rating, whether it was embedded, the criteria's verdicts and the weighted share met; also the
+    reviews not scored, and why. The reviews' sentences only go to local endpoints; `cache_only`,
+    those not embedded yet are judged by the rules alone."""
+    try:
+        exemplars = exemplar_vectors(rubric, s, cache, cache_only)
+    except models.NotEmbedded:
+        exemplars = None
     weights = {c["key"]: c["weight"] for c in rubric["criteria"]}
     found, failures = [], []
     reviews = [(r, v) for r in records for v in replies(r, "review")]
@@ -228,16 +240,17 @@ def score(
         if not parts:
             failures.append(f"#{record['number']} {name}: no written text")
             continue
-        try:
-            vectors = models.embed(s, parts, cache, True, cache_only)
-        except models.NotEmbedded as e:
-            failures.append(f"#{record['number']} {name}: {e}")
-            continue
+        vectors = None
+        if exemplars is not None:
+            try:
+                vectors = models.embed(s, parts, cache, True, cache_only)
+            except models.NotEmbedded:
+                pass
         abstract = " ".join(
             str((record["content"].get(k) or {}).get("value") or "") for k in ("title", "abstract")
         ).strip()
         paper = None
-        if abstract and any("compare" in c for c in rubric["criteria"]):
+        if vectors is not None and abstract and any("compare" in c for c in rubric["criteria"]):
             try:
                 (paper,) = models.embed(s, [abstract], cache, True, cache_only)
             except models.NotEmbedded:
@@ -256,6 +269,7 @@ def score(
                 "words": len(written.split()),
                 "rating": rating,
                 "score": round(met / sum(weights.values()), 4),
+                "embedded": vectors is not None,
                 "alerts": alerts,
                 "criteria": verdicts,
             }

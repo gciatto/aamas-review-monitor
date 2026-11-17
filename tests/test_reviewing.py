@@ -202,9 +202,6 @@ def test_cli_comments_on_the_poor_reviews_from_their_cached_scores(monkeypatch, 
     snapshot = {"taken_at": "2026-11-11T08:00:00", "papers": [paper(7)]}
     core.DIR_SNAPSHOTS.mkdir(parents=True)
     (core.DIR_SNAPSHOTS / "a.json").write_text(json.dumps(snapshot))
-    with pytest.raises(SystemExit, match="Run `review-scores` first"):
-        cli.main(["comment", "7", "--template", "spc-poor-reviews"])
-    cli.main(["review-scores"])
     monkeypatch.setattr("builtins.input", lambda prompt="": "no")
     cli.main(["comment", "7", "--template", "spc-poor-reviews"])
     out = capsys.readouterr().out
@@ -224,8 +221,11 @@ def test_cli_lists_reviews_and_shows_and_checks_the_rubric(monkeypatch, tmp_path
             | {"reviews_margin_min": 9, "reviews_abstract_min": -1, "reviews_margin_alert": 9}
         ),
     )
+    cli.main(["--cache-only", "review-scores"])
+    assert "judged by the rules alone" in capsys.readouterr().out
     cli.main(["review-scores", "--poor"])
     out = capsys.readouterr().out
+    assert "judged by the rules alone" not in out
     assert "Reviewer_hidden" in out and "!constructive" in out and "Reviewer_aB3x" not in out
     cli.main(["rubrics", "show", "reviews"])
     assert capsys.readouterr().out == FILE_REVIEW_RUBRIC_DEFAULT.read_text(encoding="utf-8")
@@ -233,3 +233,15 @@ def test_cli_lists_reviews_and_shows_and_checks_the_rubric(monkeypatch, tmp_path
     assert "weaknesses" in capsys.readouterr().out
     cli.main(["rubrics", "list"])
     assert "reviews 17 criteria (shipped)" in capsys.readouterr().out
+
+
+def test_reviews_not_embedded_yet_are_judged_by_the_rules_alone(monkeypatch, tmp_path):
+    endpoint = FakeEndpoint(monkeypatch)
+    records = records_with(GOOD, POOR)
+    s = models.settings(EMBEDDINGS)
+    (good, poor), failures = reviewing.score(records, rubric(), s, CONFIG, tmp_path, True)
+    assert endpoint.requests == [] and failures == []
+    assert not good["embedded"] and good["criteria"]["questions"]["met"]  # a "?" rule
+    assert good["criteria"]["about_paper"]["met"]  # compared: unknown, so no alert
+    assert not poor["criteria"]["constructive"]["met"]  # "nonsense": the rules rule it out
+    assert poor["criteria"]["weaknesses"]["margin"] is None

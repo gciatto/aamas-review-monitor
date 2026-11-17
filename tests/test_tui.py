@@ -984,14 +984,19 @@ def reviews_to_score(tmp_path, monkeypatch):
 
 
 async def scored_reviews(app, pilot):
-    """Opens the Reviews tab (nothing embedded yet, nothing asked), then scores."""
+    """Opens the Reviews tab: every review, by the rules alone (nothing embedded yet, nothing
+    asked); then scores, embedding them."""
     await pilot.press("t", "t", "t")  # Areas
     await done(app, pilot, lambda: app.area_results is not None)
     await pilot.press("t")  # Reviews
     await done(app, pilot, lambda: app.review_results is not None)
-    assert app.review_results == []
+    assert [r["embedded"] for r in app.review_results] == [False, False]
+    table = app.query_one("#scores")
+    assert table.row_count == 2 and str(table.get_row_at(0)[3]).endswith("*")
+    detail = str(app.query_one("#score-detail").render())
+    assert "Judged by the rules alone" in detail
     await pilot.press("k")
-    await done(app, pilot, lambda: bool(app.review_results))
+    await done(app, pilot, lambda: all(r["embedded"] for r in app.review_results))
 
 
 def test_reviews_tab_scores_each_review_and_shows_why(tmp_path, monkeypatch):

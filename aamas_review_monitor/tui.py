@@ -1451,7 +1451,11 @@ class Monitor(App):
                 MARK if key in self.review_marked else "",
                 str(r["number"]),
                 r["name"],
-                Text(f"{r['score']:>4.0%}", "yellow" if r in poor else ""),
+                # *: judged by the rules alone, not embedded yet
+                Text(
+                    f"{r['score']:>4.0%}" + ("" if r.get("embedded", True) else "*"),
+                    "yellow" if r in poor else "",
+                ),
                 Text(", ".join(r["alerts"]) or "—", "yellow" if r["alerts"] else ""),
                 str(r["words"]),
                 str(r["rating"] or "—")[:10],
@@ -1482,7 +1486,10 @@ class Monitor(App):
             return
         text = Text(f"#{row['number']}  {row['name']}\n", "bold")
         text.append(f"{row['score']:.0%} of the rubric · {row['words']} words")
-        text.append(f" · rating {row['rating'] or '—'}\n\n")
+        text.append(f" · rating {row['rating'] or '—'}\n")
+        if not row.get("embedded", True):
+            text.append("Judged by the rules alone: k embeds the reviews (locally)\n", "yellow")
+        text.append("Space marks it, c comments: to its reviewer, what to address and how\n\n")
         for c in self.review_rubric.get("criteria", []):
             verdict = row["criteria"].get(c["key"])
             if verdict is None:

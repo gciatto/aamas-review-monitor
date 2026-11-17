@@ -663,6 +663,8 @@ def reviews_table(args: argparse.Namespace, config: dict) -> None:
             f"{r['number']:>5} {r['name'][:16]:16} {r['score']:>4.0%}{flag} {r['words']:>5} "
             f"{str(r['rating'] or '—')[:8]:>8}  {missing}"
         )
+    if not all(r["embedded"] for r in shown):
+        print("Some reviews are not embedded yet (--cache-only): judged by the rules alone")
     if failures:
         print("\n".join(f"Not scored: {f}" for f in failures))
     if args.csv:
