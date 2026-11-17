@@ -1,0 +1,16 @@
+Name: Late reviewers
+Description: To each paper's reviewers whose review is missing or behind schedule
+Codes: missing_reviews, reviews_behind, late_reviewer
+Readers: late-reviewers, spcs
+Title: Your review of paper $paper
+---
+Dear reviewer,
+
+According to the Senior Area Chair's automatic checks, your review of this paper has not been
+submitted yet. Reviews are due on $deadline_reviews ($days_reviews days from now).
+
+Please submit it as soon as possible. If something prevents you from completing it, please
+reply here right away, so that other arrangements can be made in time. The checks may lag
+behind OpenReview: if you have already submitted your review, please ignore this comment.
+
+Thank you for your work for AAMAS.

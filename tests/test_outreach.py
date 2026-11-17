@@ -188,3 +188,15 @@ def test_a_comment_template_goes_to_the_papers_with_its_issues_with_its_readers(
     assert comment.readers == ("Reviewers", "Area_Chairs")
     _, skipped = outreach.comments(ISSUES[:1], records, {7}, (), CONFIG, TODAY, template)
     assert skipped == ["#7: no open issues for Scores"]
+
+
+def test_the_late_reviewers_template_reaches_each_paper_s_late_reviewers():
+    late = {t.key: t for t in outreach.comment_templates()}["reviewers-late"]
+    records = fetch(FakeClient(), CONFIG)
+    found, skipped = outreach.comments(ISSUES, records, {7}, late.readers, CONFIG, TODAY, late)
+    assert found == [] and skipped == ["#7: no late reviewer to read it"]  # no anonymous group
+    records[0]["groups"]["Reviewer_xY12"] = ["~Rev_B1"]
+    (comment,), _ = outreach.comments(ISSUES, records, {7}, late.readers, CONFIG, TODAY, late)
+    assert comment.readers == ("Reviewer_xY12", "Area_Chairs")
+    assert comment.title == "Your review of paper #7" and "$" not in comment.text
+    assert comment.issues == ((7, "missing_reviews"),)
