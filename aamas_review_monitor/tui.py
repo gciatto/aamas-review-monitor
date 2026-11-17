@@ -312,7 +312,7 @@ class Monitor(App):
         scores = self.query_one("#scores", DataTable)
         self.score_mark_column = scores.add_column("", width=1)
         scores.add_columns(
-            "#", "Last sent", "Review", "Score", "Alerts", "Words", "Rating", "Missing"
+            "#", "Commented", "Review", "Score", "Alerts", "Words", "Rating", "Missing"
         )
         self.query_one("#rubrics", DataTable).add_columns(
             "Code", "Copy", "Topics", "Exemplars", "Rules", "Area"
@@ -1476,7 +1476,7 @@ class Monitor(App):
             table.add_row(
                 MARK if key in self.review_marked else "",
                 str(r["number"]),
-                next((e["at"][5:10] for e in self.reached(*key)), ""),
+                next((e["at"][5:10] for e in self.commented(*key)), ""),
                 r["name"],
                 # *: judged by the rules alone, not embedded yet
                 Text(
@@ -1490,6 +1490,16 @@ class Monitor(App):
                 key=f"{key[0]}:{key[1]}",
             )
         self.show_review_row()
+
+    def commented(self, number: int, group: str) -> list[dict]:
+        """Comments from this app on a paper's review (Reviewer_aB3x), newest first: those
+        listing it as a poor review, as replies to it do."""
+        code = [number, f"{reviewing.CODE}:{group}"]
+        return [
+            e
+            for e in self.sent
+            if e["kind"] == "comment" and e["status"] == "sent" and code in e.get("issues", [])
+        ]
 
     def reached(self, number: int, group: str) -> list[dict]:
         """What reached a paper's reviewer (Reviewer_aB3x) from this app, newest first."""
@@ -1522,8 +1532,12 @@ class Monitor(App):
         if not row.get("embedded", True):
             text.append("Judged by the rules alone: k embeds the reviews (locally)\n", "yellow")
         text.append("Space marks it, c comments: to its reviewer, what to address and how\n")
-        text.append("Sent to its reviewer from this app:\n", "bold")
-        reached_lines(text, self.reached(row["number"], row["name"]))
+        about = self.commented(row["number"], row["name"])
+        text.append("Comments on this review from this app:\n", "bold")
+        reached_lines(text, about)
+        others = [e for e in self.reached(row["number"], row["name"]) if e not in about]
+        text.append("Anything else from this app that reached its reviewer:\n", "bold")
+        reached_lines(text, others)
         text.append("\n")
         for c in self.review_rubric.get("criteria", []):
             verdict = row["criteria"].get(c["key"])

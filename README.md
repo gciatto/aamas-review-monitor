@@ -479,8 +479,9 @@ Every email and comment the app sends, or fails to send, is appended to
 papers, to whom, the subject and body, and the template used. `history` and the History tab show
 it, and paper details and the SPCs tab show the part about each paper or SPC. Paper details
 also list each anonymous reviewer (review in or not, emergency, assigned when) with every comment
-and email that reached them, and the Reviews tab shows when its reviewer was last reached
-(`Last sent`) and, for the selected review, all of it. Comments are
+and email that reached them, and the Reviews tab shows when you last commented on each review
+(`Commented`) and, for the selected review, those comments and anything else that reached its
+reviewer (reminders, comments to all reviewers). Comments are
 never retried automatically, so a comment can't be posted twice.
 
 Nothing goes out unreviewed, and everything can be edited first. In the terminal UI, the

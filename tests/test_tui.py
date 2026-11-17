@@ -1029,6 +1029,15 @@ def test_reviews_tab_replies_to_a_marked_poor_review_which_its_reviewer_reads(
     async def scenario():
         async with app.run_test(size=(160, 40)) as pilot:
             await scored_reviews(app, pilot)
+            reminder = {"at": "2026-11-14T10:00", "kind": "comment", "status": "sent", "via": 7}
+            reminder |= {"subject": "Your review", "issues": [[7, "missing_reviews"]]}
+            app.sent = [
+                reminder
+                | {"recipients": ["ifaamas.org/AAMAS/2027/Conference/Submission7/Reviewers"]}
+            ]
+            app.fill_reviews()  # reached its reviewer, but is not about the review
+            assert app.query_one("#scores").get_row_at(0)[2] == ""
+            assert "14 10:00  comment: Your review" in str(app.query_one("#score-detail").render())
             await pilot.press("space", "c")
             form = app.screen
             assert isinstance(form, tui.CommentForm)
@@ -1048,6 +1057,7 @@ def test_reviews_tab_replies_to_a_marked_poor_review_which_its_reviewer_reads(
             await done(app, pilot, lambda: table.get_row_at(0)[2] != "")  # last sent, MM-DD
             detail = str(app.query_one("#score-detail").render())
             assert "comment: Could you improve your review of #7?" in detail
+            assert detail.index("Comments on this review") < detail.index("comment: Could")
 
     asyncio.run(scenario())
 
