@@ -8,10 +8,10 @@ Dear $review,
 
 Thank you for your review.
 
-The Senior Area Chair's checks of the reviews suggest that it could
+The Senior Area Chair's _automatic_ checks of the reviews suggest that it could
 give the authors and the SPC more to work with.
 
-These are the points it misses, each with a suggested action:
+These are the points where there's apparently more room for improvement, each with a suggested action:
 
 $issues
 
