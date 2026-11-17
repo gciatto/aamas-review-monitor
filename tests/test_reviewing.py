@@ -189,7 +189,7 @@ def test_poor_reviews_get_a_reply_their_reviewer_reads_or_a_comment_to_the_spc(
     assert comment.text.count("review by Reviewer_") == 2
 
 
-def test_cli_comments_on_the_poor_reviews_from_their_cached_scores(monkeypatch, capsys):
+def test_cli_comments_on_the_poor_reviews_to_the_spc_or_their_reviewer(monkeypatch, capsys):
     FakeEndpoint(monkeypatch)
     records = records_with(GOOD, POOR)
     papers.save(records, core.DIR_PAPERS, [])
@@ -206,7 +206,11 @@ def test_cli_comments_on_the_poor_reviews_from_their_cached_scores(monkeypatch, 
     cli.main(["comment", "7", "--template", "spc-poor-reviews"])
     out = capsys.readouterr().out
     assert "review by Reviewer_hidden meets" in out and "review by Reviewer_aB3x" not in out
+    assert "how to address it" not in out  # to the SPC: the criteria only
     assert out.rstrip().endswith("Nothing posted")
+    cli.main(["comment", "7", "--template", "reviewers-poor-review"])
+    out = capsys.readouterr().out
+    assert "replying to Reviewer_hidden" in out and "* Reports specific weaknesses" in out
 
 
 def test_cli_lists_reviews_and_shows_and_checks_the_rubric(monkeypatch, tmp_path, capsys):

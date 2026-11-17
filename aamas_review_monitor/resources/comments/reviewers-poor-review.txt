@@ -1,24 +1,23 @@
 Name: Review to improve (to its reviewer)
-Description: A reply to each review the review rubric finds thin, readable by its reviewer
+Description: A reply to each review, read by its reviewer: what it misses, and how to address it
 Codes: poor_review
 Readers: review-authors, spcs
-Title: Could you expand your review of $paper?
+Title: Could you improve your review of $paper?
 ---
 Dear $review,
 
-Thank you for your review. To make it as useful as possible to the authors and to the SPC,
-could you please expand it? In particular, a helpful review:
-
-- summarises the paper's contribution in your own words;
-- names specific strengths and weaknesses, pointing to the sections, theorems, figures or
-  experiments concerned;
-- suggests how the main weaknesses could be addressed;
-- asks the questions whose answers could change your assessment;
-- relates the work to prior work, citing it when judging novelty;
-- explains how these points lead to your rating.
+Thank you for your review. The Senior Area Chair's checks of the reviews suggest that it could
+give the authors and the SPC more to work with. These are the points it misses, each with a
+suggested action:
 
 $issues
 
-If you believe your review already covers these points, please disregard this comment.
+Could you please revise your review to address them, especially those marked important, and
+reply here once done? If you believe your review already covers some of these points, please
+disregard them, or tell us why.
+
+The checks are computed on the Senior Area Chair's machine: string matching and a local
+embedding model compare each review's sentences with public example sentences. No generative
+AI is involved, nothing is shared with anyone, and the checks never judge the paper itself.
 
 Thank you for your work for AAMAS.

@@ -1038,6 +1038,9 @@ def test_reviews_tab_replies_to_a_marked_poor_review_which_its_reviewer_reads(
             await done(app, pilot, lambda: bool(app.sent))
             ((_, _, note),) = client.comments
             assert note.replyto == "r1" and note.readers[-1].endswith("/Reviewer_hidden")
+            text = note.content["comment"]["value"]
+            assert "Dear Reviewer_hidden," in text and "how to address it:" in text
+            assert "* Reports specific weaknesses (important): Name concrete weaknesses" in text
 
     asyncio.run(scenario())
 

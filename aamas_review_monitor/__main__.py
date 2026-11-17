@@ -319,7 +319,8 @@ def main(argv: list[str] | None = None) -> None:
         if template and reviewing.CODE in template.codes:  # from the cached review scores
             rubric, results, _ = review_results(args, config, records, cache_only=True)
             poor = reviewing.poor(results, config)
-            about = reviewing.issues(poor, rubric, records, state.latest, config)
+            advice = papers.READER_REVIEW_AUTHORS in readers  # to each review's reviewer
+            about = reviewing.issues(poor, rubric, records, state.latest, config, advice)
         to_post, skipped = outreach.comments(
             about,
             records,

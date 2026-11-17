@@ -323,10 +323,11 @@ decision; the scores stay in your terminal and are never part of snapshots or ch
   its share of the criteria met, its alerts and the criteria it misses; beside it, each criterion
   of the selected review with the deciding sentence, the rules that held and, when missed, the
   advice. Opening the tab lists every review at once: those not embedded yet are judged by the
-  rules alone (their score marked `*`), and `k` embeds them (locally). `space` marks reviews
-  and `c` comments on the marked ones (else the selected one): to each paper's SPC
-  (`spc-poor-reviews`), or as a reply to each review that its reviewer reads
-  (`reviewers-poor-review`), reviewed and editable before you type `SEND`.
+  rules alone (their score marked `*`), and `k` embeds them (locally). `space` marks reviews and
+  `c` comments on the marked ones (else the selected one): as a reply to each review that its
+  reviewer reads, listing what it misses with a suggested action for each, the alerts first
+  (`reviewers-poor-review`), or to each paper's SPC (`spc-poor-reviews`), reviewed and editable
+  before you type `SEND`.
 - **Rubrics:** the area rubrics, one YAML editor each, and the review rubric (`reviews`, last;
   saving it rescores the reviews and says which became poor, or stopped being). `ctrl+s` checks and saves your copy, then
   shows what the edit changed: how many of the area's topics are nearest to it when left out,

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import textwrap
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -291,10 +292,33 @@ def missing(result: dict, rubric: dict) -> list[str]:
     return [c["name"] for c in rubric["criteria"] if not result["criteria"][c["key"]]["met"]]
 
 
+def actions(result: dict, rubric: dict) -> list[str]:
+    """What the review misses, the alerts first, each with the rubric's advice: one indented
+    line each, to follow an issue's line in a comment."""
+    unmet = [c for c in rubric["criteria"] if not result["criteria"][c["key"]]["met"]]
+    unmet.sort(key=lambda c: c["key"] not in result.get("alerts", []))
+    return [
+        textwrap.fill(
+            f"{c['name']}{' (important)' if c['key'] in result.get('alerts', []) else ''}: "
+            + " ".join(c["advice"].split()),
+            92,
+            initial_indent="    * ",
+            subsequent_indent="      ",
+        )
+        for c in unmet
+    ]
+
+
 def issues(
-    results: list[dict], rubric: dict, records: list[dict], snapshot: dict | None, config: dict
+    results: list[dict],
+    rubric: dict,
+    records: list[dict],
+    snapshot: dict | None,
+    config: dict,
+    advice: bool = False,
 ) -> list[Issue]:
-    """An issue per review given, for comments: `poor_review:Reviewer_xxxx`."""
+    """An issue per review given, for comments: `poor_review:Reviewer_xxxx`; with `advice`
+    (for its reviewer), each missed criterion follows with the suggested action."""
     by_number = {r["number"]: r for r in records}
     spcs = {p["number"]: tuple(p.get("spcs", [])) for p in (snapshot or {}).get("papers", [])}
     found = []
@@ -307,6 +331,11 @@ def issues(
             f"rubric; missing: {', '.join(missing(r, rubric)).lower() or 'none'}"
             + (f" (alerts: {', '.join(alerts)})" if alerts else "")
         )
+        if advice:
+            message = "\n".join(
+                [f"review by {r['name']}: what it misses, and how to address it:"]
+                + actions(r, rubric)
+            )
         url = config["url_forum"] + by_number[r["number"]]["id"]
         found.append(
             Issue(

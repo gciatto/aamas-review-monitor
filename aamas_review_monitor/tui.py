@@ -623,9 +623,13 @@ class Monitor(App):
         self.push_screen(CommentForm(numbered(numbers), reviewers), compose)
 
     def commenter(
-        self, issues: list[Issue], records: list[dict], numbers: list[int]
+        self,
+        issues: "list[Issue] | Callable[[list[str]], list[Issue]]",
+        records: list[dict],
+        numbers: list[int],
     ) -> "Callable[[tuple[outreach.CommentTemplate | None, list[str]] | None], None]":
-        """What composes, reviews and posts the comments once CommentForm says how."""
+        """What composes, reviews and posts the comments once CommentForm says how; `issues`
+        may depend on the readers chosen."""
 
         def compose(chosen: "tuple[outreach.CommentTemplate | None, list[str]] | None") -> None:
             if chosen is None:
@@ -633,8 +637,9 @@ class Monitor(App):
             template, readers = chosen
             latest = self.latest
             today = date.fromisoformat(latest["taken_at"][:10]) if latest else date.today()
+            about = issues(readers) if callable(issues) else issues
             found, skipped = outreach.comments(
-                issues, records, set(numbers), readers, self.config, today, template
+                about, records, set(numbers), readers, self.config, today, template
             )
             if not found:
                 self.notify("\n".join([*skipped, "Nothing to comment on"]))
@@ -1517,7 +1522,13 @@ class Monitor(App):
         if not chosen:
             return
         records = core.records()
-        issues = reviewing.issues(chosen, self.review_rubric, records, self.latest, self.config)
+
+        def issues(readers: list[str]) -> list[Issue]:
+            # to each review's reviewer: what it misses, with the suggested actions
+            advice = papers.READER_REVIEW_AUTHORS in readers
+            rubric, latest = self.review_rubric, self.latest
+            return reviewing.issues(chosen, rubric, records, latest, self.config, advice)
+
         numbers = sorted({r["number"] for r in chosen})
         compose = self.commenter(issues, records, numbers)
         scope = f"{len(chosen)} reviews of {numbered(numbers)}"
