@@ -420,28 +420,30 @@ class Email(Screen[dict | None]):
         self.dismiss({"role": self.query_one(Select).value, "subject": subject, "body": body})
 
 
-class CommentForm(ModalScreen["bool | None"]):
-    """Who may read the comments; each is reviewed, and can be edited, before posting."""
+class CommentForm(ModalScreen["list[str] | None"]):
+    """Who else reads the comments; each is reviewed, and can be edited, before posting.
+    `reviewers`: the anonymous reviewer groups of a single paper, to pick one by one."""
 
     DEFAULT_CSS = "CommentForm {" + DIALOG_CSS + " width: 90%; height: auto; padding: 1 2; } }"
     BINDINGS = [("escape", "dismiss", "Cancel")]
 
-    def __init__(self, scope: str) -> None:
+    def __init__(self, scope: str, reviewers: Collection[str] = ()) -> None:
         super().__init__()
         self.scope = scope
+        self.readers = {**papers.READERS, **{r: r for r in reviewers}}
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Static(
-                f"Comment on {self.scope}, signed as the paper's SACs. PCs and SACs read it."
-            )
-            yield Checkbox("The paper's SPCs can read it too", value=True, id="spcs-read")
+            yield Static(f"Comment on {self.scope}, signed as the paper's SACs.")
+            yield Static("PCs and SACs read it, and also:")
+            for key, label in self.readers.items():
+                yield Checkbox(label, value=key == "spcs", id=f"reader-{key}")
             yield Static("Each paper gets its own open issues, from the comment template.")
             yield Button("Review and post", id="comment-post", variant="primary")
 
     @on(Button.Pressed, "#comment-post")
     def submit(self) -> None:
-        self.dismiss(self.query_one(Checkbox).value)
+        self.dismiss([k for k in self.readers if self.query_one(f"#reader-{k}", Checkbox).value])
 
 
 class Templates(ModalScreen["outreach.Template | None"]):

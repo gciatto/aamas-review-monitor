@@ -113,6 +113,13 @@ def main(argv: list[str] | None = None) -> None:
     )
     comment_cmd.add_argument("--spcs", action="store_true", help="let the papers' SPCs read it")
     comment_cmd.add_argument("--text", type=Path, help="post this file's text instead")
+    comment_cmd.add_argument(
+        "--readers",
+        nargs="+",
+        default=[],
+        metavar="WHO",
+        help=f"who else reads it: {', '.join(papers.READERS)}, or a Reviewer_xxxx group",
+    )
     ignore_cmd = commands.add_parser(
         "ignore", help="ignore issues of a paper (codes from `issues`); no arguments: list them"
     )
@@ -292,7 +299,7 @@ def main(argv: list[str] | None = None) -> None:
             state.active,
             records,
             {r["number"] for r in records},
-            args.spcs,
+            [*args.readers, *(["spcs"] if args.spcs else [])],
             config,
             date.fromisoformat(state.latest["taken_at"][:10]),
         )

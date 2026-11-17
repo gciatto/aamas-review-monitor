@@ -191,7 +191,7 @@ Paper lists (`N ...`) default to all your papers.
 | `email ROLE [N ...] --subject S --body FILE [--edit]` | Email `reviewers`, `late-reviewers` or `spcs`, one message per paper, after you type `SEND` (`--edit`: edit each first) |
 | `templates` | List the email templates |
 | `outreach TEMPLATE [N ...] [--spc ID ...] [--edit]` | Compose templated emails from the current issues, preview every draft (`--edit`: edit each first), send after you type `SEND` |
-| `comment [N ...] [--spcs] [--text FILE] [--edit]` | Post each paper's open issues (or the file's text) as a comment on its forum, readable by PCs and SACs (and SPCs with `--spcs`), after you type `SEND` (`--edit`: edit each first) |
+| `comment [N ...] [--readers WHO ...] [--spcs] [--text FILE] [--edit]` | Post each paper's open issues (or the file's text) as a comment on its forum, readable by PCs and SACs and by `--readers` (`spcs`, `reviewers`, `reviewers-submitted`, `late-reviewers`, or a `Reviewer_xxxx` group; `--spcs` adds the SPCs), after you type `SEND` (`--edit`: edit each first) |
 | `history [N ...] [--full]` | Emails and comments sent from the app, newest first, optionally only about some papers |
 | `ignore [N CODE ...] [--undo]` | Ignore issues of a paper (codes are in brackets in `issues N`), or count them again; without arguments, list the ignored ones |
 | `rubrics list` / `show CODE` / `edit CODE` | The area rubrics (one YAML file per area of the call: topics, description, exemplars, rules): list them, print one, or edit your copy in `$EDITOR` (checked on save; then what the edit changed, as in the Rubrics tab) |
@@ -322,7 +322,7 @@ which likewise offers the current tab's actions:
 | `u` | Supplementary material: the same dialog, showing the zip's file tree |
 | `i` | Run the document checks, downloading what is missing |
 | `m` | Templated email to the SPCs (SPCs tab) or to the papers' people, reviewed and editable before you type `SEND` |
-| `c` | Comment on each paper's forum with its issues (SPCs as readers optional), reviewed and editable before you type `SEND` |
+| `c` | Comment on each paper's forum with its issues, choosing who else reads it (SPCs, reviewers, late reviewers; on one paper, each reviewer), reviewed and editable before you type `SEND` |
 | `e` | Free-form email to reviewers, late reviewers or SPCs, reviewed and editable before you type `SEND` |
 | `k` | Score the papers' areas, choosing what to embed (title, keywords, abstract, PDF text, reviews, meta-reviews); paper data only goes to local endpoints |
 | `h` | Choose the areas the Areas tab shows (kept with the sort order in `areas-view.json`) |
@@ -400,8 +400,10 @@ missing or late reviews selected, `spc-late-reviews`.
 ### Comments and history
 
 `comment` (or `c`) posts an Official_Comment on each paper's forum, signed as its Senior Area
-Chairs. Program Chairs and SACs can always read it, and you choose whether its SPCs can too
-(reviewers can't, at this stage). The text comes from
+Chairs. Program Chairs and SACs can always read it, and you choose who else can, as on
+OpenReview: the SPCs, all reviewers, the reviewers who submitted, each paper's late reviewers
+(their anonymous `Reviewer_xxxx` groups) or, when commenting on a single paper, any of its
+reviewers. The text comes from
 [`resources/comment.txt`](aamas_review_monitor/resources/comment.txt) with the paper's open issues,
 and you can edit each comment before posting. A paper whose issues are all missing or late
 reviews gets [`resources/comment-late-reviews.txt`](aamas_review_monitor/resources/comment-late-reviews.txt)

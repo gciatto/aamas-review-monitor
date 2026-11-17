@@ -586,13 +586,15 @@ class Monitor(App):
         if not (numbers := self.scope()):
             return
 
-        def compose(spcs_read: bool | None) -> None:
-            if spcs_read is None:
+        records = core.records()
+
+        def compose(readers: list[str] | None) -> None:
+            if readers is None:
                 return
             latest = self.latest
             today = date.fromisoformat(latest["taken_at"][:10]) if latest else date.today()
             found, skipped = outreach.comments(
-                self.chosen(), core.records(), set(numbers), spcs_read, self.config, today
+                self.chosen(), records, set(numbers), readers, self.config, today
             )
             if not found:
                 self.notify("\n".join([*skipped, "Nothing to comment on"]))
@@ -611,7 +613,11 @@ class Monitor(App):
             review = outreach.review_comments(found, skipped, self.sent, self.notes())
             self.review_then(review, "Title", outreach.COMMENT_LIMITS, "Posted", go)
 
-        self.push_screen(CommentForm(numbered(numbers)), compose)
+        # one paper: its reviewers can be picked one by one, as on OpenReview
+        one = [r for r in records if [r["number"]] == list(numbers)]
+        anonymous = one[0]["names"].get("reviewers_anon", "Reviewer_") if one else None
+        reviewers = sorted(g for g in one[0]["groups"] if g.startswith(anonymous)) if one else []
+        self.push_screen(CommentForm(numbered(numbers), reviewers), compose)
 
     def action_mail(self) -> None:
         by_spc: dict[str, list[Issue]] = {}

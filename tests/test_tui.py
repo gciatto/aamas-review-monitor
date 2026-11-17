@@ -472,10 +472,10 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             await pilot.press("c")
             form = app.screen
             assert isinstance(form, tui.CommentForm)
-            form.query_one("#spcs-read").value = False
+            form.query_one("#reader-spcs").value = False
             await pilot.click("#comment-post")
             review = await reviewing(app, pilot)
-            assert review.header[0] == "1 comments, readable by PCs, SACs"
+            assert review.header[0] == "1 comments"
             text = review.query_one("#review-text")
             assert "ratings [3, 6]" in text.text  # editable before posting
             text.load_text("Please check the reviews.")
@@ -699,7 +699,7 @@ def test_comments_list_only_the_marked_issues(tmp_path, monkeypatch):
             (_, _, n1, *_, first), (_, _, n2, *_, second) = map(table.get_row_at, (0, 1))
             assert n1 == n2 == 7  # two issues of one paper
             await pilot.press("space", "c")
-            app.screen.query_one("#spcs-read").value = False
+            app.screen.query_one("#reader-spcs").value = False
             await pilot.click("#comment-post")
             review = await reviewing(app, pilot)
             text = review.query_one("#review-text").text
@@ -903,5 +903,30 @@ def test_cache_only_tui_never_asks_the_embedding_endpoint(monkeypatch):
             await pilot.click("#marks-apply")
             await done(app, pilot, lambda: app.area_results == {})
             assert endpoint.requests == []
+
+    asyncio.run(scenario())
+
+
+def test_comment_form_lets_each_reviewer_of_one_paper_read_it(tmp_path, monkeypatch):
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(140, 40)) as pilot:
+            await pilot.press("c")
+            form = app.screen
+            assert isinstance(form, tui.CommentForm)
+            await until(pilot, lambda: form.query("#reader-Reviewer_aB3x"))  # one paper
+            form.query_one("#reader-reviewers").value = True
+            form.query_one("#reader-Reviewer_aB3x").value = True
+            await pilot.click("#comment-post")
+            review = await reviewing(app, pilot)
+            assert review.items[0].heading == (
+                "Comment on #7, readable by PCs, SACs, Area_Chairs, Reviewers, Reviewer_aB3x"
+            )
+            review.query_one("#confirm").focus()
+            await confirm(app, pilot, "SEND")
+            await done(app, pilot, lambda: bool(app.sent))
+            ((_, _, note),) = client.comments
+            assert note.readers[-1].endswith("Submission7/Reviewer_aB3x")
 
     asyncio.run(scenario())

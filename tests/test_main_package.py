@@ -241,7 +241,7 @@ def test_comment_posts_issues_and_history_records_emails_and_comments(
     monkeypatch.setattr("builtins.input", lambda prompt="": "no")
     cli.main(["comment", "7"])
     out = capsys.readouterr().out
-    assert out.startswith("1 comments, readable by PCs, SACs\n") and "- 🟡 ratings [3, 6]" in out
+    assert out.startswith("1 comments\n") and "- 🟡 ratings [3, 6]" in out
     assert client.comments == [] and out.rstrip().endswith("Nothing posted")
 
     monkeypatch.setattr("builtins.input", lambda prompt="": "SEND")
@@ -259,7 +259,7 @@ def test_comment_posts_issues_and_history_records_emails_and_comments(
     out = capsys.readouterr().out.splitlines()
     assert "email    via #7  sent    to ~Spc_One1" in out[0]  # newest first
     assert "(spc-digest)" in out[1]
-    assert "comment  via #7  sent    to PCs, SACs and SPCs" in out[2]
+    assert "comment  via #7  sent    to PCs, SACs, Area_Chairs" in out[2]
     assert out[-1].startswith("2 entries in")
     cli.main(["history", "99"])
     assert capsys.readouterr().out.strip() == "Nothing sent from the app yet"
@@ -292,7 +292,7 @@ def test_edit_opens_each_message_in_the_editor_before_the_preview(tmp_path, monk
     )
     import pytest
 
-    with pytest.raises(SystemExit, match="Comment on #7: empty"):
+    with pytest.raises(SystemExit, match="Comment on #7, readable by PCs, SACs: empty"):
         cli.main(["comment", "7", "--edit"])
     assert client.comments == []
 

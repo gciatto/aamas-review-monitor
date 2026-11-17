@@ -1,6 +1,6 @@
 from datetime import date
 
-from aamas_review_monitor import outreach
+from aamas_review_monitor import outreach, papers
 from aamas_review_monitor.checks import RED, YELLOW, Issue, legend
 from aamas_review_monitor.collector import fetch
 from aamas_review_monitor.papers import deliver
@@ -104,7 +104,7 @@ def test_previews_warn_when_the_same_message_already_went_out(tmp_path):
     other, _ = outreach.direct(records, "spcs", "Something else", "Hi")  # not a repeat
     assert "⚠" not in outreach.preview(other, [], sent)
 
-    found, _ = outreach.comments(ISSUES, records, {7}, False, CONFIG)
+    found, _ = outreach.comments(ISSUES, records, {7}, (), CONFIG)
     assert "⚠" not in outreach.preview_comments(found, [], sent)  # emails are not comments
     papers.post_comments(FakeClient(), found, history_file=history)
     text = outreach.preview_comments(found, [], papers.history(history))
@@ -120,7 +120,7 @@ def test_each_failed_check_is_explained_once_per_paper_for_spcs_but_not_reviewer
     (draft,), _ = outreach.compose(by_key()["spc-digest"], ISSUES + short, records, CONFIG, TODAY)
     assert draft.body.count("Reviews long enough: ") == 1
     assert "shorter than 150 words" in draft.body
-    (comment,), _ = outreach.comments(ISSUES + short, records, {7}, True, CONFIG)
+    (comment,), _ = outreach.comments(ISSUES + short, records, {7}, ("spcs",), CONFIG)
     assert comment.text.count("Reviews long enough: ") == 1
     assert comment.text.count("ask the reviewer to expand it") == 1  # suggested once, too
     (reminder,), _ = outreach.compose(
@@ -131,26 +131,40 @@ def test_each_failed_check_is_explained_once_per_paper_for_spcs_but_not_reviewer
 
 def test_comments_drop_the_explanations_when_too_long_for_openreview(monkeypatch):
     records = fetch(FakeClient(), CONFIG)
-    (explained,), _ = outreach.comments(ISSUES, records, {7}, True, CONFIG)
+    (explained,), _ = outreach.comments(ISSUES, records, {7}, ("spcs",), CONFIG)
     assert "__Suggested action__: " in explained.text and "each other's reviews" in explained.text
     monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", len(explained.text) - 1)
-    (shorter,), _ = outreach.comments(ISSUES, records, {7}, True, CONFIG)
+    (shorter,), _ = outreach.comments(ISSUES, records, {7}, ("spcs",), CONFIG)
     assert "Suggested action" not in shorter.text and "Reviews on schedule: " in shorter.text
     monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", len(shorter.text) - 1)
-    (bare,), _ = outreach.comments(ISSUES, records, {7}, True, CONFIG)
+    (bare,), _ = outreach.comments(ISSUES, records, {7}, ("spcs",), CONFIG)
     assert "Reviews on schedule: " not in bare.text and "- 🔴 2 reviews missing" in bare.text
     monkeypatch.setattr(outreach, "COMMENT_CHARS_MAX", 100)
-    found, skipped = outreach.comments(ISSUES, records, {7}, True, CONFIG)
+    found, skipped = outreach.comments(ISSUES, records, {7}, ("spcs",), CONFIG)
     assert found == [] and skipped[0].endswith("OpenReview allows 100")
 
 
 def test_late_reviews_alone_get_their_own_comment_and_suggested_spc_template():
     records = fetch(FakeClient(), CONFIG)
     late, other = ISSUES[:1], ISSUES[:2]
-    (comment,), _ = outreach.comments(late, records, {7}, True, CONFIG)
+    (comment,), _ = outreach.comments(late, records, {7}, ("spcs",), CONFIG)
     assert comment.title == "Process check: reviews late" and "responsibility" in comment.text
-    (comment,), _ = outreach.comments(other, records, {7}, True, CONFIG)
+    (comment,), _ = outreach.comments(other, records, {7}, ("spcs",), CONFIG)
     assert comment.title == "Process check: points needing attention"
     choices = outreach.templates()
     assert outreach.suggest(choices, late).key == "spc-late-reviews"
     assert outreach.suggest(choices, other) is None  # disagreement: no narrower template
+
+
+def test_comments_reach_the_late_reviewers_of_each_paper_or_any_reviewer_group():
+    records = fetch(FakeClient(), CONFIG)
+    found, skipped = outreach.comments(ISSUES, records, {7}, ("late-reviewers",), CONFIG, TODAY)
+    assert found == [] and skipped == ["#7: no late reviewer to read it"]  # no anonymous group
+    records[0]["groups"]["Reviewer_xY12"] = ["~Rev_B1"]
+    (comment,), _ = outreach.comments(
+        ISSUES, records, {7}, ("late-reviewers", "spcs"), CONFIG, TODAY
+    )
+    assert comment.readers == ("Reviewer_xY12", "Area_Chairs")
+    (comment,), _ = outreach.comments(ISSUES, records, {7}, ("reviewers",), CONFIG, TODAY)
+    assert papers.readers(comment)[2:] == [f"{SUB}7/Reviewers"]
+    assert papers.readable_by(comment) == "PCs, SACs, Reviewers"

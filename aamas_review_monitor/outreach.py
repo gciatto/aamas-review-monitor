@@ -16,7 +16,14 @@ from typing import NamedTuple
 
 from aamas_review_monitor.checks import GREEN, ICONS, Issue, legend
 from aamas_review_monitor.collector import person
-from aamas_review_monitor.papers import Comment, Draft, recipients
+from aamas_review_monitor.papers import (
+    Comment,
+    Draft,
+    late_groups,
+    readable_by,
+    reader_groups,
+    recipients,
+)
 from aamas_review_monitor.resources import (
     DIR_TEMPLATES,
     FILE_COMMENT,
@@ -387,14 +394,15 @@ def comments(
     issues: list[Issue],
     records: list[dict],
     numbers: set[int],
-    spcs_read: bool,
+    readers: Sequence[str],
     config: dict,
     today: date | None = None,
 ) -> tuple[list[Comment], list[str]]:
     """One forum comment per paper listing its open issues, each check explained once and
     followed by the action suggested to the SPC, from the first comment template whose codes
-    cover them all (the late-reviews one, else the general one); also the papers that cannot
-    get one, and why."""
+    cover them all (the late-reviews one, else the general one), also readable by `readers`
+    (`papers.READERS` keys or anonymous reviewer groups); also the papers that cannot get one,
+    and why."""
     choices = [
         _fields(f.read_text(encoding="utf-8")) for f in (FILE_COMMENT_LATE_REVIEWS, FILE_COMMENT)
     ]
@@ -406,6 +414,8 @@ def comments(
             skipped.append(f"#{number}: not cached")
         elif not theirs:
             skipped.append(f"#{number}: no open issues")
+        elif "late-reviewers" in readers and not late_groups(by_number[number]):
+            skipped.append(f"#{number}: no late reviewer to read it")
         else:
             fields, _, body = next(c for c in choices if not c[1] or _codes(theirs) <= c[1])
             url = theirs[0].url
@@ -426,7 +436,7 @@ def comments(
                             by_number[number],
                             title,
                             text,
-                            spcs_read,
+                            reader_groups(by_number[number], readers),
                             listed,
                             fields["title"],
                             values,
@@ -445,7 +455,6 @@ def review_comments(
 ) -> tuple[list[str], list[Item]]:
     """Header lines and one item per comment, warning on the papers the app already commented
     on (`sent`)."""
-    readers = "PCs, SACs" + (" and SPCs" if found and found[0].spcs_read else "")
     earlier = [
         [
             e
@@ -456,7 +465,7 @@ def review_comments(
     ]
     items = [
         Item(
-            f"Comment on #{c.record['number']}",
+            f"Comment on #{c.record['number']}, readable by {readable_by(c)}",
             _before(e),
             c.title,
             c.text,
@@ -466,7 +475,7 @@ def review_comments(
         for c, e in zip(found, earlier)
     ]
     header = [
-        f"{len(found)} comments, readable by {readers}",
+        f"{len(found)} comments",
         *notes,
         *_warnings(earlier, "papers were commented on"),
         *(f"Skipped: {s}" for s in skipped),

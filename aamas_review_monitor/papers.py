@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from pathlib import Path, PurePosixPath
 from typing import Any, NamedTuple
 
@@ -18,6 +18,14 @@ from aamas_review_monitor import logger
 from aamas_review_monitor.collector import person, replies
 
 ROLES = ("reviewers", "late-reviewers", "spcs")
+# who else may read a comment, besides PCs and SACs; a paper's anonymous reviewer groups
+# (Reviewer_aB3x) can be named too
+READERS = {
+    "spcs": "SPCs",
+    "reviewers": "all reviewers",
+    "reviewers-submitted": "reviewers who submitted",
+    "late-reviewers": "late reviewers",
+}
 
 
 def _write(file: Path, data: bytes) -> None:
@@ -209,7 +217,7 @@ class Comment(NamedTuple):
     record: dict
     title: str
     text: str
-    spcs_read: bool  # the paper's SPCs can read it (PCs and SACs always can)
+    readers: tuple[str, ...]  # groups, after the paper's prefix, also reading it (PCs, SACs do)
     issues: tuple[tuple[int, str], ...] = ()  # (number, code) of the issues it lists
     pattern: str = ""  # the title before placeholders were filled in, e.g. "$papers late"
     values: dict[str, str] = {}  # the placeholders' values in this one, $issues aside
@@ -288,12 +296,46 @@ def deliver(
     return failures
 
 
+def late_groups(record: dict) -> list[str]:
+    """The anonymous groups (Reviewer_aB3x, after the paper's prefix) of reviewers owing a
+    review."""
+    _, _, late = recipients(record, "late-reviewers")
+    prefix, anonymous = record["prefix"], record["names"].get("reviewers_anon", "Reviewer_")
+    return [
+        g
+        for g in record["groups"]
+        if g.startswith(anonymous) and (prefix + g in late or person(record, prefix + g) in late)
+    ]
+
+
+def reader_groups(record: dict, readers: Collection[str]) -> tuple[str, ...]:
+    """The paper's groups (after its prefix) that `readers` name: `READERS` keys, or its
+    anonymous reviewer groups as they are."""
+    names, found = record["names"], []
+    for key in readers:
+        if key == "spcs":
+            found.append(names["area_chairs"])
+        elif key == "reviewers":
+            found.append(names["reviewers"])
+        elif key == "reviewers-submitted":
+            found.append(names["reviewers"] + "/Submitted")
+        elif key == "late-reviewers":
+            found += late_groups(record)
+        else:
+            found.append(key)
+    return tuple(dict.fromkeys(found))
+
+
 def readers(comment: Comment) -> list[str]:
-    """PCs and the paper's SACs always (the invitation requires them), its SPCs optionally."""
+    """PCs and the paper's SACs always (the invitation requires them), then the chosen ones."""
     prefix, names = comment.record["prefix"], comment.record["names"]
     venue = prefix.rsplit(f"/{names['submission']}", 1)[0]  # ".../Submission7/" -> venue id
     found = [f"{venue}/Program_Chairs", prefix + names["senior_area_chairs"]]
-    return found + ([prefix + names["area_chairs"]] if comment.spcs_read else [])
+    return found + [prefix + g for g in comment.readers]
+
+
+def readable_by(comment: Comment) -> str:
+    return ", ".join(["PCs", "SACs", *comment.readers])
 
 
 def post_comments(
@@ -314,7 +356,7 @@ def post_comments(
             "kind": "comment",
             "via": number,
             "papers": [number],
-            "to": "PCs, SACs" + (" and SPCs" if c.spcs_read else ""),
+            "to": readable_by(c),
             "recipients": readers(c),
             "subject": c.title,
             "body": c.text,
