@@ -263,7 +263,7 @@ matched), so you can see whether the rules earn their weight.
 
 ## Terminal UI
 
-`tui` has five tabs (`t` switches between them):
+`tui` has six tabs (`t` switches between them):
 
 - **Papers:** every paper, with one row per issue and a 🟢 row for each paper without issues.
   The Commented and Emailed columns give the date of the last comment or templated email
@@ -280,6 +280,10 @@ matched), so you can see whether the rules earn their weight.
   their nearest topics, as evidence. Opening the tab shows cached scores only; `k` embeds the
   rest. The software measures fit to areas; it never scores quality or suggests decisions.
   `b` labels the selected paper with the area you judge right, `y` confirms its best area.
+- **Reviews:** every review against the review rubric, the poor ones first (in yellow), with
+  its share of the criteria met, its alerts and the criteria it misses; beside it, each criterion
+  of the selected review with the deciding sentence, the rules that held and, when missed, the
+  advice. Opening the tab shows cached scores only; `k` embeds the rest; `space` marks reviews.
 - **Rubrics:** the area rubrics, one YAML editor each. `ctrl+s` checks and saves your copy, then
   shows what the edit changed: how many of the area's topics are nearest to it when left out,
   and how many labelled papers get their label as best area, before and after, naming the
@@ -326,11 +330,11 @@ which likewise offers the current tab's actions:
 | `m` | Templated email to the SPCs (SPCs tab) or to the papers' people, reviewed and editable before you type `SEND` |
 | `c` | Comment on each paper's forum with its issues, or with a comment template, choosing who else reads it (SPCs, reviewers, late reviewers; on one paper, each reviewer), reviewed and editable before you type `SEND` |
 | `e` | Free-form email to reviewers, late reviewers or SPCs, reviewed and editable before you type `SEND` |
-| `k` | Score the papers' areas, choosing what to embed (title, keywords, abstract, PDF text, reviews, meta-reviews); paper data only goes to local endpoints |
+| `k` | Score the papers' areas, choosing what to embed (title, keywords, abstract, PDF text, reviews, meta-reviews), or, in the Reviews tab, the reviews against the review rubric; paper data only goes to local endpoints |
 | `h` | Choose the areas the Areas tab shows (kept with the sort order in `areas-view.json`) |
 | `b` / `y` | Label the selected paper's area: pick it (best first, with shares) / confirm its best area (Areas tab) |
 | `ctrl+s` / `ctrl+r` | Save the edited rubric and show what it changed / drop the unsaved edits (Rubrics tab) |
-| `t` | Switch between the Papers, SPCs, History, Areas and Rubrics tabs |
+| `t` | Switch between the Papers, SPCs, History, Areas, Reviews and Rubrics tabs |
 | `s` | Sync with OpenReview |
 | `l` | Legend of all checks; type to filter them, Esc closes |
 | `r` / `q` | Reload / quit |

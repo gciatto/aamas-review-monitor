@@ -29,7 +29,16 @@ from textual.widgets import (
     TextArea,
 )
 
-from aamas_review_monitor import areas, core, documents, logger, models, outreach, papers
+from aamas_review_monitor import (
+    areas,
+    core,
+    documents,
+    logger,
+    models,
+    outreach,
+    papers,
+    reviewing,
+)
 from aamas_review_monitor.checks import (
     GREEN,
     ICONS,
@@ -89,13 +98,13 @@ COMMANDS = [
     ("Templated email", "From a template, to SPCs (SPCs tab) or to the papers' people  [m]", "mail"),
     ("Comment", "Post each paper's issues on its forum (one paper: editable)  [c]", "comment"),
     ("Email", "Free-form, to reviewers, late reviewers or SPCs, one message per paper  [e]", "email"),
-    ("Score areas", "Each paper's share of each area, choosing what to embed (Areas tab)  [k]", "score_areas"),
+    ("Score areas or reviews", "Each paper's share of each area, choosing what to embed (Areas tab); each review against the review rubric (Reviews tab)  [k]", "score_areas"),
     ("Show or hide areas", "Which areas the Areas tab shows  [h]", "hide_areas"),
     ("Label the paper's area", "The area you judge right for the selected paper (Areas tab)  [b]", "label_area"),
     ("Confirm the best area", "Label the selected paper with its best area (Areas tab)  [y]", "confirm_area"),
     ("Save the rubric", "Check and save the edited rubric, then show what it changed (Rubrics tab)  [ctrl+s]", "save_rubric"),
     ("Revert the rubric", "Drop the unsaved edits of the rubric (Rubrics tab)  [ctrl+r]", "revert_rubric"),
-    ("Switch tab", "Papers, SPCs, History, Areas, Rubrics  [t]", "switch_tab"),
+    ("Switch tab", "Papers, SPCs, History, Areas, Reviews, Rubrics  [t]", "switch_tab"),
     ("Legend", "What each check verifies, with the current thresholds  [l]", "legend"),
 ]  # fmt: skip
 
@@ -112,6 +121,7 @@ TAB_ACTIONS = {
     "spcs-tab": {"mark", "mark_all", "mark_some", "actions", "mail"},
     "history-tab": set(),
     "areas-tab": {"score_areas", "hide_areas", "label_area", "confirm_area"},
+    "scores-tab": {"score_areas", "mark"},
     "rubrics-tab": {"save_rubric", "revert_rubric"},
 }  # fmt: skip
 EVERYWHERE = TABLE_ACTIONS - set().union(*TAB_ACTIONS.values())  # sync, legend, tab, reload
@@ -201,6 +211,12 @@ class Monitor(App):
         self.rubrics: dict[str, dict] = {}  # as saved
         self.rubric_drafts: dict[str, str] = {}  # unsaved edits, by code
         self.rubric_code: str | None = None  # the one in the editor
+        # Reviews tab: each review against the review rubric
+        self.review_rubric: dict = {}  # as saved
+        self.review_results: list[dict] | None = None  # None: not loaded yet
+        self.review_rows: list[dict] = []  # as shown: the poor ones first
+        self.review_marked: set[tuple[int, str]] = set()  # (number, Reviewer_xxxx)
+        self.review_about = ""  # model, rubric version
         self.issues: list[Issue] = []  # plus one GREEN row per paper without issues
         self.ignored: set[tuple[int, str]] = set()  # (number, code) the user ignores
         self.hide_green = False
@@ -244,6 +260,10 @@ class Monitor(App):
                         id="areas", cursor_type="row", zebra_stripes=True, fixed_columns=2
                     )
                     yield VerticalScroll(Static(id="area-detail"), id="area-panel")
+            with TabPane("Reviews", id="scores-tab"):
+                with Horizontal():
+                    yield DataTable(id="scores", cursor_type="row", zebra_stripes=True)
+                    yield VerticalScroll(Static(id="score-detail"), id="score-panel")
             with TabPane("Rubrics", id="rubrics-tab"):
                 with Horizontal():
                     yield DataTable(id="rubrics", cursor_type="row", zebra_stripes=True)
@@ -258,6 +278,7 @@ class Monitor(App):
         " #history { width: 3fr; } #history-panel { width: 2fr; padding: 0 1; }"
         " #areas { width: 2fr; } #area-panel { width: 1fr; padding: 0 1; }"
         " #rubrics { width: 1fr; } #rubric-pane { width: 2fr; }"
+        " #scores { width: 3fr; } #score-panel { width: 2fr; padding: 0 1; }"
         # the tabs take the height left, so a tall pane scrolls inside rather than the screen
         " #tabs { height: 1fr; } #tabs ContentSwitcher, #tabs TabPane { height: 1fr; }"
         " #rubrics-tab Horizontal { height: 1fr; }"
@@ -282,6 +303,9 @@ class Monitor(App):
             ICONS[YELLOW],
             "Emailed",
         )
+        scores = self.query_one("#scores", DataTable)
+        self.score_mark_column = scores.add_column("", width=1)
+        scores.add_columns("#", "Review", "Score", "Alerts", "Words", "Rating", "Missing")
         self.query_one("#rubrics", DataTable).add_columns(
             "Code", "Copy", "Topics", "Exemplars", "Rules", "Area"
         )
@@ -531,7 +555,8 @@ class Monitor(App):
             "papers": ("spcs-tab", "#spcs"),
             "spcs-tab": ("history-tab", "#history"),
             "history-tab": ("areas-tab", "#areas"),
-            "areas-tab": ("rubrics-tab", "#rubrics"),
+            "areas-tab": ("scores-tab", "#scores"),
+            "scores-tab": ("rubrics-tab", "#rubrics"),
         }
         tabs.active, table = order.get(tabs.active, ("papers", "#issues"))
         self.query_one(table, DataTable).focus()
@@ -779,6 +804,14 @@ class Monitor(App):
             spcs.update_cell(key, self.spc_mark_column, mark)
 
     def action_mark(self) -> None:
+        if self.query_one(TabbedContent).active == "scores-tab":
+            if review := self.review_row():
+                key = (review["number"], review["name"])
+                self.review_marked ^= {key}
+                table = self.query_one("#scores", DataTable)
+                mark = MARK if key in self.review_marked else ""
+                table.update_cell(f"{key[0]}:{key[1]}", self.score_mark_column, mark)
+            return
         if self.on_spcs():
             if row := self.spc_row():
                 keys = row[3]
@@ -1176,8 +1209,13 @@ class Monitor(App):
         self.refresh_bindings()  # the footer shows what this tab offers
         if event.pane.id == "areas-tab" and self.area_results is None:
             self.score_areas(cache_only=True)
+        if event.pane.id == "scores-tab" and self.review_results is None:
+            self.score_reviews(cache_only=True)
 
     def action_score_areas(self) -> None:
+        if self.query_one(TabbedContent).active == "scores-tab":
+            self.score_reviews(cache_only=False)
+            return
         options = [(n, n, n in self.area_include) for n in areas.INCLUDE]
 
         def chosen(picked: set[str] | None) -> None:
@@ -1341,6 +1379,117 @@ class Monitor(App):
             self.notify(f"#{row['number']} is not scored: press k", severity="warning")
             return
         self.give_label(row["number"], row["best"])
+
+    # The Reviews tab: each review against the review rubric
+
+    def score_reviews(
+        self, cache_only: bool, then: "Callable[[set, set], None] | None" = None
+    ) -> None:
+        """Scores every cached review; `cache_only` never asks the endpoint (reviews not embedded
+        yet stay unscored), nor does --cache-only. Reviews only go to local endpoints. `then`
+        gets the poor reviews before and after."""
+        cache_only = cache_only or self.cache_only
+        try:
+            rubric = reviewing.load(core.FILE_REVIEW_RUBRIC)
+            s = models.settings(self.config, **self.embeddings_given)
+        except ValueError as e:
+            self.notify(f"Review rubric: {e}", severity="error")
+            return
+        records = core.records()
+        before = self.review_results or []
+        self.review_results = before  # tried: opening the tab won't retry
+
+        def job(client: Any, progress: Callable[[int, int], None]) -> Any:
+            directory = core.DIR_EMBEDDINGS
+            try:
+                return reviewing.score(
+                    records, rubric, s, self.config, directory, cache_only, progress
+                )
+            except models.NotEmbedded:  # cache only, the rubric not embedded yet: none scored
+                return [], []
+
+        def done(result: tuple[list[dict], list[str]]) -> None:
+            self.review_results, failures = result
+            self.review_rubric = rubric
+            self.review_about = f"{s.model}; review rubric {reviewing.fingerprint(rubric)}"
+            self.fill_reviews()
+            if failures and not cache_only:
+                more = f" (and {len(failures) - 1} more)" if len(failures) > 1 else ""
+                self.notify(f"Not scored: {failures[0]}{more}", severity="warning")
+            if then:
+                keys = lambda found: {  # noqa: E731
+                    (r["number"], r["name"]) for r in reviewing.poor(found, self.config)
+                }
+                then(keys(before), keys(self.review_results))
+
+        label = "Loading review scores…" if cache_only else "Scoring the reviews…"
+        self.online(label, job, done, offline=True)
+
+    def fill_reviews(self) -> None:
+        table = self.query_one("#scores", DataTable)
+        table.clear()
+        found = self.review_results or []
+        poor = reviewing.poor(found, self.config)
+        rest = sorted(
+            (r for r in found if r not in poor), key=lambda r: (r["score"], r["number"], r["name"])
+        )
+        self.review_rows = poor + rest
+        for r in self.review_rows:
+            key = (r["number"], r["name"])
+            missing = [k for k, v in r["criteria"].items() if not v["met"] and k not in r["alerts"]]
+            table.add_row(
+                MARK if key in self.review_marked else "",
+                str(r["number"]),
+                r["name"],
+                Text(f"{r['score']:>4.0%}", "yellow" if r in poor else ""),
+                Text(", ".join(r["alerts"]) or "—", "yellow" if r["alerts"] else ""),
+                str(r["words"]),
+                str(r["rating"] or "—")[:10],
+                ", ".join(missing),
+                key=f"{key[0]}:{key[1]}",
+            )
+        self.show_review_row()
+
+    def review_row(self) -> dict | None:
+        table = self.query_one("#scores", DataTable)
+        if not table.row_count:
+            return None
+        row = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
+        return next(
+            (r for r in self.review_rows if f"{r['number']}:{r['name']}" == row.value), None
+        )
+
+    @on(DataTable.RowHighlighted, "#scores")
+    @mounted
+    def show_review_row(self) -> None:
+        detail = self.query_one("#score-detail", Static)
+        if (row := self.review_row()) is None:
+            note = (
+                "k scores each review against the review rubric (reviews only go to local "
+                "endpoints); space marks reviews"
+            )
+            detail.update(f"{self.review_about}\n{note}")
+            return
+        text = Text(f"#{row['number']}  {row['name']}\n", "bold")
+        text.append(f"{row['score']:.0%} of the rubric · {row['words']} words")
+        text.append(f" · rating {row['rating'] or '—'}\n\n")
+        for c in self.review_rubric.get("criteria", []):
+            verdict = row["criteria"].get(c["key"])
+            if verdict is None:
+                continue
+            alert = c.get("alert") and not verdict["met"]
+            icon = "✓" if verdict["met"] else "⚠" if alert else "✗"
+            margin = "" if verdict["margin"] is None else f" ({verdict['margin']:+.3f})"
+            style = "green" if verdict["met"] else "yellow" if alert else "red"
+            text.append(f"{icon} {c['name']}{margin}\n", style)
+            if verdict["evidence"]:
+                text.append(f"    “{textwrap.shorten(verdict['evidence'], 150)}”\n", "dim")
+            for held in verdict["rules"]:
+                text.append(f"    rule: {textwrap.shorten(held, 150)}\n", "cyan")
+            if not verdict["met"]:
+                text.append(f"    {textwrap.shorten(c['advice'], 200)}\n", "italic")
+        text.append(f"\n{self.review_about}", "dim")
+        detail.update(text)
 
     # The Rubrics tab: one YAML rubric per area, edited in place
 

@@ -311,13 +311,16 @@ def test_command_palette_and_footer_offer_each_tabs_actions(tmp_path, monkeypatc
     async def scenario():
         async with app.run_test() as pilot:
             offered = set()
-            tables = ["#issues", "#spcs", "#history", "#areas", "#rubrics"]
+            tables = ["#issues", "#spcs", "#history", "#areas", "#scores", "#rubrics"]
             for tab, table in zip(tui.TAB_ACTIONS, tables):  # together, they offer every action
                 app.query_one(TabbedContent).active = tab
                 app.query_one(table).focus()  # as `t` does
                 # opening Areas loads the cached scores in the background: the footer then
                 # offers only Interrupt, until the job ends
                 await done(app, pilot, lambda: app.area_results is not None or tab != "areas-tab")
+                await done(
+                    app, pilot, lambda: app.review_results is not None or tab != "scores-tab"
+                )
                 titles = {c.title for c in app.get_system_commands(app.screen)}
                 offered |= titles
                 shown = {
@@ -325,8 +328,8 @@ def test_command_palette_and_footer_offer_each_tabs_actions(tmp_path, monkeypatc
                     for b in app.active_bindings.values()
                     if b.enabled
                 }
-                assert ("score_areas" in shown) == (tab == "areas-tab"), tab
-                assert ("mark" in shown) == (tab in ("papers", "spcs-tab")), tab
+                assert ("score_areas" in shown) == (tab in ("areas-tab", "scores-tab")), tab
+                assert ("mark" in shown) == (tab in ("papers", "spcs-tab", "scores-tab")), tab
                 assert "switch_tab" in shown and "sync" in shown
             assert {title for title, _, _ in tui.COMMANDS} <= offered
             for _, _, action in tui.COMMANDS:  # every action names a real method
@@ -335,7 +338,7 @@ def test_command_palette_and_footer_offer_each_tabs_actions(tmp_path, monkeypatc
             app.query_one(TabbedContent).active = "papers"
             await pilot.pause()
             commands = {c.title: c for c in app.get_system_commands(app.screen)}
-            assert "Score areas" not in commands
+            assert "Score areas or reviews" not in commands
             await commands["Legend"].callback()
             await pilot.pause()
             assert isinstance(app.screen, tui.Legend)
@@ -504,6 +507,8 @@ def test_comment_then_history_tab_details_and_spc_panel_show_it(tmp_path, monkey
             assert "Please check the reviews." in str(app.query_one("#history-entry").render())
             await pilot.press("t")  # Areas: loads the cached scores (none here)
             await done(app, pilot, lambda: app.area_results is not None)
+            await pilot.press("t")  # Reviews: loads the cached review scores (none here)
+            await done(app, pilot, lambda: app.review_results is not None)
             await pilot.press("t", "t")  # Rubrics, then back to Papers
             table = app.query_one("#issues")
             rows = [table.get_row_at(r) for r in range(table.row_count)]
@@ -840,6 +845,8 @@ def test_labels_and_rubric_edits_report_what_they_change(monkeypatch):
             await done(app, pilot, lambda: app.labels == {1: "LEARN", 2: "LEARN"})
             assert "labels: best area 1/2" in str(app.query_one("#area-detail").render())
 
+            await pilot.press("t")  # Reviews: loads the cached review scores
+            await done(app, pilot, lambda: app.review_results is not None)
             await pilot.press("t")  # Rubrics: LEARN in the editor
             editor = app.query_one("#rubric-editor", TextArea)
             assert app.rubric_code == "LEARN" and "Multiagent learning" in editor.text
@@ -953,5 +960,54 @@ def test_comment_form_template_presets_its_readers(tmp_path, monkeypatch):
             await done(app, pilot, lambda: bool(app.sent))
             ((_, _, note),) = client.comments
             assert note.content["title"]["value"] == "Diverging scores on paper #7"
+
+    asyncio.run(scenario())
+
+
+def reviews_to_score(tmp_path, monkeypatch):
+    """A Monitor over #7 with a specific review and a thin one, whose sentences the fake
+    endpoint embeds; rules decide (the fake vectors can't judge)."""
+    from aamas_review_monitor import papers
+    from tests.test_models import FakeEndpoint, resolves_to
+    from tests.test_reviewing import GOOD, POOR
+
+    app, client, _ = cached_monitor(tmp_path, monkeypatch)
+    FakeEndpoint(monkeypatch)
+    resolves_to(monkeypatch, "127.0.0.1")
+    (record,) = papers.load(core.DIR_PAPERS, [7])
+    reviews = [r for r in record["replies"] if r["invitations"][0].endswith("Official_Review")]
+    for i, (review, text) in enumerate(zip(reviews, (GOOD, POOR))):
+        review["id"], review["content"]["summary"] = f"r{i}", {"value": text}
+    papers.save([record], core.DIR_PAPERS, [])
+    app.config.update(reviews_margin_min=9, reviews_margin_alert=9, reviews_abstract_min=-1)
+    return app, client
+
+
+async def scored_reviews(app, pilot):
+    """Opens the Reviews tab (nothing embedded yet, nothing asked), then scores."""
+    await pilot.press("t", "t", "t")  # Areas
+    await done(app, pilot, lambda: app.area_results is not None)
+    await pilot.press("t")  # Reviews
+    await done(app, pilot, lambda: app.review_results is not None)
+    assert app.review_results == []
+    await pilot.press("k")
+    await done(app, pilot, lambda: bool(app.review_results))
+
+
+def test_reviews_tab_scores_each_review_and_shows_why(tmp_path, monkeypatch):
+    app, _ = reviews_to_score(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(160, 40)) as pilot:
+            await scored_reviews(app, pilot)
+            table = app.query_one("#scores")
+            assert table.get_row_at(0)[2] == "Reviewer_hidden"  # the poor one first
+            detail = str(app.query_one("#score-detail").render())
+            assert (
+                "⚠ Reports specific weaknesses" in detail and "Name concrete weaknesses" in detail
+            )
+            await pilot.press("space")
+            assert app.review_marked == {(7, "Reviewer_hidden")}
+            assert table.get_row_at(0)[0] == tui.MARK
 
     asyncio.run(scenario())
